@@ -1,0 +1,133 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Attendance;
+use App\Models\CreditLog;
+use App\Models\Participant;
+use App\Models\Program;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class AttendanceController extends Controller
+{
+    /**
+     * Ogrencinin QR kod okutarak yoklama vermesi
+     */
+    public function markQrAttendance(Request $request)
+    {
+        $validated = $request->validate([
+            'qr_token' => 'required|string',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+        ]);
+
+        $user = $request->user();
+
+        $program = Program::where('qr_token', $validated['qr_token'])
+            ->where('status', 'active')
+            ->first();
+
+        if (! $program) {
+            return response()->json(['message' => 'Gecersiz veya suresi dolmus QR kod.'], 400);
+        }
+
+        if ($program->qr_expires_at && now()->isAfter($program->qr_expires_at)) {
+            return response()->json(['message' => 'Bu QR kodun suresi dolmus. Lutfen ekrandaki yeni kodu okutun.'], 400);
+        }
+
+        $participant = Participant::where('user_id', $user->id)
+            ->where('project_id', $program->project_id)
+            ->where('period_id', $program->period_id)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $participant) {
+            return response()->json(['message' => 'Bu programa katilma yetkiniz bulunmuyor.'], 403);
+        }
+
+        $existing = Attendance::where('program_id', $program->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if ($existing) {
+            return response()->json(['message' => 'Yoklamaniz zaten alinmis.'], 200);
+        }
+
+        $isValidLocation = true;
+        if ($program->latitude && $program->longitude && $validated['latitude'] && $validated['longitude']) {
+            $distance = $this->calculateDistance(
+                $program->latitude,
+                $program->longitude,
+                $validated['latitude'],
+                $validated['longitude'],
+            );
+
+            if ($distance > $program->radius_meters) {
+                $isValidLocation = false;
+            }
+        }
+
+        DB::beginTransaction();
+
+        try {
+            Attendance::create([
+                'program_id' => $program->id,
+                'user_id' => $user->id,
+                'method' => 'qr',
+                'latitude' => $validated['latitude'],
+                'longitude' => $validated['longitude'],
+                'is_valid' => $isValidLocation,
+            ]);
+
+            $creditDeduction = max((int) ($program->credit_deduction ?? 10), 0);
+
+            CreditLog::create([
+                'participant_id' => $participant->id,
+                'user_id' => $user->id,
+                'project_id' => $program->project_id,
+                'period_id' => $program->period_id,
+                'program_id' => $program->id,
+                'amount' => -$creditDeduction,
+                'type' => 'attendance_hold',
+                'reason' => 'Oturum yoklamasi alindi, degerlendirme bekleniyor',
+            ]);
+
+            if ($creditDeduction > 0) {
+                $participant->decrement('credit', $creditDeduction);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Yoklamaniz basariyla alindi.',
+                'location_warning' => ! $isValidLocation ? 'Konumunuz etkinlik alani disinda gorunuyor ancak yoklamaniz sisteme islendi.' : null,
+                'current_credit' => $participant->credit,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'Yoklama alinirken bir hata olustu.'], 500);
+        }
+    }
+
+    /**
+     * Haversine formulu ile iki koordinat arasi metre hesabı
+     */
+    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371000;
+
+        $latDelta = deg2rad($lat2 - $lat1);
+        $lonDelta = deg2rad($lon2 - $lon1);
+
+        $a = sin($latDelta / 2) * sin($latDelta / 2) +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+            sin($lonDelta / 2) * sin($lonDelta / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
+    }
+}
