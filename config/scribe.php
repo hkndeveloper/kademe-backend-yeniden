@@ -7,6 +7,15 @@ use Knuckles\Scribe\Extracting\Strategies;
 use function Knuckles\Scribe\Config\configureStrategy;
 use function Knuckles\Scribe\Config\removeStrategies;
 
+// knuckleswtf/scribe sadece require-dev; `composer install --no-dev` (Docker/Railway) paketi yuklemez.
+if (! class_exists(Defaults::class)) {
+    return [
+        'title' => (string) config('app.name', 'Laravel') . ' API',
+        'description' => '',
+        'base_url' => (string) config('app.url', 'http://localhost'),
+    ];
+}
+
 // Only the most common configs are shown. See the https://scribe.knuckles.wtf/laravel/reference/config for all.
 
 return [
