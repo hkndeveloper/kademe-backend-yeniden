@@ -1,0 +1,536 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Controller;
+use App\Models\Announcement;
+use App\Models\Participant;
+use App\Models\User;
+use App\Support\AdminExportResponder;
+use App\Services\PermissionResolver;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class AnnouncementController extends Controller
+{
+    use AuthorizesGranularPermissions;
+
+    public function __construct(
+        private readonly PermissionResolver $permissionResolver
+    ) {
+    }
+
+    private function abortUnlessAnnouncementAccessible(Request $request, Announcement $announcement, string $permission): void
+    {
+        $this->abortUnlessAllowed($request, $permission);
+        $user = $request->user();
+        if ($user->role === 'super_admin') {
+            return;
+        }
+        if ($announcement->project_id !== null) {
+            abort_unless(
+                $this->permissionResolver->canAccessProject($user, $permission, (int) $announcement->project_id),
+                403,
+                'Bu duyuru icin yetkiniz bulunmuyor.'
+            );
+
+            return;
+        }
+
+        abort_unless(
+            (int) $announcement->created_by === (int) $user->id,
+            403,
+            'Bu duyuru icin yetkiniz bulunmuyor.'
+        );
+    }
+
+    private function assertProjectAnnouncementScope(Request $request, ?int $projectId, string $permission): void
+    {
+        if ($projectId === null) {
+            return;
+        }
+
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), $permission, $projectId),
+            403,
+            'Bu proje kapsaminda islem yapamazsiniz.'
+        );
+    }
+
+    private function participantUserIdsInManageableProjects(User $sender): array
+    {
+        $projectIds = $this->permissionResolver->manageableProjectIdsForUser($sender);
+        if ($projectIds === []) {
+            return [];
+        }
+
+        return Participant::query()
+            ->whereIn('project_id', $projectIds)
+            ->where('status', 'active')
+            ->pluck('user_id')
+            ->unique()
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    private function scopeManageableAnnouncements(Request $request, $query)
+    {
+        $user = $request->user();
+
+        if ($user->role === 'super_admin') {
+            return $query;
+        }
+
+        $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+
+        if ($manageableProjectIds === []) {
+            return $query->where('created_by', $user->id);
+        }
+
+        return $query->where(function ($builder) use ($user, $manageableProjectIds) {
+            $builder
+                ->whereIn('project_id', $manageableProjectIds)
+                ->orWhere('created_by', $user->id);
+        });
+    }
+    /**
+     * GET /staff/announcements
+     * Staff kullanicisinin gorebilecegi aktif duyurulari listele.
+     */
+    public function myAnnouncements(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.view');
+        $user = Auth::user();
+
+        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])
+            ->where(function ($q) use ($user) {
+                $q->whereNull('target_roles')
+                    ->orWhereJsonLength('target_roles', 0)
+                    ->orWhereJsonContains('target_roles', $user->role);
+            })
+            ->where(function ($q) {
+                $q->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', now());
+            })
+            ->latest();
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        return response()->json([
+            'announcements' => $query->paginate(20),
+        ]);
+    }
+
+    public function exportMyAnnouncements(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.export');
+        $user = Auth::user();
+
+        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])
+            ->where(function ($q) use ($user) {
+                $q->whereNull('target_roles')
+                    ->orWhereJsonLength('target_roles', 0)
+                    ->orWhereJsonContains('target_roles', $user->role);
+            })
+            ->where(function ($q) {
+                $q->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', now());
+            })
+            ->latest();
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        $announcements = $query->get();
+
+        $headings = ['ID', 'Baslik', 'Kategori', 'Proje', 'Olusturan', 'Yayin Tarihi', 'Bitis Tarihi'];
+        $rows = $announcements->map(fn (Announcement $announcement) => [
+            $announcement->id,
+            $announcement->title,
+            $announcement->category ?? '-',
+            $announcement->project?->name ?? '-',
+            $announcement->creator ? trim($announcement->creator->name . ' ' . $announcement->creator->surname) : '-',
+            $announcement->published_at?->format('d.m.Y H:i') ?? '-',
+            $announcement->expires_at?->format('d.m.Y H:i') ?? '-',
+        ])->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'personel_duyurulari_' . now()->format('Ymd_His'),
+            'Personel Duyurulari',
+            $headings,
+            $rows,
+        );
+    }
+
+    /**
+     * GET /admin/announcements
+     * Tüm duyuruları listele.
+     */
+    public function index(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.view');
+        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])->latest();
+        $query = $this->scopeManageableAnnouncements($request, $query);
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+        if ($request->filled('project_id')) {
+            $query->where('project_id', $request->project_id);
+        }
+
+        return response()->json(['announcements' => $query->paginate(20)]);
+    }
+
+    public function export(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.export');
+        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])->latest();
+        $query = $this->scopeManageableAnnouncements($request, $query);
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+        if ($request->filled('project_id')) {
+            $query->where('project_id', $request->project_id);
+        }
+
+        $announcements = $query->get();
+
+        $headings = ['ID', 'Baslik', 'Kategori', 'Proje', 'Hedef Roller', 'Olusturan', 'Yayin Tarihi', 'Bitis Tarihi'];
+        $rows = $announcements->map(fn (Announcement $announcement) => [
+            $announcement->id,
+            $announcement->title,
+            $announcement->category ?? '-',
+            $announcement->project?->name ?? '-',
+            !empty($announcement->target_roles) ? implode(', ', $announcement->target_roles) : 'tum kullanicilar',
+            $announcement->creator ? trim($announcement->creator->name . ' ' . $announcement->creator->surname) : '-',
+            $announcement->published_at?->format('d.m.Y H:i') ?? '-',
+            $announcement->expires_at?->format('d.m.Y H:i') ?? '-',
+        ])->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'duyurular_' . now()->format('Ymd_His'),
+            'Duyurular',
+            $headings,
+            $rows,
+        );
+    }
+
+    /**
+     * POST /admin/announcements
+     * Yeni duyuru oluştur.
+     */
+    public function store(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.create');
+        $validated = $request->validate([
+            'title'        => 'required|string|max:255',
+            'content'      => 'required|string',
+            'category'     => 'nullable|string|max:100',
+            'target_roles' => 'nullable|array',
+            'target_roles.*' => 'in:super_admin,coordinator,staff,student,alumni',
+            'project_id'   => 'nullable|exists:projects,id',
+            'published_at' => 'nullable|date',
+            'expires_at'   => 'nullable|date',
+            'send_sms'     => 'boolean',
+            'send_email'   => 'boolean',
+            'email_attachment' => 'nullable|file|mimes:pdf,jpg,png,docx|max:10240',
+        ]);
+
+        if (! empty($validated['project_id'])) {
+            $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.create');
+        }
+
+        $targetUsers = $this->resolveTargetUsers($request->user(), $validated);
+
+        $announcement = Announcement::create([
+            'title'        => $validated['title'],
+            'content'      => $validated['content'],
+            'category'     => $validated['category'] ?? null,
+            'target_roles' => $validated['target_roles'] ?? [],
+            'project_id'   => $validated['project_id'] ?? null,
+            'created_by'   => Auth::id(),
+            'published_at' => $validated['published_at'] ?? now(),
+            'expires_at'   => $validated['expires_at'] ?? null,
+        ]);
+
+        // SMS gönder
+        if (!empty($validated['send_sms']) && $validated['send_sms']) {
+            $this->dispatchSms($targetUsers, $validated['title'] . ': ' . substr($validated['content'], 0, 140));
+        }
+
+        // E-posta gönder
+        if (!empty($validated['send_email']) && $validated['send_email']) {
+            $attachmentPath = null;
+            if ($request->hasFile('email_attachment')) {
+                $attachmentPath = $request->file('email_attachment')->store('announcement_attachments', 'public');
+            }
+            $this->dispatchEmail($targetUsers, $announcement, $attachmentPath);
+        }
+
+        return response()->json([
+            'message'      => 'Duyuru oluşturuldu.',
+            'announcement' => $announcement->load(['project:id,name', 'creator:id,name,surname']),
+            'target_count' => $targetUsers->count(),
+        ], 201);
+    }
+
+    /**
+     * GET /admin/announcements/{id}
+     */
+    public function show(int $id)
+    {
+        $announcement = Announcement::with(['project:id,name', 'creator:id,name,surname'])->findOrFail($id);
+        $this->abortUnlessAnnouncementAccessible(request(), $announcement, 'announcements.view');
+
+        return response()->json(['announcement' => $announcement]);
+    }
+
+    /**
+     * PUT /admin/announcements/{id}
+     */
+    public function update(Request $request, int $id)
+    {
+        $announcement = Announcement::findOrFail($id);
+        $this->abortUnlessAnnouncementAccessible($request, $announcement, 'announcements.update');
+
+        $validated = $request->validate([
+            'title'        => 'sometimes|string|max:255',
+            'content'      => 'sometimes|string',
+            'category'     => 'nullable|string|max:100',
+            'target_roles' => 'nullable|array',
+            'project_id'   => 'nullable|exists:projects,id',
+            'published_at' => 'nullable|date',
+            'expires_at'   => 'nullable|date',
+        ]);
+
+        if (array_key_exists('project_id', $validated)) {
+            $newProjectId = $validated['project_id'];
+            if ($newProjectId !== null) {
+                $this->assertProjectAnnouncementScope($request, (int) $newProjectId, 'announcements.update');
+            } elseif ($request->user()->role !== 'super_admin') {
+                abort(403, 'Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir.');
+            }
+        }
+
+        $announcement->update($validated);
+
+        return response()->json([
+            'message'      => 'Duyuru güncellendi.',
+            'announcement' => $announcement->fresh(['project:id,name', 'creator:id,name,surname']),
+        ]);
+    }
+
+    /**
+     * DELETE /admin/announcements/{id}
+     */
+    public function destroy(int $id)
+    {
+        $announcement = Announcement::findOrFail($id);
+        $this->abortUnlessAnnouncementAccessible(request(), $announcement, 'announcements.delete');
+        $announcement->delete();
+
+        return response()->json(['message' => 'Duyuru silindi.']);
+    }
+
+    /**
+     * POST /admin/announcements/send-sms
+     * Bağımsız SMS gönderim endpoint'i.
+     */
+    public function sendSms(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.send_sms');
+        $validated = $request->validate([
+            'message'      => 'required|string|max:160',
+            'target_roles' => 'nullable|array',
+            'project_id'   => 'nullable|exists:projects,id',
+            'user_ids'     => 'nullable|array',
+            'user_ids.*'   => 'exists:users,id',
+        ]);
+
+        if (! empty($validated['project_id'])) {
+            $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.send_sms');
+        }
+
+        $targetUsers = $this->resolveTargetUsers($request->user(), $validated);
+
+        $sent = $this->dispatchSms($targetUsers, $validated['message']);
+
+        return response()->json([
+            'message' => 'SMS gönderimi tamamlandı.',
+            'sent_to' => $sent,
+        ]);
+    }
+
+    /**
+     * POST /admin/announcements/send-email
+     * Bağımsız e-posta gönderim endpoint'i.
+     */
+    public function sendEmail(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.send_email');
+        $validated = $request->validate([
+            'subject'      => 'required|string|max:255',
+            'body'         => 'required|string',
+            'target_roles' => 'nullable|array',
+            'project_id'   => 'nullable|exists:projects,id',
+            'user_ids'     => 'nullable|array',
+            'user_ids.*'   => 'exists:users,id',
+            'attachment'   => 'nullable|file|mimes:pdf,jpg,png,docx|max:10240',
+        ]);
+
+        if (! empty($validated['project_id'])) {
+            $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.send_email');
+        }
+
+        $targetUsers = $this->resolveTargetUsers($request->user(), $validated);
+        $attachmentPath = null;
+
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = $request->file('attachment')->store('email_attachments', 'public');
+        }
+
+        $sent = $this->dispatchEmail($targetUsers, (object) [
+            'title'   => $validated['subject'],
+            'content' => $validated['body'],
+        ], $attachmentPath);
+
+        return response()->json([
+            'message' => 'E-posta gönderimi tamamlandı.',
+            'sent_to' => $sent,
+        ]);
+    }
+
+    // ─── YARDIMCI METODLAR ────────────────────────────────────────────────────
+
+    private function resolveTargetUsers(User $sender, array $validated): \Illuminate\Database\Eloquent\Collection
+    {
+        $columns = ['id', 'name', 'surname', 'email', 'phone'];
+
+        if ($sender->role === 'super_admin') {
+            return $this->resolveTargetUsersAsSuperAdmin($validated, $columns);
+        }
+
+        $participantIds = $this->participantUserIdsInManageableProjects($sender);
+
+        if (! empty($validated['user_ids'])) {
+            foreach ($validated['user_ids'] as $uid) {
+                $uid = (int) $uid;
+                abort_unless(
+                    in_array($uid, $participantIds, true) || $uid === (int) $sender->id,
+                    403,
+                    'Secilen kullanicilarin bir kismi erisim kapsaminiz disinda.'
+                );
+            }
+
+            return User::query()
+                ->where('status', 'active')
+                ->whereIn('id', $validated['user_ids'])
+                ->get($columns);
+        }
+
+        $privileged = array_intersect($validated['target_roles'] ?? [], ['super_admin', 'coordinator', 'staff']);
+        if ($privileged !== [] && empty($validated['project_id'])) {
+            abort(403, 'Bu rollere toplu mesaj icin proje secilmelidir.');
+        }
+
+        $query = User::query()->where('status', 'active');
+
+        if (! empty($validated['target_roles'])) {
+            $query->whereIn('role', $validated['target_roles']);
+        }
+
+        if (! empty($validated['project_id'])) {
+            $query->whereHas('participations', fn ($q) =>
+                $q->where('project_id', $validated['project_id'])->where('status', 'active'));
+
+            return $query->get($columns);
+        }
+
+        if ($participantIds === []) {
+            return User::query()->whereRaw('0 = 1')->get($columns);
+        }
+
+        $query->whereIn('id', $participantIds);
+
+        return $query->get($columns);
+    }
+
+    private function resolveTargetUsersAsSuperAdmin(array $validated, array $columns): \Illuminate\Database\Eloquent\Collection
+    {
+        $query = User::query()->where('status', 'active');
+
+        if (! empty($validated['user_ids'])) {
+            return $query->whereIn('id', $validated['user_ids'])->get($columns);
+        }
+
+        if (! empty($validated['target_roles'])) {
+            $query->whereIn('role', $validated['target_roles']);
+        }
+
+        if (! empty($validated['project_id'])) {
+            $query->whereHas('participations', fn ($q) =>
+                $q->where('project_id', $validated['project_id'])->where('status', 'active'));
+        }
+
+        return $query->get($columns);
+    }
+
+    private function dispatchSms(\Illuminate\Database\Eloquent\Collection $users, string $message): int
+    {
+        // SMS entegrasyonu (Faz 5'te Netgsm API'si eklenecek)
+        // Şimdilik CommunicationLog'a kaydediyoruz
+        $sent = 0;
+        foreach ($users as $user) {
+            if ($user->phone) {
+                $sent++;
+            }
+        }
+        // Toplu log kaydı
+        if ($sent > 0) {
+            \App\Models\CommunicationLog::create([
+                'type'             => 'sms',
+                'sender_id'        => Auth::id(),
+                'recipients_count' => $sent,
+                'subject'          => 'SMS',
+                'content'          => $message,
+                'status'           => 'queued',
+            ]);
+        }
+        return $sent;
+    }
+
+    private function dispatchEmail(\Illuminate\Database\Eloquent\Collection $users, object $announcement, ?string $attachmentPath): int
+    {
+        // E-posta entegrasyonu (Faz 5'te Laravel Mail + queue eklenecek)
+        $sent = $users->count();
+        if ($sent > 0) {
+            \App\Models\CommunicationLog::create([
+                'type'             => 'email',
+                'sender_id'        => Auth::id(),
+                'recipients_count' => $sent,
+                'subject'          => $announcement->title,
+                'content'          => substr($announcement->content, 0, 500),
+                'attachment_path'  => $attachmentPath,
+                'status'           => 'queued',
+            ]);
+        }
+        return $sent;
+    }
+}
