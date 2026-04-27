@@ -29,7 +29,7 @@ RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
 
 EXPOSE 8080
 
-ENV PHP_CLI_SERVER_WORKERS=4
-
-# PORT Railway verir. JSON exec form (sinyal / init davranisi)
-CMD ["sh", "-c", "php artisan config:cache && php artisan route:cache 2>/dev/null; exec php artisan serve --host=0.0.0.0 --port=\"${PORT:-8080}\""]
+# Basta config:cache kullanma: APP_KEY/DB yokken komut 1 cikis yapar, serve hic calismaz -> 502.
+# Cache'i Release Command / deploy sonrasi veya 'php artisan optimize' ile uretin.
+# Railway $PORT'u enjekte eder; 0.0.0.0 zorunlu.
+CMD ["sh", "-c", "exec php artisan serve --host=0.0.0.0 --port=${PORT:-8080}"]

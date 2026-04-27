@@ -9,10 +9,11 @@ use function Knuckles\Scribe\Config\removeStrategies;
 
 // knuckleswtf/scribe sadece require-dev; `composer install --no-dev` (Docker/Railway) paketi yuklemez.
 if (! class_exists(Defaults::class)) {
+    // config() yukleme siralamasinda donguye girmesin: env() kullan (sadece Scribe yokken, prod Docker)
     return [
-        'title' => (string) config('app.name', 'Laravel') . ' API',
+        'title' => (string) (env('APP_NAME', 'Laravel')) . ' API',
         'description' => '',
-        'base_url' => (string) config('app.url', 'http://localhost'),
+        'base_url' => (string) (env('APP_URL', 'http://localhost')),
     ];
 }
 
