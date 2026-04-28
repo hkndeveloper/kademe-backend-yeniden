@@ -51,6 +51,9 @@ TXT;
         $matched = $this->matchProjects($normalized, $projects);
         $wantsList = $this->wantsParticipantList($normalized);
         $wantsApplications = str_contains($normalized, 'basvuru') || str_contains($normalized, 'başvuru');
+        $limit = $this->extractLimit($normalized);
+        $applicationStatusFilter = $this->extractApplicationStatusFilter($normalized);
+        $participantStatusFilter = $this->extractParticipantStatusFilter($normalized);
         $wantsSummaryAll = (str_contains($normalized, 'tum') || str_contains($normalized, 'tüm') || str_contains($normalized, 'genel'))
             && (str_contains($normalized, 'ozet') || str_contains($normalized, 'özet') || str_contains($normalized, 'toplam'));
 
@@ -72,14 +75,14 @@ TXT;
         $project = $matched->first();
 
         if ($wantsApplications) {
-            return $this->buildApplicationStats($user, $project);
+            return $this->buildApplicationStats($user, $project, $applicationStatusFilter);
         }
 
         if ($wantsList) {
-            return $this->buildParticipantList($user, $project);
+            return $this->buildParticipantList($user, $project, $participantStatusFilter, $limit);
         }
 
-        return $this->buildParticipantStats($user, $project);
+        return $this->buildParticipantStats($user, $project, $participantStatusFilter);
     }
 
     private function manageableProjects(User $user): Collection
@@ -127,6 +130,62 @@ TXT;
             || str_contains($n, 'kimler')
             || str_contains($n, 'detay')
             || str_contains($n, 'tablo');
+    }
+
+    private function extractLimit(string $normalized): int
+    {
+        $matches = [];
+        if (preg_match('/(?:limit|ilk)\s*:?\s*(\d{1,4})/u', $normalized, $matches) === 1) {
+            $parsed = (int) ($matches[1] ?? 0);
+            if ($parsed > 0) {
+                return min($parsed, self::EXPORT_ROW_CAP);
+            }
+        }
+
+        return self::EXPORT_ROW_CAP;
+    }
+
+    private function extractApplicationStatusFilter(string $normalized): ?string
+    {
+        $map = [
+            'pending' => ['pending', 'beklemede'],
+            'accepted' => ['accepted', 'kabul', 'kabul edildi'],
+            'rejected' => ['rejected', 'red', 'reddedildi'],
+            'waitlisted' => ['waitlisted', 'yedek', 'yedek listede'],
+            'interview_planned' => ['interview_planned', 'mulakat planlandi', 'mülakat planlandı'],
+            'interview_passed' => ['interview_passed', 'mulakat gecti', 'mülakat geçti'],
+            'interview_failed' => ['interview_failed', 'mulakat olumsuz', 'mülakat olumsuz'],
+        ];
+
+        foreach ($map as $status => $keywords) {
+            foreach ($keywords as $keyword) {
+                if (str_contains($normalized, $this->normalize($keyword))) {
+                    return $status;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function extractParticipantStatusFilter(string $normalized): ?string
+    {
+        $map = [
+            'active' => ['active', 'aktif'],
+            'inactive' => ['inactive', 'pasif'],
+            'pending' => ['pending', 'beklemede'],
+            'completed' => ['completed', 'tamamlandi', 'tamamlandı'],
+        ];
+
+        foreach ($map as $status => $keywords) {
+            foreach ($keywords as $keyword) {
+                if (str_contains($normalized, $this->normalize($keyword))) {
+                    return $status;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function matchProjects(string $normalized, Collection $projects): Collection
@@ -188,16 +247,21 @@ TXT;
         return $map[$type] ?? [];
     }
 
-    private function buildParticipantStats(User $user, Project $project): array
+    private function buildParticipantStats(User $user, Project $project, ?string $statusFilter = null): array
     {
         $base = Participant::query()->where('project_id', $project->id);
+        if ($statusFilter !== null) {
+            $base->where('status', $statusFilter);
+        }
+
         $total = (clone $base)->count();
         $active = (clone $base)->where('status', 'active')->count();
         $graduated = (clone $base)->where('graduation_status', 'graduated')->count();
 
         $reply = sprintf(
-            "**%s** katılımcı özeti:\n- Toplam kayıt: %d\n- Aktif: %d\n- Mezun (işaretli): %d\n\nListe için: \"… katılımcı listesi\" yazın.",
+            "**%s** katılımcı özeti%s:\n- Toplam kayıt: %d\n- Aktif: %d\n- Mezun (işaretli): %d\n\nListe için: \"… katılımcı listesi\" yazın.",
             $project->name,
+            $statusFilter ? " (durum filtresi: {$statusFilter})" : '',
             $total,
             $active,
             $graduated,
@@ -217,14 +281,19 @@ TXT;
         return $this->response($reply, 'participant_stats', $table, null, $token);
     }
 
-    private function buildParticipantList(User $user, Project $project): array
+    private function buildParticipantList(User $user, Project $project, ?string $statusFilter = null, int $limit = self::EXPORT_ROW_CAP): array
     {
-        $rows = Participant::query()
+        $query = Participant::query()
             ->where('project_id', $project->id)
             ->with(['user:id,name,surname,email,phone,university,department', 'period:id,name'])
             ->orderByDesc('updated_at')
-            ->limit(self::EXPORT_ROW_CAP)
-            ->get();
+            ->limit($limit);
+
+        if ($statusFilter !== null) {
+            $query->where('status', $statusFilter);
+        }
+
+        $rows = $query->get();
 
         $tableRows = [];
         foreach ($rows as $p) {
@@ -247,10 +316,11 @@ TXT;
         ];
 
         $reply = sprintf(
-            "**%s** — en güncel %d katılım kaydı listelendi (üst sınır %d). CSV indirmek için düğmeyi kullanın.",
+            "**%s** — en güncel %d katılım kaydı listelendi (üst sınır %d)%s. CSV indirmek için düğmeyi kullanın.",
             $project->name,
             count($tableRows),
-            self::EXPORT_ROW_CAP,
+            $limit,
+            $statusFilter ? ", durum: {$statusFilter}" : '',
         );
 
         $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'katilimcilar_' . $project->slug);
@@ -258,15 +328,19 @@ TXT;
         return $this->response($reply, 'participant_list', $table, null, $token);
     }
 
-    private function buildApplicationStats(User $user, Project $project): array
+    private function buildApplicationStats(User $user, Project $project, ?string $statusFilter = null): array
     {
         $base = Application::query()->where('project_id', $project->id);
+        if ($statusFilter !== null) {
+            $base->where('status', $statusFilter);
+        }
+
         $byStatus = (clone $base)
             ->selectRaw('status, count(*) as c')
             ->groupBy('status')
             ->pluck('c', 'status');
 
-        $lines = ["**{$project->name}** başvuru durumları:"];
+        $lines = ["**{$project->name}** başvuru durumları" . ($statusFilter ? " (filtre: {$statusFilter})" : '') . ":"];
         $tableRows = [];
         foreach ($byStatus as $status => $count) {
             $lines[] = sprintf('- %s: %d', $status, $count);
@@ -281,9 +355,7 @@ TXT;
             'rows' => $tableRows,
         ];
 
-        $exportToken = $tableRows !== []
-            ? $this->storeExportPayload($user, $table['columns'], $table['rows'], 'basvurular_' . $project->slug)
-            : null;
+        $exportToken = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'basvurular_' . $project->slug);
 
         return $this->response(implode("\n", $lines), 'application_stats', $table, null, $exportToken);
     }
