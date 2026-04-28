@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Application;
+use App\Models\FinancialTransaction;
 use App\Models\Participant;
 use App\Models\Project;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -28,6 +30,8 @@ class AdminChatbotService
 • Bir proje adı veya kodu geçirerek (ör. Diplomasi360, KADEME+, Pergel): "aktif öğrenci sayısı", "katılımcı listesi", "özet"
 • "Tüm projeler özet" veya "genel özet" — yönetebildiğiniz projelerdeki toplam katılımcı sayıları
 • "Başvuru" + proje — bekleyen / onaylanan başvuru sayıları (yaklaşık)
+• "Mali özet" + proje(ler) — harcama/ödeme toplamları (örn: "diplomasi360 ve pergel mali özet son 30 gün")
+• Tarih filtresi: "son 7 gün", "son 30 gün", "bu ay", "YYYY-MM-DD - YYYY-MM-DD"
 
 Çıktı: Tablo görünürse CSV olarak indirebilirsiniz. Tam doğal dil anlama yoktur; anahtar kelimeler ve proje eşleşmesi kullanılır.
 TXT;
@@ -51,9 +55,12 @@ TXT;
         $matched = $this->matchProjects($normalized, $projects);
         $wantsList = $this->wantsParticipantList($normalized);
         $wantsApplications = str_contains($normalized, 'basvuru') || str_contains($normalized, 'başvuru');
+        $wantsFinancial = $this->wantsFinancialSummary($normalized);
         $limit = $this->extractLimit($normalized);
         $applicationStatusFilter = $this->extractApplicationStatusFilter($normalized);
         $participantStatusFilter = $this->extractParticipantStatusFilter($normalized);
+        [$fromDate, $toDate, $dateLabel] = $this->extractDateRange($normalized);
+        $wantsComparison = $this->wantsProjectComparison($normalized);
         $wantsSummaryAll = (str_contains($normalized, 'tum') || str_contains($normalized, 'tüm') || str_contains($normalized, 'genel'))
             && (str_contains($normalized, 'ozet') || str_contains($normalized, 'özet') || str_contains($normalized, 'toplam'));
 
@@ -71,15 +78,24 @@ TXT;
             );
         }
 
+        $selectedProjects = $matched->take($wantsComparison || $wantsFinancial ? 5 : 1)->values();
         /** @var Project $project */
-        $project = $matched->first();
+        $project = $selectedProjects->first();
+
+        if ($wantsFinancial) {
+            return $this->buildFinancialSummary($user, $selectedProjects, $fromDate, $toDate, $dateLabel);
+        }
 
         if ($wantsApplications) {
-            return $this->buildApplicationStats($user, $project, $applicationStatusFilter);
+            return $this->buildApplicationStats($user, $project, $applicationStatusFilter, $fromDate, $toDate, $dateLabel);
         }
 
         if ($wantsList) {
             return $this->buildParticipantList($user, $project, $participantStatusFilter, $limit);
+        }
+
+        if ($wantsComparison && $selectedProjects->count() > 1) {
+            return $this->buildProjectComparisonSummary($user, $selectedProjects, $fromDate, $toDate, $dateLabel);
         }
 
         return $this->buildParticipantStats($user, $project, $participantStatusFilter);
@@ -130,6 +146,25 @@ TXT;
             || str_contains($n, 'kimler')
             || str_contains($n, 'detay')
             || str_contains($n, 'tablo');
+    }
+
+    private function wantsProjectComparison(string $normalized): bool
+    {
+        return str_contains($normalized, 'karsilastir')
+            || str_contains($normalized, 'karşılaştır')
+            || str_contains($normalized, 'vs')
+            || str_contains($normalized, ' ve ');
+    }
+
+    private function wantsFinancialSummary(string $normalized): bool
+    {
+        return str_contains($normalized, 'mali')
+            || str_contains($normalized, 'finans')
+            || str_contains($normalized, 'harcama')
+            || str_contains($normalized, 'odeme')
+            || str_contains($normalized, 'ödeme')
+            || str_contains($normalized, 'gider')
+            || str_contains($normalized, 'tutar');
     }
 
     private function extractLimit(string $normalized): int
@@ -188,6 +223,42 @@ TXT;
         return null;
     }
 
+    /**
+     * @return array{0: Carbon|null, 1: Carbon|null, 2: string|null}
+     */
+    private function extractDateRange(string $normalized): array
+    {
+        if (str_contains($normalized, 'bu ay')) {
+            return [now()->startOfMonth(), now()->endOfMonth(), 'bu ay'];
+        }
+
+        $matches = [];
+        if (preg_match('/son\s+(\d{1,3})\s+gun/u', $normalized, $matches) === 1) {
+            $days = max(1, min(365, (int) ($matches[1] ?? 30)));
+            return [now()->subDays($days)->startOfDay(), now()->endOfDay(), "son {$days} gun"];
+        }
+
+        if (
+            preg_match(
+                '/(\d{4}-\d{2}-\d{2})\s*(?:-|–|—|to|ile)\s*(\d{4}-\d{2}-\d{2})/u',
+                $normalized,
+                $matches
+            ) === 1
+        ) {
+            try {
+                $from = Carbon::parse((string) ($matches[1] ?? ''))->startOfDay();
+                $to = Carbon::parse((string) ($matches[2] ?? ''))->endOfDay();
+                if ($from->lte($to)) {
+                    return [$from, $to, $from->format('Y-m-d') . ' - ' . $to->format('Y-m-d')];
+                }
+            } catch (\Throwable) {
+                return [null, null, null];
+            }
+        }
+
+        return [null, null, null];
+    }
+
     private function matchProjects(string $normalized, Collection $projects): Collection
     {
         $scored = [];
@@ -230,7 +301,7 @@ TXT;
 
         uasort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
 
-        return collect($scored)->pluck('project')->take(1);
+        return collect($scored)->pluck('project')->take(8);
     }
 
     private function aliasesForType(string $type): array
@@ -328,11 +399,21 @@ TXT;
         return $this->response($reply, 'participant_list', $table, null, $token);
     }
 
-    private function buildApplicationStats(User $user, Project $project, ?string $statusFilter = null): array
+    private function buildApplicationStats(
+        User $user,
+        Project $project,
+        ?string $statusFilter = null,
+        ?Carbon $fromDate = null,
+        ?Carbon $toDate = null,
+        ?string $dateLabel = null,
+    ): array
     {
         $base = Application::query()->where('project_id', $project->id);
         if ($statusFilter !== null) {
             $base->where('status', $statusFilter);
+        }
+        if ($fromDate !== null && $toDate !== null) {
+            $base->whereBetween('created_at', [$fromDate, $toDate]);
         }
 
         $byStatus = (clone $base)
@@ -340,7 +421,14 @@ TXT;
             ->groupBy('status')
             ->pluck('c', 'status');
 
-        $lines = ["**{$project->name}** başvuru durumları" . ($statusFilter ? " (filtre: {$statusFilter})" : '') . ":"];
+        $labelSuffix = '';
+        if ($statusFilter !== null) {
+            $labelSuffix .= "durum: {$statusFilter}";
+        }
+        if ($dateLabel !== null) {
+            $labelSuffix .= ($labelSuffix !== '' ? ', ' : '') . "tarih: {$dateLabel}";
+        }
+        $lines = ["**{$project->name}** başvuru durumları" . ($labelSuffix !== '' ? " ({$labelSuffix})" : '') . ":"];
         $tableRows = [];
         foreach ($byStatus as $status => $count) {
             $lines[] = sprintf('- %s: %d', $status, $count);
@@ -358,6 +446,95 @@ TXT;
         $exportToken = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'basvurular_' . $project->slug);
 
         return $this->response(implode("\n", $lines), 'application_stats', $table, null, $exportToken);
+    }
+
+    private function buildFinancialSummary(
+        User $user,
+        Collection $projects,
+        ?Carbon $fromDate = null,
+        ?Carbon $toDate = null,
+        ?string $dateLabel = null,
+    ): array {
+        $rows = [];
+
+        foreach ($projects as $project) {
+            $query = FinancialTransaction::query()->where('project_id', $project->id);
+
+            if ($fromDate !== null && $toDate !== null) {
+                $query->whereBetween('submitted_at', [$fromDate, $toDate]);
+            }
+
+            $pending = (clone $query)->where('status', 'pending')->sum('amount');
+            $approved = (clone $query)->where('status', 'approved')->sum('amount');
+            $paid = (clone $query)->where('status', 'paid')->sum('amount');
+            $rejected = (clone $query)->where('status', 'rejected')->sum('amount');
+            $total = (clone $query)->sum('amount');
+
+            $rows[] = [
+                (string) $project->name,
+                number_format((float) $pending, 2, ',', '.'),
+                number_format((float) $approved, 2, ',', '.'),
+                number_format((float) $paid, 2, ',', '.'),
+                number_format((float) $rejected, 2, ',', '.'),
+                number_format((float) $total, 2, ',', '.'),
+            ];
+        }
+
+        $table = [
+            'columns' => ['Proje', 'Pending Tutar', 'Approved Tutar', 'Paid Tutar', 'Rejected Tutar', 'Toplam'],
+            'rows' => $rows,
+        ];
+
+        $reply = 'Mali ozet tablosu hazirlandi';
+        if ($dateLabel !== null) {
+            $reply .= " ({$dateLabel})";
+        }
+        $reply .= '. CSV olarak indirebilirsiniz.';
+
+        $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'mali_ozet');
+
+        return $this->response($reply, 'financial_summary', $table, null, $token);
+    }
+
+    private function buildProjectComparisonSummary(
+        User $user,
+        Collection $projects,
+        ?Carbon $fromDate = null,
+        ?Carbon $toDate = null,
+        ?string $dateLabel = null,
+    ): array {
+        $rows = [];
+
+        foreach ($projects as $project) {
+            $applications = Application::query()->where('project_id', $project->id);
+            if ($fromDate !== null && $toDate !== null) {
+                $applications->whereBetween('created_at', [$fromDate, $toDate]);
+            }
+
+            $rows[] = [
+                (string) $project->name,
+                (string) Participant::query()->where('project_id', $project->id)->where('status', 'active')->count(),
+                (string) Participant::query()->where('project_id', $project->id)->count(),
+                (string) (clone $applications)->count(),
+                (string) (clone $applications)->where('status', 'pending')->count(),
+                (string) (clone $applications)->where('status', 'accepted')->count(),
+            ];
+        }
+
+        $table = [
+            'columns' => ['Proje', 'Aktif Katilimci', 'Toplam Katilimci', 'Basvuru', 'Pending', 'Accepted'],
+            'rows' => $rows,
+        ];
+
+        $reply = 'Proje karsilastirma tablosu hazirlandi';
+        if ($dateLabel !== null) {
+            $reply .= " ({$dateLabel})";
+        }
+        $reply .= '.';
+
+        $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'proje_karsilastirma');
+
+        return $this->response($reply, 'project_comparison', $table, null, $token);
     }
 
     private function buildAllProjectsSummary(User $user, Collection $projects): array
