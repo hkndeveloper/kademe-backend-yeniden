@@ -254,9 +254,11 @@ class SiteSettingsController extends Controller
 
             foreach ($entries as $key => $value) {
                 SystemSetting::updateOrCreate(
-                    ['key' => $key],
                     [
                         'group' => $group,
+                        'key' => $key,
+                    ],
+                    [
                         'value' => is_array($value)
                             ? json_encode($value, JSON_UNESCAPED_UNICODE)
                             : (string) ($value ?? ''),
