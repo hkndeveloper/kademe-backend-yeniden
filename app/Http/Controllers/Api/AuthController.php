@@ -11,6 +11,20 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     /**
+     * role kolonu ile Spatie rol kaydini senkron tut.
+     */
+    private function ensureRoleSync(User $user): void
+    {
+        $allowedRoles = ['super_admin', 'coordinator', 'staff', 'student', 'alumni', 'visitor'];
+        if (! in_array((string) $user->role, $allowedRoles, true)) {
+            return;
+        }
+
+        if (! $user->hasRole((string) $user->role)) {
+            $user->syncRoles([(string) $user->role]);
+        }
+    }
+    /**
      * Kullanıcı Kayıt (Register)
      */
     public function register(Request $request)
@@ -74,6 +88,8 @@ class AuthController extends Controller
             return response()->json(['message' => 'Hesabınız aktif değil veya pasif duruma alınmış.'], 403);
         }
 
+        $this->ensureRoleSync($user);
+
         // Token oluştur (Tüm eski tokenleri silebiliriz veya çoklu cihaza izin verebiliriz)
         // $user->tokens()->delete(); // İsteğe bağlı: Tek cihazdan giriş için
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -104,8 +120,12 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
+        /** @var User $user */
+        $user = $request->user();
+        $this->ensureRoleSync($user);
+
         return response()->json([
-            'user' => new \App\Http\Resources\UserResource($request->user()->load('profile', 'roles', 'staffProfile'))
+            'user' => new \App\Http\Resources\UserResource($user->load('profile', 'roles', 'staffProfile'))
         ]);
     }
 }

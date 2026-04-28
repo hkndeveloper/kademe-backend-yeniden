@@ -10,6 +10,7 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -126,6 +127,7 @@ class PermissionMatrixController extends Controller
                     ])->values()->all(),
                 ]
             );
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
 
             return response()->json([
                 'message' => 'Granular yetki matrisi guncellendi.',
@@ -163,6 +165,7 @@ class PermissionMatrixController extends Controller
                 ])->values()->all(),
             ]
         );
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return response()->json([
             'message' => 'Yetki matrisi guncellendi.',
