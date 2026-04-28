@@ -99,7 +99,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->group(function () {
 });
 
 // --- ADMIN / KOORDÄ°NATÃ–R PANELÄ° --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|staff'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|staff', 'audit.action'])->prefix('admin')->group(function () {
 
     // Dashboard Ä°statistikleri
     Route::get('/dashboard/stats', [\App\Http\Controllers\Api\AdminDashboardController::class, 'stats']);

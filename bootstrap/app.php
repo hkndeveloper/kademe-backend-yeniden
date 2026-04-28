@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'blacklist' => \App\Http\Middleware\CheckBlacklist::class,
             'kvkk' => \App\Http\Middleware\CheckKvkkConsent::class,
+            'audit.action' => \App\Http\Middleware\AuditAdminActions::class,
         ]);
         
         // API grubuna global olarak bazılarını ekleyebiliriz veya Route tarafında kullanırız.
