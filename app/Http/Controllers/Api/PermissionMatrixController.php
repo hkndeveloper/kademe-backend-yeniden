@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Models\RolePermissionScope;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
@@ -69,6 +70,7 @@ class PermissionMatrixController extends Controller
             'permission_groups' => $groupedPermissions,
             'granular_matrix_groups' => $granularMatrixGroups,
             'granular_permission_groups' => config('permission_catalog.granular_permissions', []),
+            'role_permission_scopes' => $this->groupedRolePermissionScopes(),
         ]);
     }
 
@@ -85,6 +87,12 @@ class PermissionMatrixController extends Controller
             'granular_matrix.*.role' => 'required|string|exists:roles,name',
             'granular_matrix.*.permissions' => 'array',
             'granular_matrix.*.permissions.*' => 'string',
+            'granular_scopes' => 'sometimes|array',
+            'granular_scopes.*.role' => 'required_with:granular_scopes|string|exists:roles,name',
+            'granular_scopes.*.scopes' => 'array',
+            'granular_scopes.*.scopes.*.permission_name' => 'required|string',
+            'granular_scopes.*.scopes.*.scope_type' => 'required|in:all,own_projects,assigned_projects,own_unit,selected_projects,self,none',
+            'granular_scopes.*.scopes.*.scope_payload' => 'nullable|array',
         ]);
 
         $hasGranular = ! empty($validated['granular_matrix'] ?? []);
@@ -117,6 +125,10 @@ class PermissionMatrixController extends Controller
                 $role->syncPermissions($allowed);
             }
 
+            if (! empty($validated['granular_scopes'])) {
+                $this->syncGranularScopes($validated['granular_scopes'], $granularCatalog);
+            }
+
             $this->logPermissionActivity(
                 $request,
                 null,
@@ -125,6 +137,10 @@ class PermissionMatrixController extends Controller
                     'roles' => collect($validated['granular_matrix'])->map(fn (array $row) => [
                         'role' => $row['role'],
                         'granular_permission_count' => count($row['permissions'] ?? []),
+                    ])->values()->all(),
+                    'scopes' => collect($validated['granular_scopes'] ?? [])->map(fn (array $row) => [
+                        'role' => $row['role'],
+                        'scope_count' => count($row['scopes'] ?? []),
                     ])->values()->all(),
                 ]
             );
@@ -630,5 +646,56 @@ class PermissionMatrixController extends Controller
             ->sort()
             ->values()
             ->all();
+    }
+
+    private function groupedRolePermissionScopes(): array
+    {
+        return RolePermissionScope::query()
+            ->get(['role_name', 'permission_name', 'scope_type', 'scope_payload'])
+            ->groupBy('role_name')
+            ->map(function ($items) {
+                return $items->mapWithKeys(function (RolePermissionScope $item) {
+                    return [
+                        $item->permission_name => [
+                            'scope_type' => $item->scope_type,
+                            'scope_payload' => $item->scope_payload ?? [],
+                        ],
+                    ];
+                })->all();
+            })
+            ->all();
+    }
+
+    private function syncGranularScopes(array $rows, array $granularCatalog): void
+    {
+        $known = collect($rows)->pluck('role')->unique()->values()->all();
+        if (! empty($known)) {
+            RolePermissionScope::query()->whereIn('role_name', $known)->delete();
+        }
+
+        foreach ($rows as $row) {
+            $roleName = $row['role'] ?? null;
+            if (! is_string($roleName) || $roleName === '') {
+                continue;
+            }
+
+            foreach (($row['scopes'] ?? []) as $scopeRow) {
+                $permissionName = $scopeRow['permission_name'] ?? null;
+                $scopeType = $scopeRow['scope_type'] ?? null;
+                if (! is_string($permissionName) || ! in_array($permissionName, $granularCatalog, true)) {
+                    continue;
+                }
+                if (! is_string($scopeType)) {
+                    continue;
+                }
+
+                RolePermissionScope::query()->create([
+                    'role_name' => $roleName,
+                    'permission_name' => $permissionName,
+                    'scope_type' => $scopeType,
+                    'scope_payload' => $scopeRow['scope_payload'] ?? [],
+                ]);
+            }
+        }
     }
 }

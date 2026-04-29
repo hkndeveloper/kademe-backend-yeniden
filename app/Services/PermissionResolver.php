@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\RolePermissionScope;
 use App\Models\Request as SupportRequest;
 use App\Models\SupportTicket;
 use App\Models\User;
@@ -153,9 +154,20 @@ class PermissionResolver
         $scopes = [];
         $manageableProjectIds = $this->manageableProjectIds($user);
         $manageableUnit = $user->staffProfile?->unit;
+        $roleNames = $user->roles->pluck('name')->filter()->values()->all();
+        $roleScopeRows = empty($roleNames)
+            ? collect()
+            : RolePermissionScope::query()
+                ->whereIn('role_name', $roleNames)
+                ->get()
+                ->groupBy('permission_name');
 
         foreach ($effectivePermissions as $permissionName) {
             $scope = $this->defaultScopeFor($user, $permissionName, $manageableProjectIds, $manageableUnit);
+            $roleScope = $this->mergedRoleScope($roleScopeRows->get($permissionName, collect()));
+            if ($roleScope !== null) {
+                $scope = $roleScope;
+            }
 
             $override = $overrides
                 ->where('effect', 'allow')
@@ -172,6 +184,53 @@ class PermissionResolver
         }
 
         return $scopes;
+    }
+
+    private function mergedRoleScope(Collection $scopeRows): ?array
+    {
+        if ($scopeRows->isEmpty()) {
+            return null;
+        }
+
+        $byPriority = [
+            'all' => 100,
+            'selected_projects' => 90,
+            'own_projects' => 80,
+            'assigned_projects' => 70,
+            'own_unit' => 60,
+            'self' => 50,
+            'none' => 10,
+        ];
+
+        $best = $scopeRows
+            ->sortByDesc(function ($row) use ($byPriority) {
+                return $byPriority[$row->scope_type] ?? 0;
+            })
+            ->first();
+
+        if (! $best) {
+            return null;
+        }
+
+        $payload = (array) ($best->scope_payload ?? []);
+        if (in_array($best->scope_type, ['selected_projects', 'own_projects', 'assigned_projects'], true)) {
+            $projectIds = $scopeRows
+                ->filter(fn ($row) => in_array($row->scope_type, ['selected_projects', 'own_projects', 'assigned_projects'], true))
+                ->flatMap(fn ($row) => (array) (($row->scope_payload ?? [])['project_ids'] ?? []))
+                ->filter(fn ($id) => is_numeric($id))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+            if (! empty($projectIds)) {
+                $payload['project_ids'] = $projectIds;
+            }
+        }
+
+        return [
+            'scope_type' => $best->scope_type,
+            'scope_payload' => $payload,
+        ];
     }
 
     private function defaultScopeFor(User $user, string $permissionName, array $manageableProjectIds, ?string $manageableUnit): array
