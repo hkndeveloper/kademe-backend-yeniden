@@ -72,6 +72,7 @@ class PermissionMatrixController extends Controller
             'granular_matrix_groups' => $granularMatrixGroups,
             'granular_permission_groups' => config('permission_catalog.granular_permissions', []),
             'role_permission_scopes' => $this->groupedRolePermissionScopes(),
+            'role_scope_storage_ready' => Schema::hasTable('role_permission_scopes'),
         ]);
     }
 

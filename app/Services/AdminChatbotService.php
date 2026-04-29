@@ -107,7 +107,7 @@ TXT;
             return Project::query()->where('status', 'active')->orderBy('name')->get();
         }
 
-        $ids = $this->permissionResolver->manageableProjectIdsForUser($user);
+        $ids = $this->permissionResolver->projectIdsForPermission($user, 'projects.view');
         if ($ids === []) {
             return collect();
         }
