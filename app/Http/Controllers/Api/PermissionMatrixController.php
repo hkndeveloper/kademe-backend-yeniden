@@ -270,6 +270,8 @@ class PermissionMatrixController extends Controller
 
         $allowedPermissions = collect(config('permission_catalog.granular_permissions', []))
             ->flatMap(fn (array $permissions) => $permissions)
+            ->merge(array_keys(config('permission_catalog.legacy_map', [])))
+            ->unique()
             ->values()
             ->all();
 
