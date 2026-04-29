@@ -344,6 +344,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::put('/financials/{id}/pay', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'markPaid']);
     Route::delete('/financials/{id}', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'destroy']);
     Route::get('/financials/{id}/invoice', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'downloadInvoice']);
+
+    // Unified aliases for role-specific pages under /panel/*
+    Route::get('/participants', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'index']);
+    Route::get('/participants/export', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'export']);
+    Route::get('/members', [\App\Http\Controllers\Api\StaffController::class, 'unitMembers']);
+    Route::get('/members/export', [\App\Http\Controllers\Api\StaffController::class, 'exportUnitMembers']);
 });
 
 // â”€â”€ KOORDÄ°NATÃ–R Ã–ZEL (sadece coordinator) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
