@@ -74,7 +74,7 @@ class UserController extends Controller
             'staffProfile',
             'participations.project:id,name',
             'applications.applicationForm.project:id,name',
-            'attendances.calendarEvent:id,title,start_time',
+            'attendances.program:id,title,start_at',
             'certificates.project:id,name',
             'roles:id,name',
         ])->findOrFail($id);
