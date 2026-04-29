@@ -10,6 +10,7 @@ use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\PermissionRegistrar;
@@ -650,6 +651,10 @@ class PermissionMatrixController extends Controller
 
     private function groupedRolePermissionScopes(): array
     {
+        if (! Schema::hasTable('role_permission_scopes')) {
+            return [];
+        }
+
         return RolePermissionScope::query()
             ->get(['role_name', 'permission_name', 'scope_type', 'scope_payload'])
             ->groupBy('role_name')
@@ -668,6 +673,10 @@ class PermissionMatrixController extends Controller
 
     private function syncGranularScopes(array $rows, array $granularCatalog): void
     {
+        if (! Schema::hasTable('role_permission_scopes')) {
+            return;
+        }
+
         $known = collect($rows)->pluck('role')->unique()->values()->all();
         if (! empty($known)) {
             RolePermissionScope::query()->whereIn('role_name', $known)->delete();

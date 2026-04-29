@@ -155,7 +155,7 @@ class PermissionResolver
         $manageableProjectIds = $this->manageableProjectIds($user);
         $manageableUnit = $user->staffProfile?->unit;
         $roleNames = $user->roles->pluck('name')->filter()->values()->all();
-        $roleScopeRows = empty($roleNames)
+        $roleScopeRows = empty($roleNames) || ! Schema::hasTable('role_permission_scopes')
             ? collect()
             : RolePermissionScope::query()
                 ->whereIn('role_name', $roleNames)
