@@ -362,7 +362,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:coordinator'])->group(func
     Route::get('/coordinator/participants/export', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'export']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'role:coordinator'])->prefix('panel/coordinator')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|staff'])->prefix('panel/coordinator')->group(function () {
     Route::get('/financials', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'myFinancials']);
     Route::get('/financials/export', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'exportMyFinancials']);
     Route::post('/financials', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'store']);
@@ -388,7 +388,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:staff'])->group(function (
     Route::get('/staff/projects/export', [\App\Http\Controllers\Api\StaffController::class, 'exportMyProjects']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'role:staff'])->prefix('panel/staff')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|staff'])->prefix('panel/staff')->group(function () {
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'myAnnouncements']);
     Route::get('/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'exportMyAnnouncements']);
     Route::get('/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'staffIndex']);
