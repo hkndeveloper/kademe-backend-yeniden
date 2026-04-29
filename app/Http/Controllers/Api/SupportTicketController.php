@@ -205,7 +205,7 @@ class SupportTicketController extends Controller
             ->latest();
 
         if ($user->role !== 'super_admin') {
-            $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.view');
 
             $query->where(function (Builder $builder) use ($user, $manageableProjectIds) {
                 $builder
@@ -259,7 +259,7 @@ class SupportTicketController extends Controller
             ->latest();
 
         if ($user->role !== 'super_admin') {
-            $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.export');
 
             $query->where(function (Builder $builder) use ($user, $manageableProjectIds) {
                 $builder

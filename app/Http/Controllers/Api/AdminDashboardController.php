@@ -54,18 +54,25 @@ class AdminDashboardController extends Controller
 
         $user = $request->user();
         $isGlobal = $user->role === 'super_admin';
-        $projectIds = $isGlobal ? null : ($this->permissionResolver->resolve($user)['contexts']['manageable_project_ids'] ?? []);
+        $projectIdsByPermission = [
+            'programs' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'programs.view'),
+            'applications' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'applications.view'),
+            'financial' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'financial.view'),
+            'support' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'support.view'),
+            'certificates' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'certificates.view'),
+            'projects' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'projects.view'),
+        ];
 
         $now = Carbon::now();
         $startOfMonth = $now->copy()->startOfMonth();
         $endOfMonth = $now->copy()->endOfMonth();
 
-        $scopeParticipant = Participant::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIds));
-        $scopeProgram = Program::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIds));
-        $scopeFinancial = FinancialTransaction::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIds));
-        $scopeApplication = Application::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIds));
-        $scopeSupport = SupportTicket::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIds));
-        $scopeCommunication = CommunicationLog::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIds));
+        $scopeParticipant = Participant::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['projects'] ?? [-1]));
+        $scopeProgram = Program::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['programs'] ?? [-1]));
+        $scopeFinancial = FinancialTransaction::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['financial'] ?? [-1]));
+        $scopeApplication = Application::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['applications'] ?? [-1]));
+        $scopeSupport = SupportTicket::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['support'] ?? [-1]));
+        $scopeCommunication = CommunicationLog::query()->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['projects'] ?? [-1]));
 
         $activeStudentCount = (clone $scopeParticipant)->where('status', 'active')->count();
 
@@ -93,7 +100,7 @@ class AdminDashboardController extends Controller
         $pendingFinancials = (clone $scopeFinancial)->where('status', 'pending')->count();
         $pendingSupport = (clone $scopeSupport)->where('status', 'open')->count();
 
-        $projectsQuery = Project::query()->when(! $isGlobal, fn ($q) => $q->whereIn('id', $projectIds));
+        $projectsQuery = Project::query()->when(! $isGlobal, fn ($q) => $q->whereIn('id', $projectIdsByPermission['projects'] ?? [-1]));
         $projects = $projectsQuery->withCount([
             'participants as active_participants_count' => fn ($q) => $q->where('status', 'active'),
         ])->get(['id', 'name', 'slug', 'max_participants']);

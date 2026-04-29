@@ -58,9 +58,9 @@ class AnnouncementController extends Controller
         );
     }
 
-    private function participantUserIdsInManageableProjects(User $sender): array
+    private function participantUserIdsInManageableProjects(User $sender, string $permission): array
     {
-        $projectIds = $this->permissionResolver->manageableProjectIdsForUser($sender);
+        $projectIds = $this->permissionResolver->projectIdsForPermission($sender, $permission);
         if ($projectIds === []) {
             return [];
         }
@@ -75,7 +75,7 @@ class AnnouncementController extends Controller
             ->all();
     }
 
-    private function scopeManageableAnnouncements(Request $request, $query)
+    private function scopeManageableAnnouncements(Request $request, $query, string $permission)
     {
         $user = $request->user();
 
@@ -83,7 +83,7 @@ class AnnouncementController extends Controller
             return $query;
         }
 
-        $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, $permission);
 
         if ($manageableProjectIds === []) {
             return $query->where('created_by', $user->id);
@@ -184,7 +184,7 @@ class AnnouncementController extends Controller
     {
         $this->abortUnlessAllowed($request, 'announcements.view');
         $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])->latest();
-        $query = $this->scopeManageableAnnouncements($request, $query);
+        $query = $this->scopeManageableAnnouncements($request, $query, 'announcements.view');
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -200,7 +200,7 @@ class AnnouncementController extends Controller
     {
         $this->abortUnlessAllowed($request, 'announcements.export');
         $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])->latest();
-        $query = $this->scopeManageableAnnouncements($request, $query);
+        $query = $this->scopeManageableAnnouncements($request, $query, 'announcements.export');
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -257,7 +257,7 @@ class AnnouncementController extends Controller
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.create');
         }
 
-        $targetUsers = $this->resolveTargetUsers($request->user(), $validated);
+        $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.create');
 
         $announcement = Announcement::create([
             'title'        => $validated['title'],
@@ -368,7 +368,7 @@ class AnnouncementController extends Controller
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.send_sms');
         }
 
-        $targetUsers = $this->resolveTargetUsers($request->user(), $validated);
+        $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.send_sms');
 
         $sent = $this->dispatchSms($targetUsers, $validated['message']);
 
@@ -399,7 +399,7 @@ class AnnouncementController extends Controller
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.send_email');
         }
 
-        $targetUsers = $this->resolveTargetUsers($request->user(), $validated);
+        $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.send_email');
         $attachmentPath = null;
 
         if ($request->hasFile('attachment')) {
@@ -419,7 +419,7 @@ class AnnouncementController extends Controller
 
     // ─── YARDIMCI METODLAR ────────────────────────────────────────────────────
 
-    private function resolveTargetUsers(User $sender, array $validated): \Illuminate\Database\Eloquent\Collection
+    private function resolveTargetUsers(User $sender, array $validated, string $permission): \Illuminate\Database\Eloquent\Collection
     {
         $columns = ['id', 'name', 'surname', 'email', 'phone'];
 
@@ -427,7 +427,7 @@ class AnnouncementController extends Controller
             return $this->resolveTargetUsersAsSuperAdmin($validated, $columns);
         }
 
-        $participantIds = $this->participantUserIdsInManageableProjects($sender);
+        $participantIds = $this->participantUserIdsInManageableProjects($sender, $permission);
 
         if (! empty($validated['user_ids'])) {
             foreach ($validated['user_ids'] as $uid) {

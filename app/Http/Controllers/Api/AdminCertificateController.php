@@ -19,12 +19,12 @@ class AdminCertificateController extends Controller
     ) {
     }
 
-    private function scopedCertificateQuery(Request $request)
+    private function scopedCertificateQuery(Request $request, string $permission)
     {
         $query = Certificate::with(['project:id,name', 'user:id,name,surname,email']);
 
         if ($request->user()->role !== 'super_admin') {
-            $projectIds = $this->permissionResolver->resolve($request->user())['contexts']['manageable_project_ids'] ?? [];
+            $projectIds = $this->permissionResolver->projectIdsForPermission($request->user(), $permission);
             $query->whereIn('project_id', $projectIds);
         }
 
@@ -38,7 +38,7 @@ class AdminCertificateController extends Controller
     {
         $this->abortUnlessAllowed($request, 'certificates.view');
 
-        $query = $this->scopedCertificateQuery($request);
+        $query = $this->scopedCertificateQuery($request, 'certificates.view');
 
         if ($request->filled('project_id')) {
             $projectId = (int) $request->project_id;
@@ -72,7 +72,7 @@ class AdminCertificateController extends Controller
     {
         $this->abortUnlessAllowed($request, 'certificates.export');
 
-        $query = $this->scopedCertificateQuery($request);
+        $query = $this->scopedCertificateQuery($request, 'certificates.export');
 
         if ($request->filled('project_id')) {
             $projectId = (int) $request->project_id;

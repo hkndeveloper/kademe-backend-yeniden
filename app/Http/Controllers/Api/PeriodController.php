@@ -19,7 +19,7 @@ class PeriodController extends Controller
     ) {
     }
 
-    private function scopeManageablePeriods(Request $request, $query)
+    private function scopeManageablePeriods(Request $request, $query, string $permission)
     {
         $user = $request->user();
 
@@ -27,7 +27,7 @@ class PeriodController extends Controller
             return $query;
         }
 
-        $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, $permission);
 
         if ($manageableProjectIds === []) {
             return $query->whereRaw('1 = 0');
@@ -41,7 +41,7 @@ class PeriodController extends Controller
         $this->abortUnlessAllowed($request, 'periods.view');
 
         $query = Period::with('project:id,name')->orderByDesc('created_at');
-        $query = $this->scopeManageablePeriods($request, $query);
+        $query = $this->scopeManageablePeriods($request, $query, 'periods.view');
 
         if ($request->filled('project_id')) {
             $query->where('project_id', $request->project_id);
@@ -61,7 +61,7 @@ class PeriodController extends Controller
         $this->abortUnlessAllowed($request, 'periods.export');
 
         $query = Period::with('project:id,name')->orderByDesc('created_at');
-        $query = $this->scopeManageablePeriods($request, $query);
+        $query = $this->scopeManageablePeriods($request, $query, 'periods.export');
 
         if ($request->filled('project_id')) {
             $query->where('project_id', $request->project_id);

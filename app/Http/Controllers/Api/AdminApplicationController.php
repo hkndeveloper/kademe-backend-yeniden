@@ -22,9 +22,9 @@ class AdminApplicationController extends Controller
     }
 
     /** @return int[] */
-    private function manageableProjectIdList(Request $request): array
+    private function manageableProjectIdList(Request $request, string $permission): array
     {
-        return $this->permissionResolver->manageableProjectIdsForUser($request->user());
+        return $this->permissionResolver->projectIdsForPermission($request->user(), $permission);
     }
 
     public function export(Request $request)
@@ -32,7 +32,7 @@ class AdminApplicationController extends Controller
         $this->abortUnlessAllowed($request, 'applications.export');
 
         $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'project:id,name']);
-        $query->whereIn('project_id', $this->manageableProjectIdList($request));
+        $query->whereIn('project_id', $this->manageableProjectIdList($request, 'applications.export'));
 
         if ($request->filled('project_id')) {
             $query->where('project_id', (int) $request->project_id);
@@ -82,7 +82,7 @@ class AdminApplicationController extends Controller
     {
         $this->abortUnlessAllowed($request, 'applications.view');
 
-        $projectIds = $this->manageableProjectIdList($request);
+        $projectIds = $this->manageableProjectIdList($request, 'applications.view');
 
         $query = Application::query()
             ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name'])
@@ -115,7 +115,7 @@ class AdminApplicationController extends Controller
     {
         $this->abortUnlessAllowed($request, 'applications.export');
 
-        $projectIds = $this->manageableProjectIdList($request);
+        $projectIds = $this->manageableProjectIdList($request, 'applications.export');
 
         $query = Application::query()
             ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name'])
@@ -167,7 +167,7 @@ class AdminApplicationController extends Controller
     {
         $this->abortUnlessAllowed($request, 'applications.update_status');
 
-        $projectIds = $this->manageableProjectIdList($request);
+        $projectIds = $this->manageableProjectIdList($request, 'applications.update_status');
         $application = Application::with('period')->findOrFail($id);
 
         abort_unless(in_array((int) $application->project_id, $projectIds, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
@@ -188,7 +188,7 @@ class AdminApplicationController extends Controller
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
-        $ids = $this->manageableProjectIdList($request);
+        $ids = $this->manageableProjectIdList($request, 'applications.view');
         abort_unless(in_array((int) $project->id, $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
 
         $query = Application::where('project_id', $validated['project_id'])
@@ -218,7 +218,7 @@ class AdminApplicationController extends Controller
 
         $application = Application::with('period')->findOrFail($id);
 
-        $ids = $this->manageableProjectIdList($request);
+        $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
 
         DB::beginTransaction();

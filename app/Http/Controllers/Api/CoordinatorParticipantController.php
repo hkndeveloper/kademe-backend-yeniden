@@ -37,7 +37,7 @@ class CoordinatorParticipantController extends Controller
     {
         $this->abortUnlessAllowed($request, 'projects.participants.view');
         $coordinator = $request->user();
-        $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($coordinator);
+        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.participants.view');
 
         $query = Participant::with([
             'project:id,name',
@@ -128,7 +128,7 @@ class CoordinatorParticipantController extends Controller
     {
         $this->abortUnlessAllowed($request, 'projects.participants.view');
         $coordinator = $request->user();
-        $manageableProjectIds = $this->permissionResolver->manageableProjectIdsForUser($coordinator);
+        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.participants.view');
 
         $query = Participant::with([
             'project:id,name',

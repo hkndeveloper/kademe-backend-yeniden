@@ -24,7 +24,11 @@ class FinancialTransactionController extends Controller
     /**
      * Süper admin dışı: yalnızca manageable_project_ids içindeki project_id kayıtları (null proje satırları dahil değil).
      */
-    private function scopeFinancialTransactionsForUser($query, \Illuminate\Contracts\Auth\Authenticatable $user): void
+    private function scopeFinancialTransactionsForUser(
+        $query,
+        \Illuminate\Contracts\Auth\Authenticatable $user,
+        string $permissionName = 'financial.view'
+    ): void
     {
         if ($user instanceof \App\Models\User && $user->role === 'super_admin') {
             return;
@@ -36,7 +40,7 @@ class FinancialTransactionController extends Controller
             return;
         }
 
-        $ids = $this->permissionResolver->manageableProjectIdsForUser($user);
+        $ids = $this->permissionResolver->projectIdsForPermission($user, $permissionName);
         if ($ids === []) {
             $query->whereRaw('1 = 0');
 
@@ -59,7 +63,7 @@ class FinancialTransactionController extends Controller
             'submitter:id,name,surname',
             'approver:id,name,surname',
         ]);
-        $this->scopeFinancialTransactionsForUser($query, $request->user());
+        $this->scopeFinancialTransactionsForUser($query, $request->user(), 'financial.view');
 
         // Filtreler
         if ($request->filled('project_id')) {
@@ -88,7 +92,7 @@ class FinancialTransactionController extends Controller
 
         // Toplam tutar hesaplama
         $totalQuery = FinancialTransaction::query();
-        $this->scopeFinancialTransactionsForUser($totalQuery, $request->user());
+        $this->scopeFinancialTransactionsForUser($totalQuery, $request->user(), 'financial.view');
         if ($request->filled('project_id')) $totalQuery->where('project_id', $request->project_id);
         if ($request->filled('status')) $totalQuery->where('status', $request->status);
         if ($request->filled('date_from')) $totalQuery->where('submitted_at', '>=', $request->date_from);
@@ -97,7 +101,7 @@ class FinancialTransactionController extends Controller
 
         // Kategori bazlı infografik
         $categoryStats = FinancialTransaction::query()
-            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $request->user()))
+            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $request->user(), 'financial.view'))
             ->selectRaw('category, SUM(amount) as total, COUNT(*) as count')
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->project_id))
             ->groupBy('category')
@@ -105,7 +109,7 @@ class FinancialTransactionController extends Controller
 
         // Proje bazlı harcama
         $projectStats = FinancialTransaction::query()
-            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $request->user()))
+            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $request->user(), 'financial.view'))
             ->with('project:id,name')
             ->selectRaw('project_id, SUM(amount) as total')
             ->groupBy('project_id')
@@ -297,7 +301,7 @@ class FinancialTransactionController extends Controller
             'submitter:id,name,surname',
             'approver:id,name,surname',
         ]);
-        $this->scopeFinancialTransactionsForUser($query, $request->user());
+        $this->scopeFinancialTransactionsForUser($query, $request->user(), 'financial.export');
 
         if ($request->filled('project_id')) $query->where('project_id', $request->project_id);
         if ($request->filled('status')) $query->where('status', $request->status);
@@ -340,7 +344,7 @@ class FinancialTransactionController extends Controller
         $this->abortUnlessAllowed($request, 'financial.view');
         $user = Auth::user();
 
-        $projectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'financial.view');
 
         $query = FinancialTransaction::with([
             'project:id,name',
@@ -370,7 +374,7 @@ class FinancialTransactionController extends Controller
     {
         $this->abortUnlessAllowed($request, 'financial.export');
         $user = Auth::user();
-        $projectIds = $this->permissionResolver->manageableProjectIdsForUser($user);
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'financial.export');
 
         $query = FinancialTransaction::with([
             'project:id,name',

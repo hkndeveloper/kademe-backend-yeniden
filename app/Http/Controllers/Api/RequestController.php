@@ -85,8 +85,7 @@ class RequestController extends Controller
             ->orderByDesc('created_at');
 
         if (! $user->hasRole('super_admin')) {
-            $manageableProjectIds = $this->permissionResolver
-                ->resolve($user)['contexts']['manageable_project_ids'] ?? [];
+            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.view');
 
             $query->where(function ($builder) use ($manageableProjectIds, $user) {
                 $builder->where('requester_id', $user->id)
@@ -112,8 +111,10 @@ class RequestController extends Controller
 
         $requests = $query->get();
 
+        $projectScopeIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.create');
         $projects = Project::query()
             ->where('status', 'active')
+            ->when(! $user->hasRole('super_admin'), fn ($q) => $q->whereIn('id', $projectScopeIds))
             ->orderBy('name')
             ->get(['id', 'name', 'slug', 'type'])
             ->map(fn (Project $project) => [
@@ -161,8 +162,7 @@ class RequestController extends Controller
             ->orderByDesc('created_at');
 
         if (! $user->hasRole('super_admin')) {
-            $manageableProjectIds = $this->permissionResolver
-                ->resolve($user)['contexts']['manageable_project_ids'] ?? [];
+            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.export');
 
             $query->where(function ($builder) use ($manageableProjectIds, $user) {
                 $builder->where('requester_id', $user->id)

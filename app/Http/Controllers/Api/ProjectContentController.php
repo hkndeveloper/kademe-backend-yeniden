@@ -32,7 +32,7 @@ class ProjectContentController extends Controller
         }, 'participants.user']);
 
         if ($user->role !== 'super_admin') {
-            $ids = $this->permissionResolver->manageableProjectIdsForUser($user);
+            $ids = $this->permissionResolver->projectIdsForPermission($user, 'projects.view');
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }
 
@@ -51,7 +51,7 @@ class ProjectContentController extends Controller
         }, 'participants.user']);
 
         if ($user->role !== 'super_admin') {
-            $ids = $this->permissionResolver->manageableProjectIdsForUser($user);
+            $ids = $this->permissionResolver->projectIdsForPermission($user, 'projects.export');
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }
 

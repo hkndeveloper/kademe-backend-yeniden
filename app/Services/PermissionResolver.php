@@ -403,6 +403,33 @@ class PermissionResolver
     }
 
     /**
+     * Permission kapsamına göre erişilebilir proje listesi.
+     * Endpoint bazlı filtrelemelerde context yerine bunu kullanın.
+     */
+    public function projectIdsForPermission(User $user, string $permissionName): array
+    {
+        if (! $this->hasPermission($user, $permissionName)) {
+            return [];
+        }
+
+        $scope = $this->scopeFor($user, $permissionName);
+        $scopeType = $scope['scope_type'] ?? 'none';
+        $payload = $scope['scope_payload'] ?? [];
+
+        return match ($scopeType) {
+            'all' => Project::query()->pluck('id')->all(),
+            'own_projects', 'assigned_projects', 'selected_projects' => collect($payload['project_ids'] ?? [])
+                ->filter(fn ($id) => is_numeric($id))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all(),
+            'self' => $user->participations->pluck('project_id')->unique()->values()->all(),
+            default => [],
+        };
+    }
+
+    /**
      * canAccessProject: birim / diger proje-disi scope tipleri burada false doner; yalnizca beklenmeyen scope_type loglanir.
      */
     private function denyProjectScopeWithOptionalLog(string $permissionName, string $scopeType, ?int $projectId): bool

@@ -24,7 +24,7 @@ class StaffController extends Controller
 
     private function visibleProjectIdsForStaff(User $user): \Illuminate\Support\Collection
     {
-        return collect($this->permissionResolver->manageableProjectIdsForUser($user));
+        return collect($this->permissionResolver->projectIdsForPermission($user, 'projects.export'));
     }
 
     private function coordinatorUnit(?User $user): ?string
@@ -63,7 +63,7 @@ class StaffController extends Controller
                 'participants:id,project_id,status,graduation_status',
             ]);
 
-        $projectIds = collect($this->permissionResolver->manageableProjectIdsForUser($user));
+        $projectIds = collect($this->permissionResolver->projectIdsForPermission($user, 'projects.view'));
 
         if ($projectIds->isEmpty()) {
             return response()->json([
