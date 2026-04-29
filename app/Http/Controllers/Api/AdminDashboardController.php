@@ -176,18 +176,24 @@ class AdminDashboardController extends Controller
     public function activityLogs(Request $request)
     {
         $this->abortUnlessAllowed($request, 'logs.view');
-
-        if ($request->user()->role !== 'super_admin') {
-            return response()->json([
-                'logs' => [],
-                'warning' => 'Aktivite loglari su an yalnizca ust admin kapsaminda listelenir.',
-            ]);
-        }
+        $actor = $request->user();
 
         try {
             $query = \Spatie\Activitylog\Models\Activity::query()
                 ->with('causer:id,name,surname,role')
                 ->latest();
+
+            if ($actor->role !== 'super_admin') {
+                // Non-admin users can see their own actions and permission-related audit trail.
+                $query->where(function ($builder) use ($actor) {
+                    $builder
+                        ->where(function ($self) use ($actor) {
+                            $self->where('causer_type', \App\Models\User::class)
+                                ->where('causer_id', $actor->id);
+                        })
+                        ->orWhere('log_name', 'permissions');
+                });
+            }
 
             if ($request->filled('log_name')) {
                 $query->where('log_name', $request->string('log_name')->toString());
@@ -204,15 +210,23 @@ class AdminDashboardController extends Controller
     public function exportActivityLogs(Request $request)
     {
         $this->abortUnlessAllowed($request, 'logs.export');
-
-        if ($request->user()->role !== 'super_admin') {
-            return response()->json(['message' => 'Log disa aktarma yalnizca ust admin icindir.'], 403);
-        }
+        $actor = $request->user();
 
         try {
             $query = \Spatie\Activitylog\Models\Activity::query()
                 ->with('causer:id,name,surname,role')
                 ->latest();
+
+            if ($actor->role !== 'super_admin') {
+                $query->where(function ($builder) use ($actor) {
+                    $builder
+                        ->where(function ($self) use ($actor) {
+                            $self->where('causer_type', \App\Models\User::class)
+                                ->where('causer_id', $actor->id);
+                        })
+                        ->orWhere('log_name', 'permissions');
+                });
+            }
 
             if ($request->filled('log_name')) {
                 $query->where('log_name', $request->string('log_name')->toString());
