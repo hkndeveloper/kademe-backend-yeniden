@@ -9,6 +9,7 @@ use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Permission;
@@ -77,11 +78,11 @@ class PermissionMatrixController extends Controller
 
         $validated = $request->validate([
             'matrix' => 'sometimes|array|min:1',
-            'matrix.*.role' => 'required|string|in:super_admin,coordinator,staff,student,alumni,visitor',
+            'matrix.*.role' => 'required|string|exists:roles,name',
             'matrix.*.permissions' => 'array',
             'matrix.*.permissions.*' => 'string',
             'granular_matrix' => 'sometimes|array|min:1',
-            'granular_matrix.*.role' => 'required|string|in:super_admin,coordinator,staff,student,alumni,visitor',
+            'granular_matrix.*.role' => 'required|string|exists:roles,name',
             'granular_matrix.*.permissions' => 'array',
             'granular_matrix.*.permissions.*' => 'string',
         ]);
@@ -178,7 +179,7 @@ class PermissionMatrixController extends Controller
 
         $query = User::query()
             ->with(['roles:id,name', 'staffProfile:user_id,unit,title'])
-            ->whereIn('role', ['super_admin', 'coordinator', 'staff']);
+            ->where('status', '!=', 'banned');
 
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
@@ -292,9 +293,150 @@ class PermissionMatrixController extends Controller
                 ])->values()->all(),
             ]
         );
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return response()->json([
             'message' => 'Kullaniciya ozel yetkiler guncellendi.',
+            'resolved' => $this->permissionResolver->resolve($user->fresh()),
+        ]);
+    }
+
+    public function roleCatalog(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'permissions.matrix.view');
+
+        $roles = Role::query()
+            ->with('permissions:id,name')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'label' => config('permission_catalog.role_labels.' . $role->name) ?? Str::headline($role->name),
+                'is_system' => $this->isSystemRole($role->name),
+                'permission_count' => $role->permissions->count(),
+                'permissions' => $role->permissions->pluck('name')->values(),
+                'user_count' => User::query()->role($role->name)->count(),
+            ])
+            ->values();
+
+        return response()->json([
+            'roles' => $roles,
+            'scope_templates' => config('permission_catalog.scope_templates', []),
+        ]);
+    }
+
+    public function createRole(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9_\\-]+$/', 'unique:roles,name'],
+            'permissions' => 'nullable|array',
+            'permissions.*' => 'string',
+        ]);
+
+        abort_if($this->isSystemRole($validated['name']), 422, 'Bu isim sistem rolu olarak ayrildi.');
+
+        $role = Role::create([
+            'name' => $validated['name'],
+            'guard_name' => 'web',
+        ]);
+
+        if (! empty($validated['permissions'])) {
+            $role->syncPermissions($validated['permissions']);
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->logPermissionActivity($request, null, 'role.custom.created', [
+            'role' => $role->name,
+            'permission_count' => count($validated['permissions'] ?? []),
+        ]);
+
+        return response()->json([
+            'message' => 'Ozel rol olusturuldu.',
+            'role' => $role->load('permissions:id,name'),
+        ], 201);
+    }
+
+    public function updateRole(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+
+        $role = Role::query()->findOrFail($id);
+        abort_if($this->isSystemRole($role->name), 422, 'Sistem rolleri buradan degistirilemez.');
+
+        $validated = $request->validate([
+            'permissions' => 'nullable|array',
+            'permissions.*' => 'string',
+        ]);
+
+        $role->syncPermissions($validated['permissions'] ?? []);
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->logPermissionActivity($request, null, 'role.custom.updated', [
+            'role' => $role->name,
+            'permission_count' => count($validated['permissions'] ?? []),
+        ]);
+
+        return response()->json([
+            'message' => 'Rol yetkileri guncellendi.',
+            'role' => $role->load('permissions:id,name'),
+        ]);
+    }
+
+    public function deleteRole(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+
+        $role = Role::query()->findOrFail($id);
+        abort_if($this->isSystemRole($role->name), 422, 'Sistem rolleri silinemez.');
+
+        $assignedCount = User::query()->role($role->name)->count();
+        abort_if($assignedCount > 0, 422, 'Bu role atanmis kullanicilar var. Once atamalari kaldirin.');
+
+        $name = $role->name;
+        $role->delete();
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->logPermissionActivity($request, null, 'role.custom.deleted', ['role' => $name]);
+
+        return response()->json(['message' => 'Rol silindi.']);
+    }
+
+    public function assignUserRoles(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'permissions.user_override.update');
+
+        $user = User::query()->with('roles:id,name')->findOrFail($id);
+        $validated = $request->validate([
+            'roles' => 'required|array|min:1',
+            'roles.*' => 'required|string|exists:roles,name',
+            'primary_role' => 'nullable|string',
+        ]);
+
+        $roleNames = collect($validated['roles'])->unique()->values()->all();
+        $user->syncRoles($roleNames);
+
+        $primaryRole = $validated['primary_role'] ?? ($user->roles->pluck('name')->first() ?? $roleNames[0]);
+        if (in_array($primaryRole, array_keys(config('permission_catalog.role_labels', [])), true)) {
+            $user->forceFill(['role' => $primaryRole])->save();
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->logPermissionActivity($request, $user, 'user_roles.updated', [
+            'target_user_id' => $user->id,
+            'roles' => $roleNames,
+            'primary_role' => $user->role,
+        ]);
+
+        return response()->json([
+            'message' => 'Kullanici rolleri guncellendi.',
+            'user' => [
+                'id' => $user->id,
+                'role' => $user->role,
+                'roles' => $user->fresh('roles')->roles->pluck('name')->values(),
+            ],
             'resolved' => $this->permissionResolver->resolve($user->fresh()),
         ]);
     }
@@ -304,7 +446,7 @@ class PermissionMatrixController extends Controller
      */
     public function audit(Request $request): JsonResponse
     {
-        abort_unless($request->user()?->role === 'super_admin', 403, 'Bu kayitlar yalnizca ust admin icindir.');
+        $this->abortUnlessAnyPermission($request, ['permissions.matrix.view', 'logs.view']);
 
         try {
             $logs = Activity::query()
@@ -401,11 +543,18 @@ class PermissionMatrixController extends Controller
             }
         }
 
+        $systemRoleOrder = array_keys($roleLabels);
         $roles = Role::query()
-            ->whereIn('name', array_keys($roleLabels))
             ->with('permissions:id,name')
             ->get()
-            ->sortBy(fn (Role $role) => array_search($role->name, array_keys($roleLabels), true))
+            ->sortBy(function (Role $role) use ($systemRoleOrder) {
+                $pos = array_search($role->name, $systemRoleOrder, true);
+                if ($pos === false) {
+                    return 999 + crc32($role->name);
+                }
+
+                return $pos;
+            })
             ->values();
 
         $allAssignableNames = collect($permissionCatalog)
@@ -421,6 +570,11 @@ class PermissionMatrixController extends Controller
             ->get(['id', 'name']);
 
         return [$roles, $permissions];
+    }
+
+    private function isSystemRole(string $roleName): bool
+    {
+        return array_key_exists($roleName, config('permission_catalog.role_labels', []));
     }
 
     /**

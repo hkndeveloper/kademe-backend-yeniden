@@ -20,8 +20,10 @@ class AuditAdminActions
             return $response;
         }
 
-        // Sadece admin API aksiyonlarini denetim kaydina al.
-        if (! $request->is('api/admin/*')) {
+        // Yalnizca audit.action middleware'i eklenmis rotalari kaydet.
+        // Boylece /admin/* disindaki generic alias endpointleri de tutarli sekilde loglanir.
+        $routeMiddleware = $request->route()?->gatherMiddleware() ?? [];
+        if (! in_array('audit.action', $routeMiddleware, true)) {
             return $response;
         }
 

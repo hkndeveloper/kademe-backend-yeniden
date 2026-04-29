@@ -104,14 +104,22 @@ class UserController extends Controller
         $user = User::findOrFail($id);
 
         $validated = $request->validate([
-            'role' => 'sometimes|in:super_admin,coordinator,staff,student,alumni',
+            'role' => 'sometimes|string|exists:roles,name',
             'status' => 'sometimes|in:active,inactive,banned',
         ]);
 
-        $user->update($validated);
+        $columnUpdates = collect($validated)
+            ->except(['role'])
+            ->toArray();
+        if ($columnUpdates !== []) {
+            $user->update($columnUpdates);
+        }
 
         if (!empty($validated['role'])) {
             $user->syncRoles([$validated['role']]);
+            if (array_key_exists($validated['role'], config('permission_catalog.role_labels', []))) {
+                $user->forceFill(['role' => $validated['role']])->save();
+            }
         }
 
         return response()->json([

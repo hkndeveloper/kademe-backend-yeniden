@@ -360,4 +360,36 @@ return [
             'kpd.appointments.manage',
         ],
     ],
+
+    /**
+     * Admin panelde hizli scope atamasi icin rol bazli varsayilan template'ler.
+     * primary role (users.role) tarafi korunurken custom roller icin de referans olarak kullanilir.
+     */
+    'scope_templates' => [
+        'global_admin' => [
+            'label' => 'Global (tum projeler)',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ],
+        'project_owner' => [
+            'label' => 'Own Projects',
+            'scope_type' => 'own_projects',
+            'scope_payload' => ['project_ids' => []],
+        ],
+        'assigned_projects' => [
+            'label' => 'Assigned Projects',
+            'scope_type' => 'assigned_projects',
+            'scope_payload' => ['project_ids' => []],
+        ],
+        'selected_projects' => [
+            'label' => 'Selected Projects',
+            'scope_type' => 'selected_projects',
+            'scope_payload' => ['project_ids' => []],
+        ],
+        'own_unit' => [
+            'label' => 'Own Unit',
+            'scope_type' => 'own_unit',
+            'scope_payload' => ['unit' => null],
+        ],
+    ],
 ];
