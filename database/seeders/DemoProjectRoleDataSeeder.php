@@ -61,7 +61,7 @@ class DemoProjectRoleDataSeeder extends Seeder
             StaffProfile::updateOrCreate(
                 ['user_id' => $coordinator->id],
                 [
-                    'title' => 'Proje Koordinatoru',
+                    'title' => 'coordinator',
                     'unit' => 'Koordinasyon',
                     'contract_type' => 'full_time',
                     'start_date' => now()->subMonths(3)->toDateString(),
@@ -87,7 +87,7 @@ class DemoProjectRoleDataSeeder extends Seeder
             StaffProfile::updateOrCreate(
                 ['user_id' => $staff->id],
                 [
-                    'title' => 'Program Sorumlusu',
+                    'title' => 'specialist',
                     'unit' => 'Operasyon',
                     'contract_type' => 'full_time',
                     'start_date' => now()->subMonths(2)->toDateString(),
