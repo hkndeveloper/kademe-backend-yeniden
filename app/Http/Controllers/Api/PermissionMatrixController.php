@@ -276,7 +276,7 @@ class PermissionMatrixController extends Controller
             ->all();
 
         $validated = $request->validate([
-            'overrides' => 'required|array',
+            'overrides' => 'present|array',
             'overrides.*.permission_name' => 'required|string',
             'overrides.*.effect' => 'required|in:allow,deny',
             'overrides.*.scope_type' => 'nullable|in:all,own_projects,assigned_projects,own_unit,selected_projects,self,none',
