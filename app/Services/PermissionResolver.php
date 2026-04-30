@@ -41,10 +41,17 @@ class PermissionResolver
         $scopeType = $scope['scope_type'] ?? 'none';
         $scopePayload = $scope['scope_payload'] ?? [];
 
+        $scopedProjectIds = collect($scopePayload['project_ids'] ?? [])
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
         return match ($scopeType) {
             'all' => true,
             'own_projects', 'assigned_projects', 'selected_projects' => $projectId !== null
-                && in_array($projectId, $scopePayload['project_ids'] ?? [], true),
+                && in_array($projectId, $scopedProjectIds, true),
             'self' => $projectId !== null && $user->participations
                 ->where('project_id', $projectId)
                 ->isNotEmpty(),
