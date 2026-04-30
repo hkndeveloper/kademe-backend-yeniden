@@ -87,7 +87,7 @@ class FeedbackController extends Controller
                 ] : null,
                 'feedback_submitted' => (bool) $submittedFeedback,
                 'submitted_at' => optional($submittedFeedback?->submitted_at)?->toIso8601String(),
-                'anonymous_feedback_id' => $submittedFeedback?->public_id,
+                'anonymous_feedback_id' => Feedback::usesPublicIdColumn() ? $submittedFeedback?->public_id : null,
                 'credit_restored' => (bool) $rewardLog,
             ];
         })->values();
@@ -188,7 +188,7 @@ class FeedbackController extends Controller
         return response()->json([
             'message' => 'Degerlendirmen alindi ve oturuma ait kredi iadesi uygulandi.',
             'current_credit' => $participant->credit,
-            'anonymous_feedback_id' => $savedFeedback->public_id,
+            'anonymous_feedback_id' => Feedback::usesPublicIdColumn() ? $savedFeedback->public_id : null,
         ], 201);
     }
 }

@@ -47,11 +47,19 @@ class AdminProgramController extends Controller
         $project = Project::findOrFail($validated['project_id']);
         $this->abortIfUnauthorized($request->user(), $project, 'programs.view');
 
-        $programs = Program::query()
+        $query = Program::query()
             ->with(['project:id,name', 'period:id,name'])
             ->where('project_id', $project->id)
-            ->orderBy('start_at', 'desc')
-            ->get();
+            ->orderBy('start_at', 'desc');
+
+        if ($this->permissionResolver->hasPermission($request->user(), 'programs.attendance.view')) {
+            $query->withCount([
+                'attendances as attendance_count',
+                'feedbacks as feedback_count',
+            ]);
+        }
+
+        $programs = $query->get();
 
         return response()->json(['programs' => $programs]);
     }
@@ -188,18 +196,20 @@ class AdminProgramController extends Controller
         $this->abortIfUnauthorized($request->user(), $program->project, 'programs.qr.manage');
 
         $qrToken = 'prg_' . $program->id . '_' . Str::random(12);
-        $expiresAt = now()->addSeconds($program->qr_rotation_seconds ?? 30);
+        $rotationSeconds = 30;
+        $expiresAt = now()->addSeconds($rotationSeconds);
 
         $program->update([
             'status' => 'active',
             'qr_token' => $qrToken,
             'qr_expires_at' => $expiresAt,
+            'qr_rotation_seconds' => $rotationSeconds,
         ]);
 
         return response()->json([
             'qr_token' => $qrToken,
             'expires_at' => $expiresAt,
-            'refresh_in_seconds' => $program->qr_rotation_seconds ?? 30,
+            'refresh_in_seconds' => $rotationSeconds,
         ]);
     }
 
