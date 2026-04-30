@@ -17,8 +17,10 @@ Route::get('/activities', [\App\Http\Controllers\Api\Public\PublicContentControl
 Route::get('/activities/{id}', [\App\Http\Controllers\Api\Public\PublicContentController::class, 'activityDetail']);
 Route::get('/certificates/verify/{verificationCode}', [\App\Http\Controllers\Api\CertificateController::class, 'verify']);
 Route::get('/site-config', [\App\Http\Controllers\Api\SiteSettingsController::class, 'public']);
-Route::post('/contact', [\App\Http\Controllers\Api\SupportTicketController::class, 'storePublic']);
-Route::post('/newsletter/subscribe', [\App\Http\Controllers\Api\NewsletterController::class, 'subscribe']);
+Route::post('/contact', [\App\Http\Controllers\Api\SupportTicketController::class, 'storePublic'])
+    ->middleware('throttle:10,1');
+Route::post('/newsletter/subscribe', [\App\Http\Controllers\Api\NewsletterController::class, 'subscribe'])
+    ->middleware('throttle:20,1');
 
 // --- AUTH ROUTLARI --- //
 Route::prefix('auth')->group(function () {
@@ -61,7 +63,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->prefix('applications')
 });
 
 // Public project application endpoint (guest users can apply).
-Route::post('/applications/public', [\App\Http\Controllers\Api\ApplicationController::class, 'storePublic']);
+Route::post('/applications/public', [\App\Http\Controllers\Api\ApplicationController::class, 'storePublic'])
+    ->middleware('throttle:10,1');
 
 // --- PROGRAM (ETKÄ°NLÄ°K) & YOKLAMA --- //
 Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->group(function () {

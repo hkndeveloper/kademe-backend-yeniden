@@ -11,6 +11,7 @@ use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AdminApplicationController extends Controller
 {
@@ -230,6 +231,18 @@ class AdminApplicationController extends Controller
             ]);
 
             if ($validated['status'] === 'accepted') {
+                $hasAnotherActiveProject = Participant::query()
+                    ->where('user_id', $application->user_id)
+                    ->where('status', 'active')
+                    ->where('project_id', '!=', $application->project_id)
+                    ->exists();
+
+                if ($hasAnotherActiveProject) {
+                    throw ValidationException::withMessages([
+                        'status' => ['Bu kullanici aktif olarak baska bir projede yer aldigi icin kabul edilemez.'],
+                    ]);
+                }
+
                 Participant::firstOrCreate([
                     'user_id' => $application->user_id,
                     'project_id' => $application->project_id,
@@ -247,6 +260,10 @@ class AdminApplicationController extends Controller
                 'message' => 'Başvuru durumu başarıyla güncellendi.',
                 'application' => $application,
             ]);
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Exception $e) {
             DB::rollBack();
 

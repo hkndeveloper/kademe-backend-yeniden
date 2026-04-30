@@ -49,12 +49,31 @@ class CalendarController extends Controller
     public function overview(Request $request, GoogleCalendarService $googleCalendar): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'calendar.view');
+        $user = $request->user();
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
         ]);
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'calendar.view');
+
+        if (empty($projectIds)) {
+            return response()->json([
+                'projects' => [],
+                'programs' => [],
+                'summary' => [
+                    'total_programs' => 0,
+                    'upcoming_this_week' => 0,
+                    'upcoming_this_month' => 0,
+                    'open_support_count' => 0,
+                    'google_synced_count' => 0,
+                ],
+                'upcoming_tasks' => [],
+                'google_calendar' => $googleCalendar->getStatus(),
+            ]);
+        }
 
         $projects = Project::query()
             ->with(['periods' => fn ($query) => $query->where('status', 'active')->orderByDesc('start_date')])
+            ->whereIn('id', $projectIds)
             ->orderBy('name')
             ->get();
 
@@ -64,6 +83,7 @@ class CalendarController extends Controller
                 'period:id,name',
                 'calendarEvent:id,program_id,google_event_id,assigned_users',
             ])
+            ->whereIn('project_id', $projectIds)
             ->orderBy('start_at');
 
         if (!empty($validated['project_id'])) {
@@ -85,7 +105,7 @@ class CalendarController extends Controller
             ->get()
             ->keyBy('id');
 
-        $currentUserId = $request->user()->id;
+        $currentUserId = $user->id;
 
         $programs = $programCollection
             ->map(function (Program $program) use ($assignedUsers, $currentUserId) {
@@ -144,6 +164,7 @@ class CalendarController extends Controller
             ->values();
 
         $openSupportCount = SupportTicket::query()
+            ->whereIn('project_id', $projectIds)
             ->whereIn('status', ['open', 'in_progress'])
             ->count();
 
@@ -192,12 +213,34 @@ class CalendarController extends Controller
     public function assignees(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'calendar.assignments.manage');
+        $validated = $request->validate([
+            'project_id' => 'nullable|integer|exists:projects,id',
+        ]);
+        $user = $request->user();
+        $projectId = $validated['project_id'] ?? null;
+
+        if ($projectId !== null) {
+            abort_unless(
+                $this->permissionResolver->canAccessProject($user, 'calendar.assignments.manage', (int) $projectId),
+                403,
+                'Bu proje icin gorev atama yetkiniz yok.'
+            );
+        }
+
         $users = User::query()
             ->with('staffProfile')
             ->whereIn('role', ['coordinator', 'staff'])
-            ->where('status', '!=', 'banned')
+            ->where('status', 'active')
             ->orderBy('name')
             ->get();
+
+        $users = $users->filter(function (User $candidate) use ($projectId) {
+            if ($projectId === null) {
+                return $this->permissionResolver->hasPermission($candidate, 'calendar.assignments.manage');
+            }
+
+            return $this->permissionResolver->canAccessProject($candidate, 'calendar.assignments.manage', (int) $projectId);
+        })->values();
 
         return response()->json([
             'users' => $this->mapAssignments($users),
@@ -220,10 +263,15 @@ class CalendarController extends Controller
             ->unique()
             ->values();
 
-        $allowedIds = User::query()
+        $allowedUsers = User::query()
             ->whereIn('id', $assignedIds)
             ->whereIn('role', ['coordinator', 'staff'])
-            ->pluck('id');
+            ->where('status', 'active')
+            ->get()
+            ->filter(fn (User $candidate) => $this->permissionResolver->canAccessProject($candidate, 'calendar.assignments.manage', $program->project_id))
+            ->values();
+
+        $allowedIds = $allowedUsers->pluck('id');
 
         $event = CalendarEvent::query()->updateOrCreate(
             ['program_id' => $program->id],

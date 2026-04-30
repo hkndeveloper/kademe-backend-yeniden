@@ -6,12 +6,15 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Models\SupportReply;
 use App\Models\SupportTicket;
+use App\Models\Project;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Services\PermissionResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SupportTicketController extends Controller
 {
@@ -45,6 +48,104 @@ class SupportTicketController extends Controller
         }
 
         return $this->permissionResolver->canAccessProject($user, $permission, $ticket->project_id);
+    }
+
+    private function pickLeastLoadedAssignee(array $candidateIds): ?int
+    {
+        if ($candidateIds === []) {
+            return null;
+        }
+
+        $counts = SupportTicket::query()
+            ->select('assigned_to', DB::raw('COUNT(*) as open_count'))
+            ->whereIn('assigned_to', $candidateIds)
+            ->whereIn('status', ['open', 'in_progress'])
+            ->groupBy('assigned_to')
+            ->pluck('open_count', 'assigned_to');
+
+        $bestId = null;
+        $bestCount = PHP_INT_MAX;
+
+        foreach ($candidateIds as $candidateId) {
+            $count = (int) ($counts[$candidateId] ?? 0);
+            if ($count < $bestCount) {
+                $bestId = (int) $candidateId;
+                $bestCount = $count;
+            }
+        }
+
+        return $bestId;
+    }
+
+    private function candidateIdsByCategory(?string $category): array
+    {
+        $raw = Str::lower(trim((string) $category));
+        if ($raw === '') {
+            return [];
+        }
+
+        $unitKeywords = match (true) {
+            str_contains($raw, 'tasar') || str_contains($raw, 'medya') || str_contains($raw, 'social') => ['medya', 'tasarim', 'icerik', 'content'],
+            str_contains($raw, 'evrak') => ['idari', 'operasyon'],
+            str_contains($raw, 'konaklama') || str_contains($raw, 'bilet') || str_contains($raw, 'ulas') || str_contains($raw, 'yemek') || str_contains($raw, 'arac') => ['operasyon', 'idari'],
+            str_contains($raw, 'teknik') || str_contains($raw, 'hata') => ['it', 'teknik', 'bilisim'],
+            default => [],
+        };
+
+        if ($unitKeywords === []) {
+            return [];
+        }
+
+        return User::query()
+            ->whereIn('role', ['staff', 'coordinator'])
+            ->where('status', 'active')
+            ->whereHas('staffProfile', function (Builder $builder) use ($unitKeywords) {
+                $builder->where(function (Builder $inner) use ($unitKeywords) {
+                    foreach ($unitKeywords as $keyword) {
+                        $inner->orWhereRaw('LOWER(unit) LIKE ?', ['%' . $keyword . '%']);
+                    }
+                });
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    private function resolveAutoAssignee(?int $projectId, ?string $category): ?int
+    {
+        if ($projectId) {
+            $project = Project::query()
+                ->with(['coordinators' => function ($builder) {
+                    $builder->where('status', 'active');
+                }])
+                ->find($projectId);
+
+            $coordinatorIds = $project?->coordinators
+                ?->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all() ?? [];
+
+            $bestCoordinator = $this->pickLeastLoadedAssignee($coordinatorIds);
+            if ($bestCoordinator) {
+                return $bestCoordinator;
+            }
+        }
+
+        $categoryCandidates = $this->candidateIdsByCategory($category);
+        $bestCategoryAssignee = $this->pickLeastLoadedAssignee($categoryCandidates);
+        if ($bestCategoryAssignee) {
+            return $bestCategoryAssignee;
+        }
+
+        $fallbackAdmin = User::query()
+            ->where('role', 'super_admin')
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->value('id');
+
+        return $fallbackAdmin ? (int) $fallbackAdmin : null;
     }
 
     /**
@@ -113,6 +214,8 @@ class SupportTicketController extends Controller
             );
         }
 
+        $autoAssigneeId = $this->resolveAutoAssignee($validated['project_id'] ?? null, $validated['category'] ?? null);
+
         $ticket = SupportTicket::create([
             'user_id' => $request->user()->id,
             'name' => trim($request->user()->name . ' ' . $request->user()->surname),
@@ -120,8 +223,9 @@ class SupportTicketController extends Controller
             'subject' => $validated['subject'],
             'category' => $validated['category'],
             'project_id' => $validated['project_id'] ?? null,
+            'assigned_to' => $autoAssigneeId,
             'message' => $validated['message'],
-            'status' => 'open',
+            'status' => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
 
         return response()->json([
@@ -144,6 +248,8 @@ class SupportTicketController extends Controller
             'message' => 'required|string',
         ]);
 
+        $autoAssigneeId = $this->resolveAutoAssignee($validated['project_id'] ?? null, $validated['category'] ?? null);
+
         $ticket = SupportTicket::create([
             'user_id' => null,
             'name' => $validated['name'],
@@ -151,8 +257,9 @@ class SupportTicketController extends Controller
             'subject' => $validated['subject'],
             'category' => $validated['category'],
             'project_id' => $validated['project_id'] ?? null,
+            'assigned_to' => $autoAssigneeId,
             'message' => $validated['message'],
-            'status' => 'open',
+            'status' => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
 
         return response()->json([
