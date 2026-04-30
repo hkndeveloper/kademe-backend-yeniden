@@ -31,11 +31,11 @@ trait AuthorizesGranularPermissions
             'project_id' => $projectId,
         ]);
 
-        abort_unless(
-            $this->permissionResolver->canAccessProject($request->user(), $permission, $projectId),
-            403,
-            'Bu proje icin yetkiniz bulunmuyor.'
-        );
+        $allowed = $projectId === null
+            ? $this->permissionResolver->hasGlobalScope($request->user(), $permission)
+            : $this->permissionResolver->canAccessProject($request->user(), $permission, $projectId);
+
+        abort_unless($allowed, 403, 'Bu proje icin yetkiniz bulunmuyor.');
     }
 
     protected function abortUnlessUnitAllowed(Request $request, string $permission, ?string $unit): void

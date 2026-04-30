@@ -31,6 +31,15 @@ class PermissionResolver
         ];
     }
 
+    public function hasGlobalScope(User $user, string $permissionName): bool
+    {
+        if (! $this->hasPermission($user, $permissionName)) {
+            return false;
+        }
+
+        return ($this->scopeFor($user, $permissionName)['scope_type'] ?? 'none') === 'all';
+    }
+
     public function canAccessProject(User $user, string $permissionName, ?int $projectId): bool
     {
         if (! $this->hasPermission($user, $permissionName)) {

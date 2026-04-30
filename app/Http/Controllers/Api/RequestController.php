@@ -64,7 +64,7 @@ class RequestController extends Controller
             return false;
         }
 
-        if ($user->hasRole('super_admin') || $workflowRequest->target_user_id === $user->id) {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission) || $workflowRequest->target_user_id === $user->id) {
             return true;
         }
 
@@ -84,7 +84,7 @@ class RequestController extends Controller
             ])
             ->orderByDesc('created_at');
 
-        if (! $user->hasRole('super_admin')) {
+        if (! $this->permissionResolver->hasGlobalScope($user, 'requests.view')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.view');
 
             $query->where(function ($builder) use ($manageableProjectIds, $user) {
@@ -114,7 +114,7 @@ class RequestController extends Controller
         $projectScopeIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.create');
         $projects = Project::query()
             ->where('status', 'active')
-            ->when(! $user->hasRole('super_admin'), fn ($q) => $q->whereIn('id', $projectScopeIds))
+            ->when(! $this->permissionResolver->hasGlobalScope($user, 'requests.create'), fn ($q) => $q->whereIn('id', $projectScopeIds))
             ->orderBy('name')
             ->get(['id', 'name', 'slug', 'type'])
             ->map(fn (Project $project) => [
@@ -161,7 +161,7 @@ class RequestController extends Controller
             ])
             ->orderByDesc('created_at');
 
-        if (! $user->hasRole('super_admin')) {
+        if (! $this->permissionResolver->hasGlobalScope($user, 'requests.export')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.export');
 
             $query->where(function ($builder) use ($manageableProjectIds, $user) {

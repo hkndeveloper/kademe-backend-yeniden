@@ -370,7 +370,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 });
 
 // â”€â”€ KOORDÄ°NATÃ–R Ã–ZEL (sadece coordinator) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-Route::middleware(['auth:sanctum', 'blacklist', 'role:coordinator'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
     // KoordinatÃ¶rÃ¼n mali iÅŸlemleri (kendi projesi)
     Route::get('/coordinator/financials', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'myFinancials']);
     Route::get('/coordinator/financials/export', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'exportMyFinancials']);
@@ -385,7 +385,7 @@ Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
     Route::get('/my-leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'myLeaveRequests']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'role:staff'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
     Route::get('/staff/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'myAnnouncements']);
     Route::get('/staff/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'exportMyAnnouncements']);
     Route::get('/staff/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'staffIndex']);

@@ -76,7 +76,7 @@ class AdminProgramController extends Controller
             $project = Project::findOrFail($request->integer('project_id'));
             $this->abortIfUnauthorized($request->user(), $project, 'programs.export');
             $query->where('project_id', $project->id);
-        } elseif ($request->user()->role !== 'super_admin') {
+        } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'programs.export')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($request->user(), 'programs.export');
             $query->whereIn('project_id', $manageableProjectIds);
         }

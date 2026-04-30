@@ -23,7 +23,7 @@ class PeriodController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role === 'super_admin') {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
             return $query;
         }
 

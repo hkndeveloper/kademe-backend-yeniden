@@ -25,7 +25,7 @@ class AnnouncementController extends Controller
     {
         $this->abortUnlessAllowed($request, $permission);
         $user = $request->user();
-        if ($user->role === 'super_admin') {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
             return;
         }
         if ($announcement->project_id !== null) {
@@ -79,7 +79,7 @@ class AnnouncementController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role === 'super_admin') {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
             return $query;
         }
 
@@ -324,7 +324,7 @@ class AnnouncementController extends Controller
             $newProjectId = $validated['project_id'];
             if ($newProjectId !== null) {
                 $this->assertProjectAnnouncementScope($request, (int) $newProjectId, 'announcements.update');
-            } elseif ($request->user()->role !== 'super_admin') {
+            } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'announcements.update')) {
                 abort(403, 'Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir.');
             }
         }
@@ -423,7 +423,7 @@ class AnnouncementController extends Controller
     {
         $columns = ['id', 'name', 'surname', 'email', 'phone'];
 
-        if ($sender->role === 'super_admin') {
+        if ($this->permissionResolver->hasGlobalScope($sender, $permission)) {
             return $this->resolveTargetUsersAsSuperAdmin($validated, $columns);
         }
 

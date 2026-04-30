@@ -33,6 +33,10 @@ class StaffController extends Controller
             return null;
         }
 
+        if ($this->permissionResolver->hasGlobalScope($user, 'staff.view')) {
+            return null;
+        }
+
         return $user->staffProfile?->unit;
     }
 
@@ -300,9 +304,7 @@ class StaffController extends Controller
         $activeStaff = User::with('staffProfile')
             ->whereIn('role', ['coordinator', 'staff'])
             ->whereHas('tokens', fn($q) => $q->where('last_used_at', '>=', now()->subHours(8)))
-            ->when(Auth::user()?->role === 'coordinator' && Auth::user()?->staffProfile?->unit, fn ($query) =>
-                $query->whereHas('staffProfile', fn ($builder) => $builder->where('unit', Auth::user()->staffProfile->unit))
-            )
+            ->tap(fn ($query) => $this->applyCoordinatorUnitScope(request(), $query))
             ->get(['id', 'name', 'surname', 'email', 'role', 'profile_photo_path']);
 
         // İzinli personeller
@@ -311,9 +313,7 @@ class StaffController extends Controller
               ->where('start_date', '<=', today())
               ->where('end_date', '>=', today())
         ])->whereIn('role', ['coordinator', 'staff'])
-          ->when(Auth::user()?->role === 'coordinator' && Auth::user()?->staffProfile?->unit, fn ($query) =>
-              $query->whereHas('staffProfile', fn ($builder) => $builder->where('unit', Auth::user()->staffProfile->unit))
-          )
+          ->tap(fn ($query) => $this->applyCoordinatorUnitScope(request(), $query))
           ->whereHas('leaveRequests', fn($q) =>
               $q->where('status', 'approved')
                 ->where('start_date', '<=', today())

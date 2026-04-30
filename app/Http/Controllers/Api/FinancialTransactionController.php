@@ -30,7 +30,7 @@ class FinancialTransactionController extends Controller
         string $permissionName = 'financial.view'
     ): void
     {
-        if ($user instanceof \App\Models\User && $user->role === 'super_admin') {
+        if ($user instanceof \App\Models\User && $this->permissionResolver->hasGlobalScope($user, $permissionName)) {
             return;
         }
 
@@ -147,6 +147,8 @@ class FinancialTransactionController extends Controller
 
         if (!empty($validated['project_id'])) {
             $this->abortUnlessProjectAllowed($request, 'financial.create', (int) $validated['project_id']);
+        } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'financial.create')) {
+            abort(403, 'Projesiz mali islem icin global kapsam gerekir.');
         }
 
         $transaction = FinancialTransaction::create([

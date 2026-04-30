@@ -103,7 +103,7 @@ TXT;
 
     private function manageableProjects(User $user): Collection
     {
-        if ($user->role === 'super_admin') {
+        if ($this->permissionResolver->hasGlobalScope($user, 'projects.view')) {
             return Project::query()->where('status', 'active')->orderBy('name')->get();
         }
 
@@ -554,7 +554,7 @@ TXT;
             'rows' => $tableRows,
         ];
 
-        $reply = $user->role === 'super_admin'
+        $reply = $this->permissionResolver->hasGlobalScope($user, 'projects.view')
             ? 'Tüm aktif projeler için özet tablo hazırlandı.'
             : 'Erişim kapsamınızdaki aktif projeler için özet tablo hazırlandı.';
 

@@ -29,10 +29,14 @@ class ProjectContentController extends Controller
             'projects.view',
             'programs.view',
             'programs.create',
+            'programs.update',
+            'programs.complete',
+            'programs.qr.manage',
             'applications.view',
             'financial.view',
             'announcements.create',
             'projects.content.update',
+            'projects.application_form.update',
             'periods.view',
         ];
         $validated = $request->validate([
@@ -50,7 +54,7 @@ class ProjectContentController extends Controller
             $builder->where('status', 'active');
         }, 'participants.user']);
 
-        if ($user->role !== 'super_admin') {
+        if (! $this->permissionResolver->hasGlobalScope($user, $targetPermission)) {
             $ids = $this->permissionResolver->projectIdsForPermission($user, $targetPermission);
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }
@@ -69,7 +73,7 @@ class ProjectContentController extends Controller
             $builder->where('status', 'active');
         }, 'participants.user']);
 
-        if ($user->role !== 'super_admin') {
+        if (! $this->permissionResolver->hasGlobalScope($user, 'projects.export')) {
             $ids = $this->permissionResolver->projectIdsForPermission($user, 'projects.export');
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }

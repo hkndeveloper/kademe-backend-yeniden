@@ -27,7 +27,7 @@ class SupportTicketController extends Controller
 
     private function canAccessTicket(User $user, SupportTicket $ticket, string $permission): bool
     {
-        if ($user->role === 'super_admin') {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
             return true;
         }
 
@@ -316,7 +316,7 @@ class SupportTicketController extends Controller
             ])
             ->latest();
 
-        if ($user->role !== 'super_admin') {
+        if (! $this->permissionResolver->hasGlobalScope($user, 'support.view')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.view');
 
             $query->where(function (Builder $builder) use ($user, $manageableProjectIds) {
@@ -370,7 +370,7 @@ class SupportTicketController extends Controller
             ])
             ->latest();
 
-        if ($user->role !== 'super_admin') {
+        if (! $this->permissionResolver->hasGlobalScope($user, 'support.export')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.export');
 
             $query->where(function (Builder $builder) use ($user, $manageableProjectIds) {

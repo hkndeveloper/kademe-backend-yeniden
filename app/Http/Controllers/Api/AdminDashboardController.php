@@ -53,7 +53,8 @@ class AdminDashboardController extends Controller
         $this->assertCanViewDashboard($request);
 
         $user = $request->user();
-        $isGlobal = $user->role === 'super_admin';
+        $isGlobal = $this->permissionResolver->hasGlobalScope($user, 'dashboard.admin.view')
+            || $this->permissionResolver->hasGlobalScope($user, 'projects.view');
         $projectIdsByPermission = [
             'programs' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'programs.view'),
             'applications' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'applications.view'),
@@ -183,7 +184,7 @@ class AdminDashboardController extends Controller
                 ->with('causer:id,name,surname,role')
                 ->latest();
 
-            if ($actor->role !== 'super_admin') {
+            if (! $this->permissionResolver->hasGlobalScope($actor, 'logs.view')) {
                 // Non-admin users can see their own actions and permission-related audit trail.
                 $query->where(function ($builder) use ($actor) {
                     $builder
@@ -217,7 +218,7 @@ class AdminDashboardController extends Controller
                 ->with('causer:id,name,surname,role')
                 ->latest();
 
-            if ($actor->role !== 'super_admin') {
+            if (! $this->permissionResolver->hasGlobalScope($actor, 'logs.export')) {
                 $query->where(function ($builder) use ($actor) {
                     $builder
                         ->where(function ($self) use ($actor) {

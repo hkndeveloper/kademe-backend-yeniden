@@ -23,7 +23,7 @@ class AdminCertificateController extends Controller
     {
         $query = Certificate::with(['project:id,name', 'user:id,name,surname,email']);
 
-        if ($request->user()->role !== 'super_admin') {
+        if (! $this->permissionResolver->hasGlobalScope($request->user(), $permission)) {
             $projectIds = $this->permissionResolver->projectIdsForPermission($request->user(), $permission);
             $query->whereIn('project_id', $projectIds);
         }
