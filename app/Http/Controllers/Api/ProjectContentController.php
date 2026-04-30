@@ -24,15 +24,36 @@ class ProjectContentController extends Controller
 
     public function manageable(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowedForProject($request, 'projects.view');
         $user = $request->user();
+        $candidatePermissions = [
+            'projects.view',
+            'programs.view',
+            'applications.view',
+            'financial.view',
+            'announcements.create',
+            'projects.content.update',
+            'periods.view',
+        ];
+
+        $hasAnyProjectScopedPermission = collect($candidatePermissions)
+            ->contains(fn (string $permission) => $this->permissionResolver->hasPermission($user, $permission));
+
+        abort_unless($hasAnyProjectScopedPermission, 403, 'Projelere erisim yetkiniz yok.');
 
         $query = Project::query()->with(['periods' => function ($builder) {
             $builder->where('status', 'active');
         }, 'participants.user']);
 
         if ($user->role !== 'super_admin') {
-            $ids = $this->permissionResolver->projectIdsForPermission($user, 'projects.view');
+            $ids = collect($candidatePermissions)
+                ->flatMap(function (string $permission) use ($user) {
+                    return $this->permissionResolver->projectIdsForPermission($user, $permission);
+                })
+                ->filter(fn ($id) => is_numeric($id))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }
 
