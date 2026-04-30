@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\RolePermissionScope;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -70,5 +72,31 @@ class UnifiedPanelAliasTest extends TestCase
         $this->assertNotNull($log);
         $this->assertSame('api/panel/periods', $log->properties['path'] ?? null);
         $this->assertSame('periods.view', $log->properties['permission_checked'] ?? null);
+    }
+
+    public function test_custom_role_with_action_can_use_unified_panel_without_system_role(): void
+    {
+        Permission::findOrCreate('periods.view', 'web');
+        $role = Role::findOrCreate('period_viewer', 'web');
+        $role->givePermissionTo('periods.view');
+
+        RolePermissionScope::query()->create([
+            'role_name' => 'period_viewer',
+            'permission_name' => 'periods.view',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ]);
+
+        $user = User::factory()->create([
+            'name' => 'Custom',
+            'surname' => 'Role',
+            'email' => 'custom-panel@test.local',
+            'role' => 'visitor',
+        ]);
+        $user->assignRole('period_viewer');
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/panel/periods')->assertOk();
+        $this->getJson('/api/admin/periods')->assertForbidden();
     }
 }
