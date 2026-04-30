@@ -59,12 +59,15 @@ class AttendanceController extends Controller
         }
 
         $isValidLocation = true;
-        if ($program->latitude && $program->longitude && $validated['latitude'] && $validated['longitude']) {
+        $latitude = $validated['latitude'] ?? null;
+        $longitude = $validated['longitude'] ?? null;
+
+        if ($program->latitude && $program->longitude && $latitude !== null && $longitude !== null) {
             $distance = $this->calculateDistance(
                 $program->latitude,
                 $program->longitude,
-                $validated['latitude'],
-                $validated['longitude'],
+                $latitude,
+                $longitude,
             );
 
             if ($distance > $program->radius_meters) {
@@ -79,8 +82,8 @@ class AttendanceController extends Controller
                 'program_id' => $program->id,
                 'user_id' => $user->id,
                 'method' => 'qr',
-                'latitude' => $validated['latitude'],
-                'longitude' => $validated['longitude'],
+                'latitude' => $latitude,
+                'longitude' => $longitude,
                 'is_valid' => $isValidLocation,
             ]);
 
