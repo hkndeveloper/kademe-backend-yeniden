@@ -28,6 +28,7 @@ class ProjectContentController extends Controller
         $allowedPermissions = [
             'projects.view',
             'programs.view',
+            'programs.create',
             'applications.view',
             'financial.view',
             'announcements.create',
