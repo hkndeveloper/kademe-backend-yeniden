@@ -60,6 +60,9 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->prefix('applications')
     Route::post('/', [\App\Http\Controllers\Api\ApplicationController::class, 'store']);
 });
 
+// Public project application endpoint (guest users can apply).
+Route::post('/applications/public', [\App\Http\Controllers\Api\ApplicationController::class, 'storePublic']);
+
 // --- PROGRAM (ETKÄ°NLÄ°K) & YOKLAMA --- //
 Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->group(function () {
     

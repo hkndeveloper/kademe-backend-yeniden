@@ -5,14 +5,100 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationForm;
+use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ApplicationController extends Controller
 {
+    private function resolveApplicantUser(array $applicant): User
+    {
+        $email = Str::lower(trim($applicant['email']));
+        $existing = User::where('email', $email)->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $user = User::create([
+            'name' => trim($applicant['name']),
+            'surname' => trim($applicant['surname']),
+            'email' => $email,
+            'phone' => $applicant['phone'] ? trim((string) $applicant['phone']) : null,
+            'password' => Hash::make(Str::random(32)),
+            'role' => 'student',
+            'status' => 'active',
+            'email_verified_at' => now(),
+        ]);
+
+        $user->syncRoles(['student']);
+
+        return $user;
+    }
+
+    private function ensureSingleProjectRule(User $user, Project $project): void
+    {
+        $activeParticipationExists = Participant::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where('project_id', '!=', $project->id)
+            ->exists();
+
+        if ($activeParticipationExists) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Aktif olarak baska bir projede yer aldiginiz icin bu projeye basvuru yapamazsiniz.'],
+            ]);
+        }
+    }
+
+    private function createApplicationForUser(User $user, Project $project, array $formData): Application
+    {
+        $this->ensureSingleProjectRule($user, $project);
+
+        $currentPeriod = Period::where('project_id', $project->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $currentPeriod) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu proje icin aktif bir donem bulunamadi.'],
+            ]);
+        }
+
+        $existingApp = Application::where('user_id', $user->id)
+            ->where('project_id', $project->id)
+            ->where('period_id', $currentPeriod->id)
+            ->first();
+
+        if ($existingApp) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu projeye ve doneme ait zaten bir basvurunuz bulunuyor.'],
+            ]);
+        }
+
+        $form = ApplicationForm::where('project_id', $project->id)
+            ->where('is_active', true)
+            ->latest()
+            ->first();
+
+        $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData));
+
+        return Application::create([
+            'user_id' => $user->id,
+            'project_id' => $project->id,
+            'period_id' => $currentPeriod->id,
+            'application_form_id' => $form?->id,
+            'form_data' => $normalizedFormData,
+            'status' => 'pending',
+        ]);
+    }
+
     /**
      * Kullanicinin kendi basvurularini listelemesi
      */
@@ -110,40 +196,34 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $user = $request->user();
+        $application = $this->createApplicationForUser($request->user(), $project, $validated['form_data']);
 
-        $currentPeriod = Period::where('project_id', $project->id)
-            ->where('status', 'active')
-            ->first();
+        return response()->json([
+            'message' => 'Basvurunuz basariyla alindi.',
+            'application' => $application,
+        ], 201);
+    }
 
-        if (! $currentPeriod) {
-            return response()->json(['message' => 'Bu proje icin aktif bir donem bulunamadi.'], 400);
-        }
-
-        $existingApp = Application::where('user_id', $user->id)
-            ->where('project_id', $project->id)
-            ->where('period_id', $currentPeriod->id)
-            ->first();
-
-        if ($existingApp) {
-            return response()->json(['message' => 'Bu projeye ve doneme ait zaten bir basvurunuz bulunuyor.'], 400);
-        }
-
-        $form = ApplicationForm::where('project_id', $project->id)
-            ->where('is_active', true)
-            ->latest()
-            ->first();
-
-        $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($validated['form_data']));
-
-        $application = Application::create([
-            'user_id' => $user->id,
-            'project_id' => $project->id,
-            'period_id' => $currentPeriod->id,
-            'application_form_id' => $form?->id,
-            'form_data' => $normalizedFormData,
-            'status' => 'pending',
+    public function storePublic(Request $request)
+    {
+        $validated = $request->validate([
+            'project_id' => 'required|exists:projects,id',
+            'form_data' => 'required|array',
+            'applicant.name' => 'required|string|max:255',
+            'applicant.surname' => 'required|string|max:255',
+            'applicant.email' => 'required|email|max:255',
+            'applicant.phone' => 'nullable|string|max:30',
         ]);
+
+        $project = Project::findOrFail($validated['project_id']);
+        if (! $project->application_open) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu proje icin basvurular su an kapali.'],
+            ]);
+        }
+
+        $user = $this->resolveApplicantUser($validated['applicant']);
+        $application = $this->createApplicationForUser($user, $project, $validated['form_data']);
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',
