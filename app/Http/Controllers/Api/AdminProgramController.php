@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Models\Attendance;
+use App\Models\CreditLog;
+use App\Models\Feedback;
 use App\Models\Program;
 use App\Models\Project;
 use App\Support\AdminExportResponder;
@@ -240,5 +243,106 @@ class AdminProgramController extends Controller
         return response()->json([
             'message' => 'Etkinlik ve yoklama alimi basariyla sonlandirildi.',
         ]);
+    }
+
+    public function attendanceDetails(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'programs.attendance.view');
+        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
+        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.attendance.view');
+
+        $attendances = Attendance::query()
+            ->with(['user:id,name,surname,email', 'program:id,title'])
+            ->where('program_id', $program->id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $feedbackByUserId = [];
+        $feedbackCount = Feedback::query()->where('program_id', $program->id)->count();
+        if ($feedbackCount > 0) {
+            $participantIds = $attendances->pluck('user_id')->filter()->values()->all();
+            if ($participantIds !== []) {
+                $logs = CreditLog::query()
+                    ->where('program_id', $program->id)
+                    ->where('type', 'restore')
+                    ->whereIn('user_id', $participantIds)
+                    ->get();
+                $feedbackByUserId = $logs->groupBy('user_id')->map(fn ($group) => $group->count())->all();
+            }
+        }
+
+        return response()->json([
+            'program' => [
+                'id' => $program->id,
+                'title' => $program->title,
+                'project' => $program->project?->name,
+                'period' => $program->period?->name,
+                'start_at' => optional($program->start_at)?->toIso8601String(),
+                'status' => $program->status,
+            ],
+            'summary' => [
+                'attendance_count' => $attendances->count(),
+                'feedback_count' => $feedbackCount,
+            ],
+            'records' => $attendances->map(function (Attendance $attendance) use ($feedbackByUserId) {
+                $uid = (int) $attendance->user_id;
+                return [
+                    'id' => $attendance->id,
+                    'student' => $attendance->user ? trim($attendance->user->name . ' ' . $attendance->user->surname) : 'Silinmis kullanici',
+                    'email' => $attendance->user?->email,
+                    'method' => $attendance->method,
+                    'is_valid' => (bool) $attendance->is_valid,
+                    'latitude' => $attendance->latitude,
+                    'longitude' => $attendance->longitude,
+                    'feedback_submitted' => ($feedbackByUserId[$uid] ?? 0) > 0,
+                    'recorded_at' => optional($attendance->created_at)?->toIso8601String(),
+                ];
+            })->values(),
+        ]);
+    }
+
+    public function exportAttendanceDetails(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'programs.attendance.export');
+        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
+        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.attendance.export');
+
+        $attendances = Attendance::query()
+            ->with('user:id,name,surname,email')
+            ->where('program_id', $program->id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $feedbackUserIds = CreditLog::query()
+            ->where('program_id', $program->id)
+            ->where('type', 'restore')
+            ->pluck('user_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $headings = ['Yoklama ID', 'Ogrenci', 'E-posta', 'Yontem', 'Konum Dogrulamasi', 'Feedback', 'Enlem', 'Boylam', 'Kayit Zamani'];
+        $rows = $attendances->map(function (Attendance $attendance) use ($feedbackUserIds) {
+            return [
+                $attendance->id,
+                $attendance->user ? trim($attendance->user->name . ' ' . $attendance->user->surname) : 'Silinmis kullanici',
+                $attendance->user?->email ?? '-',
+                $attendance->method,
+                $attendance->is_valid ? 'dogrulandi' : 'alan disi',
+                in_array((int) $attendance->user_id, $feedbackUserIds, true) ? 'gonderildi' : 'bekliyor',
+                $attendance->latitude ?? '-',
+                $attendance->longitude ?? '-',
+                optional($attendance->created_at)?->format('d.m.Y H:i:s') ?? '-',
+            ];
+        })->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'program_' . $program->id . '_yoklama_' . now()->format('Ymd_His'),
+            'Program Yoklama Detaylari',
+            $headings,
+            $rows,
+        );
     }
 }
