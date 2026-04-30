@@ -25,7 +25,7 @@ class ProjectContentController extends Controller
     public function manageable(Request $request): JsonResponse
     {
         $user = $request->user();
-        $candidatePermissions = [
+        $allowedPermissions = [
             'projects.view',
             'programs.view',
             'applications.view',
@@ -34,26 +34,23 @@ class ProjectContentController extends Controller
             'projects.content.update',
             'periods.view',
         ];
+        $validated = $request->validate([
+            'permission' => ['nullable', 'string', Rule::in($allowedPermissions)],
+        ]);
+        $targetPermission = $validated['permission'] ?? 'projects.view';
 
-        $hasAnyProjectScopedPermission = collect($candidatePermissions)
-            ->contains(fn (string $permission) => $this->permissionResolver->hasPermission($user, $permission));
-
-        abort_unless($hasAnyProjectScopedPermission, 403, 'Projelere erisim yetkiniz yok.');
+        abort_unless(
+            $this->permissionResolver->hasPermission($user, $targetPermission),
+            403,
+            'Projelere erisim yetkiniz yok.'
+        );
 
         $query = Project::query()->with(['periods' => function ($builder) {
             $builder->where('status', 'active');
         }, 'participants.user']);
 
         if ($user->role !== 'super_admin') {
-            $ids = collect($candidatePermissions)
-                ->flatMap(function (string $permission) use ($user) {
-                    return $this->permissionResolver->projectIdsForPermission($user, $permission);
-                })
-                ->filter(fn ($id) => is_numeric($id))
-                ->map(fn ($id) => (int) $id)
-                ->unique()
-                ->values()
-                ->all();
+            $ids = $this->permissionResolver->projectIdsForPermission($user, $targetPermission);
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }
 
