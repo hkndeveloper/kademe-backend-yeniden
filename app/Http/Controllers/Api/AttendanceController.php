@@ -96,7 +96,7 @@ class AttendanceController extends Controller
                 'period_id' => $program->period_id,
                 'program_id' => $program->id,
                 'amount' => -$creditDeduction,
-                'type' => 'attendance_hold',
+                'type' => 'deduction',
                 'reason' => 'Oturum yoklamasi alindi, degerlendirme bekleniyor',
             ]);
 

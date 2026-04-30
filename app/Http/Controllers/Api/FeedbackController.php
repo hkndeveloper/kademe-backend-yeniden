@@ -69,7 +69,7 @@ class FeedbackController extends Controller
             $rewardLog = CreditLog::query()
                 ->where('user_id', $user->id)
                 ->where('program_id', $program->id)
-                ->where('type', 'feedback_reward')
+                ->where('type', 'restore')
                 ->latest()
                 ->first();
 
@@ -162,7 +162,7 @@ class FeedbackController extends Controller
             $rewardExists = CreditLog::query()
                 ->where('user_id', $user->id)
                 ->where('program_id', $program->id)
-                ->where('type', 'feedback_reward')
+                ->where('type', 'restore')
                 ->exists();
 
             if (! $rewardExists && $creditAmount > 0) {
@@ -173,7 +173,7 @@ class FeedbackController extends Controller
                     'period_id' => $program->period_id,
                     'program_id' => $program->id,
                     'amount' => $creditAmount,
-                    'type' => 'feedback_reward',
+                    'type' => 'restore',
                     'reason' => 'Oturum degerlendirmesi tamamlandi',
                 ]);
 
