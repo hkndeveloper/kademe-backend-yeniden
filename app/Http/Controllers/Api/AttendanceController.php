@@ -9,6 +9,7 @@ use App\Models\Participant;
 use App\Models\Program;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AttendanceController extends Controller
 {
@@ -24,8 +25,10 @@ class AttendanceController extends Controller
         ]);
 
         $user = $request->user();
+        $tokenInput = trim((string) $validated['qr_token']);
+        $qrToken = $this->extractQrToken($tokenInput);
 
-        $program = Program::where('qr_token', $validated['qr_token'])
+        $program = Program::where('qr_token', $qrToken)
             ->where('status', 'active')
             ->first();
 
@@ -129,5 +132,27 @@ class AttendanceController extends Controller
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadius * $c;
+    }
+
+    private function extractQrToken(string $raw): string
+    {
+        if ($raw === '') {
+            return '';
+        }
+
+        if (! Str::startsWith($raw, ['http://', 'https://'])) {
+            return $raw;
+        }
+
+        $parts = parse_url($raw);
+        if (! is_array($parts) || empty($parts['query'])) {
+            return $raw;
+        }
+
+        parse_str((string) $parts['query'], $query);
+
+        $token = isset($query['token']) ? trim((string) $query['token']) : '';
+
+        return $token !== '' ? $token : $raw;
     }
 }
