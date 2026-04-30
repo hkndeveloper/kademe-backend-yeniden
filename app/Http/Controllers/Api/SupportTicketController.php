@@ -196,6 +196,11 @@ class SupportTicketController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (! in_array($user->role, ['student', 'alumni'], true)) {
+            $this->abortUnlessAllowed($request, 'support.create');
+        }
+
         $validated = $request->validate([
             'subject' => 'required|string|max:255',
             'category' => 'required|string|max:100',
@@ -205,10 +210,10 @@ class SupportTicketController extends Controller
 
         if (
             ! empty($validated['project_id'])
-            && $this->permissionResolver->hasPermission($request->user(), 'support.view')
+            && $this->permissionResolver->hasPermission($user, 'support.create')
         ) {
             abort_unless(
-                $this->permissionResolver->canAccessProject($request->user(), 'support.view', (int) $validated['project_id']),
+                $this->permissionResolver->canAccessProject($user, 'support.create', (int) $validated['project_id']),
                 403,
                 'Bu proje icin destek talebi olusturma yetkiniz bulunmuyor.'
             );

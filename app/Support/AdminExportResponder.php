@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Exports\ArrayExport;
+use App\Support\SimpleDocxExporter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
 use Maatwebsite\Excel\Facades\Excel;
@@ -37,6 +38,14 @@ class AdminExportResponder
             ])->setPaper('a4', 'landscape');
 
             return $pdf->download("{$filename}.pdf");
+        }
+
+        if ($normalizedFormat === 'docx' || $normalizedFormat === 'word') {
+            $docxPath = SimpleDocxExporter::create($title, $headings, $rows);
+
+            return response()
+                ->download($docxPath, "{$filename}.docx")
+                ->deleteFileAfterSend(true);
         }
 
         return Excel::download(

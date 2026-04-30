@@ -189,10 +189,6 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::post('/staff/{id}/documents', [\App\Http\Controllers\Api\StaffController::class, 'uploadDocument']);
 
     // â”€â”€ Ä°ZÄ°N TALEPLERÄ° (Admin gÃ¶rÃ¼nÃ¼mÃ¼) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    Route::get('/leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'leaveRequests']);
-    Route::get('/leave-requests/export', [\App\Http\Controllers\Api\StaffController::class, 'exportLeaveRequests']);
-    Route::put('/leave-requests/{id}/approve', [\App\Http\Controllers\Api\StaffController::class, 'approveLeave']);
-    Route::put('/leave-requests/{id}/reject', [\App\Http\Controllers\Api\StaffController::class, 'rejectLeave']);
 
     // â”€â”€ DUYURULAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Route::post('/announcements/send-sms', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendSms']);
@@ -310,6 +306,10 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::get('/staff/{id}', [\App\Http\Controllers\Api\StaffController::class, 'show']);
     Route::put('/staff/{id}', [\App\Http\Controllers\Api\StaffController::class, 'update']);
     Route::post('/staff/{id}/documents', [\App\Http\Controllers\Api\StaffController::class, 'uploadDocument']);
+    Route::get('/leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'leaveRequests']);
+    Route::get('/leave-requests/export', [\App\Http\Controllers\Api\StaffController::class, 'exportLeaveRequests']);
+    Route::put('/leave-requests/{id}/approve', [\App\Http\Controllers\Api\StaffController::class, 'approveLeave']);
+    Route::put('/leave-requests/{id}/reject', [\App\Http\Controllers\Api\StaffController::class, 'rejectLeave']);
     Route::get('/leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'leaveRequests']);
     Route::get('/leave-requests/export', [\App\Http\Controllers\Api\StaffController::class, 'exportLeaveRequests']);
     Route::put('/leave-requests/{id}/approve', [\App\Http\Controllers\Api\StaffController::class, 'approveLeave']);

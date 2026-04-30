@@ -87,6 +87,7 @@ class FeedbackController extends Controller
                 ] : null,
                 'feedback_submitted' => (bool) $submittedFeedback,
                 'submitted_at' => optional($submittedFeedback?->submitted_at)?->toIso8601String(),
+                'anonymous_feedback_id' => $submittedFeedback?->public_id,
                 'credit_restored' => (bool) $rewardLog,
             ];
         })->values();
@@ -150,8 +151,8 @@ class FeedbackController extends Controller
 
         $creditAmount = max((int) ($program->credit_deduction ?? 10), 0);
 
-        DB::transaction(function () use ($validated, $program, $anonymousToken, $participant, $user, $creditAmount) {
-            Feedback::create([
+        $savedFeedback = DB::transaction(function () use ($validated, $program, $anonymousToken, $participant, $user, $creditAmount) {
+            $created = Feedback::create([
                 'program_id' => $program->id,
                 'anonymous_token' => $anonymousToken,
                 'responses' => $validated['responses'],
@@ -178,6 +179,8 @@ class FeedbackController extends Controller
 
                 $participant->increment('credit', $creditAmount);
             }
+
+            return $created;
         });
 
         $participant->refresh();
@@ -185,6 +188,7 @@ class FeedbackController extends Controller
         return response()->json([
             'message' => 'Degerlendirmen alindi ve oturuma ait kredi iadesi uygulandi.',
             'current_credit' => $participant->credit,
+            'anonymous_feedback_id' => $savedFeedback->public_id,
         ], 201);
     }
 }

@@ -156,6 +156,7 @@ return [
         ],
         'Support' => [
             'support.view',
+            'support.create',
             'support.assign',
             'support.reply',
             'support.close',
@@ -294,6 +295,7 @@ return [
         ],
         'manage support' => [
             'support.view',
+            'support.create',
             'support.assign',
             'support.reply',
             'support.close',

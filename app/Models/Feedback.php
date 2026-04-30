@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Feedback extends Model
 {
@@ -14,6 +15,7 @@ class Feedback extends Model
     protected $fillable = [
         'program_id',
         'anonymous_token',
+        'public_id',
         'responses',
         'submitted_at',
     ];
@@ -26,5 +28,14 @@ class Feedback extends Model
     public function program()
     {
         return $this->belongsTo(Program::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (Feedback $feedback) {
+            if (! $feedback->public_id) {
+                $feedback->public_id = (string) Str::uuid();
+            }
+        });
     }
 }
