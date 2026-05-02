@@ -19,19 +19,23 @@ class MediaUploadController extends Controller
     private function canUpload(Request $request): bool
     {
         $user = $request->user();
-        $perms = [
+        $globalPerms = [
             'content.blog.create',
             'content.blog.update',
             'content.faq.create',
             'content.faq.update',
-            'projects.content.update',
-            'projects.gallery.update',
             'settings.update',
             'content.site_settings.update',
         ];
 
-        foreach ($perms as $permission) {
-            if ($this->permissionResolver->hasPermission($user, $permission)) {
+        foreach ($globalPerms as $permission) {
+            if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
+                return true;
+            }
+        }
+
+        foreach (['projects.content.update', 'projects.gallery.update'] as $permission) {
+            if ($this->permissionResolver->projectIdsForPermission($user, $permission) !== []) {
                 return true;
             }
         }

@@ -4,8 +4,6 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\RolePermissionScope;
-use App\Models\Request as SupportRequest;
-use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -81,7 +79,8 @@ class PermissionResolver
 
         return match ($scopeType) {
             'all' => true,
-            'own_unit' => $unit !== null && ($scopePayload['unit'] ?? null) === $unit,
+            'own_unit' => $this->normalizeUnit($unit) !== null
+                && $this->normalizeUnit($scopePayload['unit'] ?? null) === $this->normalizeUnit($unit),
             'none' => false,
             default => $this->denyUnitScopeWithOptionalLog($permissionName, $scopeType, $unit),
         };
@@ -279,12 +278,15 @@ class PermissionResolver
                 'programs.',
                 'calendar.',
                 'applications.',
+                'volunteer.',
                 'financial.',
                 'support.',
                 'requests.',
                 'announcements.',
                 'content.',
                 'certificates.',
+                'digital_bohca.',
+                'assignments.',
             ])) {
                 return [
                     'scope_type' => 'own_projects',
@@ -292,7 +294,7 @@ class PermissionResolver
                 ];
             }
 
-            if ($this->matchesAny($permissionName, ['staff.'])) {
+            if ($this->matchesAny($permissionName, ['staff.', 'users.'])) {
                 return [
                     'scope_type' => 'own_unit',
                     'scope_payload' => ['unit' => $manageableUnit],
@@ -301,14 +303,14 @@ class PermissionResolver
         }
 
         if ($user->role === 'staff') {
-            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'projects.', 'calendar.'])) {
+            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'content.', 'certificates.', 'digital_bohca.', 'assignments.'])) {
                 return [
                     'scope_type' => 'assigned_projects',
                     'scope_payload' => ['project_ids' => $manageableProjectIds],
                 ];
             }
 
-            if ($this->matchesAny($permissionName, ['staff.'])) {
+            if ($this->matchesAny($permissionName, ['staff.', 'users.'])) {
                 return [
                     'scope_type' => 'own_unit',
                     'scope_payload' => ['unit' => $manageableUnit],
@@ -352,30 +354,7 @@ class PermissionResolver
                 }
             }
 
-            return collect()
-                ->merge(
-                    SupportRequest::query()
-                        ->where(function ($builder) use ($user) {
-                            $builder
-                                ->where('requester_id', $user->id)
-                                ->orWhere('target_user_id', $user->id);
-                        })
-                        ->whereNotNull('project_id')
-                        ->pluck('project_id')
-                )
-                ->merge(
-                    SupportTicket::query()
-                        ->where(function ($builder) use ($user) {
-                            $builder
-                                ->where('user_id', $user->id)
-                                ->orWhere('assigned_to', $user->id);
-                        })
-                        ->whereNotNull('project_id')
-                        ->pluck('project_id')
-                )
-                ->unique()
-                ->values()
-                ->all();
+            return $user->participations->pluck('project_id')->unique()->values()->all();
         }
 
         if (in_array($user->role, ['student', 'alumni'], true)) {
@@ -403,10 +382,6 @@ class PermissionResolver
     {
         return in_array($permissionName, [
             'calendar.view',
-            'programs.view',
-            'applications.view',
-            'projects.view',
-            'periods.view',
         ], true);
     }
 
@@ -445,6 +420,63 @@ class PermissionResolver
         };
     }
 
+    public function canAccessUser(User $actor, string $permissionName, User $target): bool
+    {
+        if (! $this->hasPermission($actor, $permissionName)) {
+            return false;
+        }
+
+        $scope = $this->scopeFor($actor, $permissionName);
+        $scopeType = $scope['scope_type'] ?? 'none';
+
+        return match ($scopeType) {
+            'all' => true,
+            'own_unit' => $this->canAccessUnit($actor, $permissionName, $target->staffProfile?->unit),
+            'self' => $actor->id === $target->id,
+            'none' => false,
+            default => false,
+        };
+    }
+
+    public function applyUserScope($query, User $actor, string $permissionName): void
+    {
+        if (! $this->hasPermission($actor, $permissionName)) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $scope = $this->scopeFor($actor, $permissionName);
+        $scopeType = $scope['scope_type'] ?? 'none';
+
+        if ($scopeType === 'all') {
+            return;
+        }
+
+        if ($scopeType === 'own_unit') {
+            $unit = $this->normalizeUnit(($scope['scope_payload'] ?? [])['unit'] ?? null);
+            if ($unit === null) {
+                $query->whereRaw('1 = 0');
+
+                return;
+            }
+
+            $query->whereHas('staffProfile', function ($builder) use ($unit) {
+                $builder->whereRaw('LOWER(TRIM(unit)) = ?', [$unit]);
+            });
+
+            return;
+        }
+
+        if ($scopeType === 'self') {
+            $query->where('id', $actor->id);
+
+            return;
+        }
+
+        $query->whereRaw('1 = 0');
+    }
+
     /**
      * canAccessProject: birim / diger proje-disi scope tipleri burada false doner; yalnizca beklenmeyen scope_type loglanir.
      */
@@ -476,5 +508,12 @@ class PermissionResolver
         }
 
         return false;
+    }
+
+    private function normalizeUnit(mixed $unit): ?string
+    {
+        $normalized = mb_strtolower(trim((string) $unit));
+
+        return $normalized === '' ? null : $normalized;
     }
 }

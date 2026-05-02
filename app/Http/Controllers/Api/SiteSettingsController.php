@@ -23,16 +23,16 @@ class SiteSettingsController extends Controller
     {
         $user = $request->user();
 
-        return $this->permissionResolver->hasPermission($user, 'settings.view')
-            || $this->permissionResolver->hasPermission($user, 'content.site_settings.update');
+        return $this->permissionResolver->hasGlobalScope($user, 'settings.view')
+            || $this->permissionResolver->hasGlobalScope($user, 'content.site_settings.update');
     }
 
     private function canUpdateAdminSettings(Request $request): bool
     {
         $user = $request->user();
 
-        return $this->permissionResolver->hasPermission($user, 'settings.update')
-            || $this->permissionResolver->hasPermission($user, 'content.site_settings.update');
+        return $this->permissionResolver->hasGlobalScope($user, 'settings.update')
+            || $this->permissionResolver->hasGlobalScope($user, 'content.site_settings.update');
     }
 
     private function defaults(): array

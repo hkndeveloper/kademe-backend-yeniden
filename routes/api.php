@@ -245,6 +245,11 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::put('/applications/{id}/interview', [\App\Http\Controllers\Api\AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [\App\Http\Controllers\Api\AdminApplicationController::class, 'addToWaitlist']);
 
+    Route::get('/volunteer/opportunities', [\App\Http\Controllers\Api\VolunteerController::class, 'panelIndex']);
+    Route::post('/volunteer/opportunities', [\App\Http\Controllers\Api\VolunteerController::class, 'panelStore']);
+    Route::put('/volunteer/applications/{id}', [\App\Http\Controllers\Api\VolunteerController::class, 'panelUpdateApplication']);
+    Route::delete('/volunteer/opportunities/{id}', [\App\Http\Controllers\Api\VolunteerController::class, 'panelDestroy']);
+
     Route::get('/periods', [\App\Http\Controllers\Api\PeriodController::class, 'index']);
     Route::get('/periods/export', [\App\Http\Controllers\Api\PeriodController::class, 'export']);
     Route::post('/periods', [\App\Http\Controllers\Api\PeriodController::class, 'store']);
@@ -256,6 +261,15 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::put('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'update']);
     Route::get('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'applicationForm']);
     Route::put('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'updateApplicationForm']);
+
+    Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelIndex']);
+    Route::post('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelStore']);
+    Route::delete('/digital-bohca/{id}', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelDestroy']);
+
+    Route::get('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelIndex']);
+    Route::post('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelStore']);
+    Route::delete('/assignments/{id}', [\App\Http\Controllers\Api\AssignmentController::class, 'panelDestroy']);
+    Route::put('/assignment-submissions/{id}/review', [\App\Http\Controllers\Api\AssignmentController::class, 'panelReviewSubmission']);
 
     Route::get('/calendar/overview', [\App\Http\Controllers\Api\CalendarController::class, 'overview']);
     Route::get('/calendar/assignees', [\App\Http\Controllers\Api\CalendarController::class, 'assignees']);

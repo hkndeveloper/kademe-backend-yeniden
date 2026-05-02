@@ -125,10 +125,24 @@ class RequestController extends Controller
             ])
             ->values();
 
-        $targetUsers = User::query()
+        $targetUserQuery = User::query()
+            ->with('staffProfile')
             ->whereIn('role', ['super_admin', 'coordinator', 'staff'])
             ->where('status', 'active')
-            ->orderBy('name')
+            ->orderBy('name');
+
+        if (! $this->permissionResolver->hasGlobalScope($user, 'requests.create')) {
+            $unit = $user->staffProfile?->unit;
+            $targetUserQuery->where(function ($builder) use ($unit) {
+                $builder->where('role', 'super_admin');
+
+                if ($unit) {
+                    $builder->orWhereHas('staffProfile', fn ($q) => $q->where('unit', $unit));
+                }
+            });
+        }
+
+        $targetUsers = $targetUserQuery
             ->get(['id', 'name', 'surname', 'role'])
             ->map(fn (User $targetUser) => [
                 'id' => $targetUser->id,
@@ -233,6 +247,14 @@ class RequestController extends Controller
                 403,
                 'Bu proje icin talep olusturma yetkiniz bulunmuyor.'
             );
+        }
+
+        if (! empty($validated['target_user_id']) && ! $this->permissionResolver->hasGlobalScope($request->user(), 'requests.create')) {
+            $targetUser = User::query()->with('staffProfile')->findOrFail((int) $validated['target_user_id']);
+            $actorUnit = $request->user()->staffProfile?->unit;
+            $sameUnit = $actorUnit && $targetUser->staffProfile?->unit === $actorUnit;
+
+            abort_unless($targetUser->role === 'super_admin' || $sameUnit, 403, 'Bu kisiye talep gonderme yetkiniz bulunmuyor.');
         }
 
         $workflowRequest = WorkflowRequest::create([

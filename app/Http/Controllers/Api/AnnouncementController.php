@@ -190,7 +190,8 @@ class AnnouncementController extends Controller
             $query->where('category', $request->category);
         }
         if ($request->filled('project_id')) {
-            $query->where('project_id', $request->project_id);
+            $this->assertProjectAnnouncementScope($request, (int) $request->project_id, 'announcements.view');
+            $query->where('project_id', (int) $request->project_id);
         }
 
         return response()->json(['announcements' => $query->paginate(20)]);
@@ -206,7 +207,8 @@ class AnnouncementController extends Controller
             $query->where('category', $request->category);
         }
         if ($request->filled('project_id')) {
-            $query->where('project_id', $request->project_id);
+            $this->assertProjectAnnouncementScope($request, (int) $request->project_id, 'announcements.export');
+            $query->where('project_id', (int) $request->project_id);
         }
 
         $announcements = $query->get();

@@ -28,6 +28,7 @@ class UserController extends Controller
     {
         $this->abortUnlessAllowed($request, 'users.view');
         $query = User::with('profile')->withTrashed(false);
+        $this->permissionResolver->applyUserScope($query, $request->user(), 'users.view');
 
         if ($request->filled('role')) {
             $query->where('role', $request->role);
@@ -63,12 +64,6 @@ class UserController extends Controller
      */
     public function showUser(int $id)
     {
-        abort_unless(
-            $this->permissionResolver->hasPermission(request()->user(), 'users.view'),
-            403,
-            'Bu kullaniciyi goruntuleme yetkiniz bulunmuyor.'
-        );
-
         $user = User::with([
             'profile',
             'staffProfile',
@@ -78,6 +73,12 @@ class UserController extends Controller
             'certificates.project:id,name',
             'roles:id,name',
         ])->findOrFail($id);
+
+        abort_unless(
+            $this->permissionResolver->canAccessUser(request()->user(), 'users.view', $user),
+            403,
+            'Bu kullaniciyi goruntuleme yetkiniz bulunmuyor.'
+        );
 
         $documents = $user->staffProfile?->personal_documents ?? [];
         $creditScore = \App\Models\CreditLog::where('user_id', $user->id)->sum('amount');
@@ -101,7 +102,12 @@ class UserController extends Controller
         $permission = $needsRoleUpdate ? 'users.assign_role' : 'users.update';
         $this->abortUnlessAllowed($request, $permission);
 
-        $user = User::findOrFail($id);
+        $user = User::with('staffProfile')->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessUser($request->user(), $permission, $user),
+            403,
+            'Bu kullaniciyi guncelleme yetkiniz bulunmuyor.'
+        );
 
         $validated = $request->validate([
             'role' => 'sometimes|string|exists:roles,name',
@@ -136,6 +142,7 @@ class UserController extends Controller
     {
         $this->abortUnlessAllowed($request, 'users.export');
         $query = User::with('profile');
+        $this->permissionResolver->applyUserScope($query, $request->user(), 'users.export');
 
         if ($request->filled('role')) {
             $query->where('role', $request->role);

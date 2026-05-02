@@ -25,9 +25,9 @@ class UserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'surname' => $this->surname,
-            'email' => $this->maskEmail($this->email),
+            'email' => $request->user()?->id === $this->id ? $this->email : $this->maskEmail($this->email),
             // Sadece yetkili kişiler maskesiz telefonu görebilir
-            'phone' => ($request->user() && ($request->user()->hasRole('super_admin') || $request->user()->hasRole('coordinator')))
+            'phone' => ($request->user()?->id === $this->id || ($request->user() && ($request->user()->hasRole('super_admin') || $request->user()->hasRole('coordinator'))))
                 ? $this->phone
                 : $this->maskPhone($this->phone),
             'role' => $this->role,

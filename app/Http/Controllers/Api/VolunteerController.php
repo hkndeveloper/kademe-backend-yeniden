@@ -2,15 +2,24 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\VolunteerOpportunityResource;
 use App\Models\VolunteerApplication;
 use App\Models\VolunteerOpportunity;
+use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class VolunteerController extends Controller
 {
+    use AuthorizesGranularPermissions;
+
+    public function __construct(
+        private readonly PermissionResolver $permissionResolver
+    ) {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -130,5 +139,97 @@ class VolunteerController extends Controller
                 ],
             ],
         ], 201);
+    }
+
+    public function panelIndex(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'volunteer.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'status' => 'nullable|string|max:50',
+        ]);
+
+        $projectIds = $this->permissionResolver->projectIdsForPermission($request->user(), 'volunteer.view');
+        $query = VolunteerOpportunity::query()
+            ->with([
+                'project:id,name',
+                'creator:id,name,surname',
+                'applications.user:id,name,surname,email,phone',
+            ])
+            ->withCount('applications')
+            ->whereIn('project_id', $projectIds)
+            ->orderByDesc('created_at');
+
+        if (! empty($validated['project_id'])) {
+            $this->abortUnlessProjectAllowed($request, 'volunteer.view', (int) $validated['project_id']);
+            $query->where('project_id', (int) $validated['project_id']);
+        }
+
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
+        }
+
+        return response()->json([
+            'opportunities' => $query->paginate(20),
+        ]);
+    }
+
+    public function panelStore(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'volunteer.manage');
+        $validated = $request->validate([
+            'project_id' => 'required|exists:projects,id',
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string|max:4000',
+            'location' => 'nullable|string|max:255',
+            'start_at' => 'nullable|date',
+            'end_at' => 'nullable|date|after_or_equal:start_at',
+            'quota' => 'nullable|integer|min:1',
+            'status' => 'required|in:open,closed,draft',
+        ]);
+
+        $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $validated['project_id']);
+
+        $opportunity = VolunteerOpportunity::query()->create([
+            ...$validated,
+            'created_by' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Gonullu ilani olusturuldu.',
+            'opportunity' => $opportunity->load(['project:id,name', 'creator:id,name,surname']),
+        ], 201);
+    }
+
+    public function panelUpdateApplication(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'volunteer.manage');
+        $validated = $request->validate([
+            'status' => 'required|in:pending,accepted,rejected',
+            'evaluation_note' => 'nullable|string|max:3000',
+        ]);
+
+        $application = VolunteerApplication::query()
+            ->with('opportunity:id,project_id,title')
+            ->findOrFail($id);
+
+        $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $application->opportunity->project_id);
+
+        $application->update($validated);
+
+        return response()->json([
+            'message' => 'Gonullu basvurusu guncellendi.',
+            'application' => $application->fresh(['user:id,name,surname,email,phone']),
+        ]);
+    }
+
+    public function panelDestroy(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'volunteer.manage');
+        $opportunity = VolunteerOpportunity::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $opportunity->project_id);
+        $opportunity->delete();
+
+        return response()->json(['message' => 'Gonullu ilani silindi.']);
     }
 }

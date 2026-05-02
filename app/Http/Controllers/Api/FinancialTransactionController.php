@@ -140,15 +140,15 @@ class FinancialTransactionController extends Controller
             'invoice'     => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
-        $invoicePath = null;
-        if ($request->hasFile('invoice')) {
-            $invoicePath = $request->file('invoice')->store('invoices', 'public');
-        }
-
         if (!empty($validated['project_id'])) {
             $this->abortUnlessProjectAllowed($request, 'financial.create', (int) $validated['project_id']);
         } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'financial.create')) {
             abort(403, 'Projesiz mali islem icin global kapsam gerekir.');
+        }
+
+        $invoicePath = null;
+        if ($request->hasFile('invoice')) {
+            $invoicePath = $request->file('invoice')->store('invoices', 'public');
         }
 
         $transaction = FinancialTransaction::create([

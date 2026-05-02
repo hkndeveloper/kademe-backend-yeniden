@@ -10,6 +10,33 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    private function authenticatedUserPayload(User $user): array
+    {
+        $user->loadMissing('profile', 'roles', 'staffProfile');
+        $authorization = app(\App\Services\PermissionResolver::class)->resolve($user);
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'surname' => $user->surname,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'role' => $user->role,
+            'status' => $user->status,
+            'university' => $user->university,
+            'department' => $user->department,
+            'class_year' => $user->class_year,
+            'profile' => $user->profile,
+            'roles' => $user->roles,
+            'joined_at' => $user->created_at?->format('Y-m-d H:i:s'),
+            'effective_permissions' => $authorization['effective_permissions'] ?? [],
+            'role_permissions' => $authorization['role_permissions'] ?? [],
+            'permission_scopes' => $authorization['scopes'] ?? [],
+            'permission_overrides' => $authorization['direct_overrides'] ?? [],
+            'authorization_context' => $authorization['contexts'] ?? [],
+        ];
+    }
+
     /**
      * role kolonu ile Spatie rol kaydini senkron tut.
      */
@@ -62,7 +89,7 @@ class AuthController extends Controller
             'message' => 'Kayıt başarılı.',
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => $user->load('profile', 'roles')
+            'user' => $this->authenticatedUserPayload($user)
         ], 201);
     }
 
@@ -98,7 +125,7 @@ class AuthController extends Controller
             'message' => 'Giriş başarılı.',
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => $user->load('profile', 'roles')
+            'user' => $this->authenticatedUserPayload($user)
         ]);
     }
 

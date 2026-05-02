@@ -23,9 +23,20 @@ class ContentManagementController extends Controller
     ) {
     }
 
+    private function abortUnlessGlobalContentPermission(Request $request, string $permission): void
+    {
+        $this->abortUnlessAllowed($request, $permission);
+
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), $permission),
+            403,
+            'Bu global icerik islemi icin tum sistem kapsami gerekir.'
+        );
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.view');
+        $this->abortUnlessGlobalContentPermission($request, 'content.view');
 
         return response()->json([
             'blogs' => BlogPost::with('category')->orderByDesc('created_at')->get(),
@@ -36,7 +47,7 @@ class ContentManagementController extends Controller
 
     public function exportBlogs(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'content.blog.export');
+        $this->abortUnlessGlobalContentPermission($request, 'content.blog.export');
 
         $blogs = BlogPost::with('category')
             ->orderByDesc('created_at')
@@ -64,7 +75,7 @@ class ContentManagementController extends Controller
 
     public function exportFaqs(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'content.faq.export');
+        $this->abortUnlessGlobalContentPermission($request, 'content.faq.export');
 
         $faqs = Faq::orderBy('category')
             ->orderBy('order')
@@ -91,7 +102,7 @@ class ContentManagementController extends Controller
 
     public function storeBlog(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.blog.create');
+        $this->abortUnlessGlobalContentPermission($request, 'content.blog.create');
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -121,7 +132,7 @@ class ContentManagementController extends Controller
 
     public function updateBlog(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.blog.update');
+        $this->abortUnlessGlobalContentPermission($request, 'content.blog.update');
 
         $blog = BlogPost::findOrFail($id);
 
@@ -151,7 +162,7 @@ class ContentManagementController extends Controller
 
     public function deleteBlog(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.blog.delete');
+        $this->abortUnlessGlobalContentPermission($request, 'content.blog.delete');
 
         BlogPost::findOrFail($id)->delete();
 
@@ -162,7 +173,7 @@ class ContentManagementController extends Controller
 
     public function storeFaq(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.faq.create');
+        $this->abortUnlessGlobalContentPermission($request, 'content.faq.create');
 
         $validated = $request->validate([
             'question' => 'required|string|max:1000',
@@ -184,7 +195,7 @@ class ContentManagementController extends Controller
 
     public function updateFaq(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.faq.update');
+        $this->abortUnlessGlobalContentPermission($request, 'content.faq.update');
 
         $faq = Faq::findOrFail($id);
 
@@ -208,7 +219,7 @@ class ContentManagementController extends Controller
 
     public function deleteFaq(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'content.faq.delete');
+        $this->abortUnlessGlobalContentPermission($request, 'content.faq.delete');
 
         Faq::findOrFail($id)->delete();
 

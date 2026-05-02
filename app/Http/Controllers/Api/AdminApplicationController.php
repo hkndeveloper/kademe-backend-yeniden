@@ -184,16 +184,20 @@ class AdminApplicationController extends Controller
         $this->abortUnlessAllowed($request, 'applications.view');
 
         $validated = $request->validate([
-            'project_id' => 'required|exists:projects,id',
+            'project_id' => 'nullable|exists:projects,id',
             'status' => 'nullable|string',
         ]);
 
-        $project = Project::findOrFail($validated['project_id']);
         $ids = $this->manageableProjectIdList($request, 'applications.view');
-        abort_unless(in_array((int) $project->id, $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
 
-        $query = Application::where('project_id', $validated['project_id'])
-            ->with(['user:id,name,surname,email,phone', 'period']);
+        $query = Application::query()
+            ->whereIn('project_id', $ids)
+            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name']);
+
+        if (! empty($validated['project_id'])) {
+            abort_unless(in_array((int) $validated['project_id'], $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
+            $query->where('project_id', (int) $validated['project_id']);
+        }
 
         if (! empty($validated['status'])) {
             $query->where('status', $validated['status']);

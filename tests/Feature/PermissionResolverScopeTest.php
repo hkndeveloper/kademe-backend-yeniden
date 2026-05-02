@@ -176,4 +176,42 @@ class PermissionResolverScopeTest extends TestCase
         $this->assertTrue($resolver->canAccessProject($admin, 'financial.view', 1));
         $this->assertTrue($resolver->canAccessProject($admin, 'financial.view', 999999));
     }
+
+    public function test_coordinator_project_view_stays_on_own_projects(): void
+    {
+        foreach (['projects.view', 'calendar.view'] as $name) {
+            Permission::findOrCreate($name, 'web');
+        }
+
+        $coordinator = User::factory()->create([
+            'name' => 'Coordinator',
+            'surname' => 'Scope',
+            'email' => 'coordinator-scope@test.local',
+            'role' => 'coordinator',
+        ]);
+        Role::findOrCreate('coordinator', 'web');
+        $coordinator->assignRole('coordinator');
+        $coordinator->givePermissionTo(['projects.view', 'calendar.view']);
+
+        $ownProject = Project::query()->create([
+            'name' => 'Own Project',
+            'slug' => 'own-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $otherProject = Project::query()->create([
+            'name' => 'Other Project',
+            'slug' => 'other-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $coordinator->coordinatedProjects()->attach($ownProject->id);
+
+        $coordinator->refresh();
+        $resolver = $this->resolver();
+
+        $this->assertTrue($resolver->canAccessProject($coordinator, 'projects.view', $ownProject->id));
+        $this->assertFalse($resolver->canAccessProject($coordinator, 'projects.view', $otherProject->id));
+        $this->assertTrue($resolver->canAccessProject($coordinator, 'calendar.view', $otherProject->id));
+    }
 }
