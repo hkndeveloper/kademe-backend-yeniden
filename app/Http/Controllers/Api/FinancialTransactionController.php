@@ -284,7 +284,17 @@ class FinancialTransactionController extends Controller
         $transaction = FinancialTransaction::findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'financial.invoice.download', $transaction->project_id);
 
-        if (!$transaction->invoice_path || !MediaStorage::exists($transaction->invoice_path)) {
+        if (!$transaction->invoice_path) {
+            return response()->json(['message' => 'Fatura bulunamadı.'], 404);
+        }
+
+        if (MediaStorage::publicUrlConfigured()) {
+            return response()->json([
+                'download_url' => MediaStorage::url($transaction->invoice_path),
+            ]);
+        }
+
+        if (!MediaStorage::exists($transaction->invoice_path)) {
             return response()->json(['message' => 'Fatura bulunamadı.'], 404);
         }
 

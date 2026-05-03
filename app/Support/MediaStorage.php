@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -20,12 +21,12 @@ class MediaStorage
 
     public static function putFile(string $directory, UploadedFile $file): string
     {
-        return $file->store($directory, self::diskName());
+        return self::ensureStoredPath($file->store($directory, self::diskName()));
     }
 
     public static function putFileAs(string $directory, UploadedFile $file, string $name): string
     {
-        return $file->storeAs($directory, $name, self::diskName());
+        return self::ensureStoredPath($file->storeAs($directory, $name, self::diskName()));
     }
 
     public static function delete(?string $path): bool
@@ -34,7 +35,11 @@ class MediaStorage
             return false;
         }
 
-        return self::disk()->delete($path);
+        try {
+            return self::disk()->delete($path);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public static function exists(?string $path): bool
@@ -43,7 +48,11 @@ class MediaStorage
             return false;
         }
 
-        return self::disk()->exists($path);
+        try {
+            return self::disk()->exists($path);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public static function url(?string $path): ?string
@@ -62,6 +71,22 @@ class MediaStorage
         }
 
         return self::disk()->url($path);
+    }
+
+    public static function publicUrlConfigured(): bool
+    {
+        return rtrim((string) config('filesystems.disks.' . self::diskName() . '.url'), '/') !== '';
+    }
+
+    private static function ensureStoredPath(mixed $path): string
+    {
+        if (is_string($path) && $path !== '') {
+            return $path;
+        }
+
+        throw new HttpResponseException(response()->json([
+            'message' => 'Dosya yuklenemedi. Storage/R2 ayarlarini kontrol edin.',
+        ], 503));
     }
 
     private static function isUrl(string $path): bool
