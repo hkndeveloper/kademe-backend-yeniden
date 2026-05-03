@@ -10,6 +10,7 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Support\MediaStorage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DigitalBohcaController extends Controller
 {
@@ -52,15 +53,7 @@ class DigitalBohcaController extends Controller
             ->with('uploader:id,name,surname,role')
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function (DigitalBohca $material) {
-                if ($material->file_path && ! str_starts_with($material->file_path, 'http://') && ! str_starts_with($material->file_path, 'https://')) {
-                    $material->file_url = MediaStorage::url($material->file_path);
-                } else {
-                    $material->file_url = $material->file_path;
-                }
-
-                return $material;
-            });
+            ->map(fn (DigitalBohca $material) => $this->materialPayload($material, '/digital-bohca'));
 
         return response()->json([
             'materials' => $materials
@@ -92,7 +85,9 @@ class DigitalBohcaController extends Controller
         }
 
         return response()->json([
-            'materials' => $query->paginate(20),
+            'materials' => $query->paginate(20)->through(
+                fn (DigitalBohca $material) => $this->materialPayload($material, '/panel/digital-bohca')
+            ),
         ]);
     }
 
@@ -130,8 +125,56 @@ class DigitalBohcaController extends Controller
 
         return response()->json([
             'message' => 'Dijital bohca materyali yuklendi.',
-            'material' => $material->load(['project:id,name', 'user:id,name,surname,email', 'uploader:id,name,surname']),
+            'material' => $this->materialPayload(
+                $material->load(['project:id,name', 'user:id,name,surname,email', 'uploader:id,name,surname']),
+                '/panel/digital-bohca'
+            ),
         ], 201);
+    }
+
+    public function download(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $user = $request->user();
+        $projectIds = Participant::where('user_id', $user->id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->pluck('project_id');
+
+        $material = DigitalBohca::query()
+            ->whereKey($id)
+            ->where('visible_to_student', true)
+            ->where(function ($query) use ($projectIds, $user) {
+                $query->whereIn('project_id', $projectIds)
+                    ->orWhere('user_id', $user->id)
+                    ->orWhereNull('project_id');
+            })
+            ->firstOrFail();
+
+        return $this->downloadMaterial($material);
+    }
+
+    public function panelDownload(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $this->abortUnlessAllowed($request, 'digital_bohca.view');
+        $material = DigitalBohca::query()->findOrFail($id);
+        $user = $request->user();
+
+        if ($material->project_id !== null) {
+            $this->abortUnlessProjectAllowed($request, 'digital_bohca.view', (int) $material->project_id);
+        } elseif (
+            ! $this->permissionResolver->hasGlobalScope($user, 'digital_bohca.view')
+            && (int) $material->uploaded_by !== (int) $user->id
+        ) {
+            abort(403, 'Genel bohca materyalini gormek icin global kapsam gerekir.');
+        }
+
+        return $this->downloadMaterial($material);
     }
 
     public function panelDestroy(Request $request, int $id): JsonResponse
@@ -149,5 +192,46 @@ class DigitalBohcaController extends Controller
         $material->delete();
 
         return response()->json(['message' => 'Dijital bohca materyali silindi.']);
+    }
+
+    private function materialPayload(DigitalBohca $material, string $basePath): array
+    {
+        return [
+            'id' => $material->id,
+            'project_id' => $material->project_id,
+            'user_id' => $material->user_id,
+            'title' => $material->title,
+            'description' => $material->description,
+            'file_path' => $material->file_path,
+            'file_url' => MediaStorage::directDownloadsEnabled() ? MediaStorage::url($material->file_path) : null,
+            'download_url' => "{$basePath}/{$material->id}/download",
+            'file_type' => $material->file_type,
+            'visible_to_student' => $material->visible_to_student,
+            'created_at' => optional($material->created_at)?->toIso8601String(),
+            'updated_at' => optional($material->updated_at)?->toIso8601String(),
+            'project' => $material->relationLoaded('project') ? $material->project : null,
+            'user' => $material->relationLoaded('user') ? $material->user : null,
+            'uploader' => $material->relationLoaded('uploader') ? $material->uploader : null,
+        ];
+    }
+
+    private function downloadMaterial(DigitalBohca $material): JsonResponse|StreamedResponse
+    {
+        if (!$material->file_path) {
+            return response()->json(['message' => 'Dosya bulunamadi.'], 404);
+        }
+
+        if (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured()) {
+            return response()->json(['download_url' => MediaStorage::url($material->file_path)]);
+        }
+
+        if (!MediaStorage::exists($material->file_path)) {
+            return response()->json(['message' => 'Dosya storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($material->file_path, PATHINFO_EXTENSION);
+        $filename = str($material->title)->slug()->toString() ?: 'digital-bohca';
+
+        return MediaStorage::disk()->download($material->file_path, $filename . ($extension ? ".{$extension}" : ''));
     }
 }

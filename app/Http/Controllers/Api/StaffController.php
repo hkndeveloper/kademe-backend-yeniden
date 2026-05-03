@@ -59,6 +59,15 @@ class StaffController extends Controller
         return $normalized === '' ? null : $normalized;
     }
 
+    private function documentsWithUrls(array $documents): array
+    {
+        return array_map(function (array $document) {
+            $document['url'] = MediaStorage::url($document['path'] ?? null);
+
+            return $document;
+        }, $documents);
+    }
+
     /**
      * GET /staff/projects
      * Personelin gorev kapsamindaki projeleri dondurur.
@@ -343,6 +352,10 @@ class StaffController extends Controller
 
         $this->abortUnlessUnitAllowed($request, 'staff.view', $user->staffProfile?->unit);
 
+        if ($user->staffProfile) {
+            $user->staffProfile->personal_documents = $this->documentsWithUrls($user->staffProfile->personal_documents ?? []);
+        }
+
         return response()->json(['staff' => $user]);
     }
 
@@ -419,13 +432,14 @@ class StaffController extends Controller
         $docs = $profile->personal_documents ?? [];
         $docs[] = [
             'path'       => $path,
+            'url'        => MediaStorage::url($path),
             'label'      => $request->label ?? $request->file('document')->getClientOriginalName(),
             'uploaded_at' => now()->toDateTimeString(),
         ];
 
         $profile->update(['personal_documents' => $docs]);
 
-        return response()->json(['message' => 'Belge yüklendi.', 'documents' => $docs]);
+        return response()->json(['message' => 'Belge yüklendi.', 'documents' => $this->documentsWithUrls($docs)]);
     }
 
     /**

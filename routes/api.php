@@ -82,6 +82,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk', 'role:student|alumni'])-
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'recipientAnnouncements']);
     
     Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'index']);
+    Route::get('/digital-bohca/{id}/download', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'download']);
     Route::get('/certificates', [\App\Http\Controllers\Api\CertificateController::class, 'index']);
     Route::get('/feedbacks', [\App\Http\Controllers\Api\FeedbackController::class, 'index']);
     Route::post('/feedbacks', [\App\Http\Controllers\Api\FeedbackController::class, 'store']);
@@ -266,6 +267,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 
     Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelIndex']);
     Route::post('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelStore']);
+    Route::get('/digital-bohca/{id}/download', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelDownload']);
     Route::delete('/digital-bohca/{id}', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelDestroy']);
 
     Route::get('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelIndex']);

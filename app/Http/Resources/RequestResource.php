@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,6 +22,7 @@ class RequestResource extends JsonResource
             'description' => $this->description,
             'status' => $this->status,
             'response_file_path' => $this->response_file_path,
+            'response_file_url' => MediaStorage::url($this->response_file_path),
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'updated_at' => optional($this->updated_at)?->toIso8601String(),
             'requester' => $this->whenLoaded('requester', function () {
