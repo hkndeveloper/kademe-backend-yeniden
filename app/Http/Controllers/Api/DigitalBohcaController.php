@@ -29,7 +29,14 @@ class DigitalBohcaController extends Controller
 
         // Aktif projelerinin ID'lerini bul
         $projectIds = Participant::where('user_id', $user->id)
-            ->where('status', 'active')
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
             ->pluck('project_id');
 
         // Bu projelere ait, öğrenciye görünür olan dosyalar (veya genele açık olanlar)
@@ -44,7 +51,16 @@ class DigitalBohcaController extends Controller
             ->where('visible_to_student', true)
             ->with('uploader:id,name,surname,role')
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(function (DigitalBohca $material) {
+                if ($material->file_path && ! str_starts_with($material->file_path, 'http://') && ! str_starts_with($material->file_path, 'https://')) {
+                    $material->file_url = Storage::disk('public')->url($material->file_path);
+                } else {
+                    $material->file_url = $material->file_path;
+                }
+
+                return $material;
+            });
 
         return response()->json([
             'materials' => $materials

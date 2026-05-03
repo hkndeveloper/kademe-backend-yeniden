@@ -21,7 +21,7 @@ class AdminChatbotController extends Controller
 
     public function query(Request $request, AdminChatbotService $chatbot): \Illuminate\Http\JsonResponse
     {
-        $this->abortUnlessAnyPermission($request, ['chatbot.manage', 'chatbot.view']);
+        $this->abortUnlessGlobalChatbotPermission($request);
 
         $validated = $request->validate([
             'message' => 'required|string|max:2000',
@@ -34,7 +34,7 @@ class AdminChatbotController extends Controller
 
     public function export(Request $request, AdminChatbotService $chatbot, string $token): StreamedResponse|Response
     {
-        $this->abortUnlessAnyPermission($request, ['chatbot.manage', 'chatbot.view']);
+        $this->abortUnlessGlobalChatbotPermission($request);
 
         if (! preg_match('/^[a-zA-Z0-9]{40,64}$/', $token)) {
             return response('Gecersiz disa aktarma istegi.', 400);
@@ -69,5 +69,17 @@ class AdminChatbotController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
+    }
+
+    private function abortUnlessGlobalChatbotPermission(Request $request): void
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($user, 'chatbot.manage')
+                || $this->permissionResolver->hasGlobalScope($user, 'chatbot.view'),
+            403,
+            'Veri asistani icin tum sistem kapsami gerekir.'
+        );
     }
 }

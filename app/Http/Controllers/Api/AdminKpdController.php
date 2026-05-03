@@ -23,6 +23,11 @@ class AdminKpdController extends Controller
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'kpd.appointments.view');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'kpd.appointments.view'),
+            403,
+            'KPD randevulari icin tum sistem kapsami gerekir.'
+        );
 
         $appointments = KpdAppointment::with(['counselor:id,name,surname', 'counselee:id,name,surname', 'room'])
             ->orderBy('start_at', 'desc')
@@ -37,6 +42,11 @@ class AdminKpdController extends Controller
     public function store(Request $request)
     {
         $this->abortUnlessAllowed($request, 'kpd.appointments.manage');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'kpd.appointments.manage'),
+            403,
+            'KPD randevulari icin tum sistem kapsami gerekir.'
+        );
 
         $validated = $request->validate([
             'counselor_id' => 'required|exists:users,id',

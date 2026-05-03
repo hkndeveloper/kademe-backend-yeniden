@@ -25,6 +25,7 @@ class AttendanceController extends Controller
         ]);
 
         $user = $request->user();
+        abort_unless($user->role === 'student', 403, 'QR yoklama yalnizca ogrenci paneli icin kullanilabilir.');
         $tokenInput = trim((string) $validated['qr_token']);
         $qrToken = $this->extractQrToken($tokenInput);
 
@@ -55,14 +56,23 @@ class AttendanceController extends Controller
             ->first();
 
         if ($existing) {
+            if (! $existing->is_valid) {
+                return response()->json([
+                    'message' => 'Bu oturum icin gecerli yoklama kaydin bulunmuyor. Lutfen etkinlik alaninda tekrar deneyin.',
+                ], 422);
+            }
+
             return response()->json(['message' => 'Yoklamaniz zaten alinmis.'], 200);
         }
 
-        $isValidLocation = true;
         $latitude = $validated['latitude'] ?? null;
         $longitude = $validated['longitude'] ?? null;
 
-        if ($program->latitude && $program->longitude && $latitude !== null && $longitude !== null) {
+        if ($program->latitude && $program->longitude) {
+            if ($latitude === null || $longitude === null) {
+                return response()->json(['message' => 'Bu yoklama icin konum izni zorunludur.'], 422);
+            }
+
             $distance = $this->calculateDistance(
                 $program->latitude,
                 $program->longitude,
@@ -70,8 +80,12 @@ class AttendanceController extends Controller
                 $longitude,
             );
 
-            if ($distance > $program->radius_meters) {
-                $isValidLocation = false;
+            $radiusMeters = max((int) ($program->radius_meters ?? 100), 1);
+
+            if ($distance > $radiusMeters) {
+                return response()->json([
+                    'message' => 'Konumunuz etkinlik alani disinda. Yoklama alinmadi.',
+                ], 422);
             }
         }
 
@@ -84,7 +98,7 @@ class AttendanceController extends Controller
                 'method' => 'qr',
                 'latitude' => $latitude,
                 'longitude' => $longitude,
-                'is_valid' => $isValidLocation,
+                'is_valid' => true,
             ]);
 
             $creditDeduction = max((int) ($program->credit_deduction ?? 10), 0);
@@ -108,7 +122,6 @@ class AttendanceController extends Controller
 
             return response()->json([
                 'message' => 'Yoklamaniz basariyla alindi.',
-                'location_warning' => ! $isValidLocation ? 'Konumunuz etkinlik alani disinda gorunuyor ancak yoklamaniz sisteme islendi.' : null,
                 'current_credit' => $participant->credit,
             ]);
         } catch (\Exception $e) {

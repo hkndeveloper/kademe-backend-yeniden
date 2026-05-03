@@ -129,6 +129,53 @@ class AnnouncementController extends Controller
         ]);
     }
 
+    public function recipientAnnouncements(Request $request)
+    {
+        $user = $request->user();
+
+        $projectIds = Participant::query()
+            ->where('user_id', $user->id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->pluck('project_id')
+            ->filter()
+            ->values();
+
+        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])
+            ->where(function ($q) use ($user) {
+                $q->whereNull('target_roles')
+                    ->orWhereJsonLength('target_roles', 0)
+                    ->orWhereJsonContains('target_roles', $user->role);
+            })
+            ->where(function ($q) use ($projectIds) {
+                $q->whereNull('project_id')
+                    ->orWhereIn('project_id', $projectIds);
+            })
+            ->where(function ($q) {
+                $q->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', now());
+            })
+            ->latest();
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        return response()->json([
+            'announcements' => $query->limit(50)->get(),
+        ]);
+    }
+
     public function exportMyAnnouncements(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.export');

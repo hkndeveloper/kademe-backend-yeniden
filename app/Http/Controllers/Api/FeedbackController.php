@@ -50,11 +50,13 @@ class FeedbackController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
+        abort_unless($user->role === 'student', 403, 'Degerlendirme yalnizca ogrenci paneli icin kullanilabilir.');
 
         $attendedPrograms = Program::query()
             ->with(['project:id,name,slug,type'])
             ->whereHas('attendances', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
+                $query->where('user_id', $user->id)
+                    ->where('is_valid', true);
             })
             ->orderByDesc('start_at')
             ->get();
@@ -110,16 +112,18 @@ class FeedbackController extends Controller
         ]);
 
         $user = $request->user();
+        abort_unless($user->role === 'student', 403, 'Degerlendirme yalnizca ogrenci paneli icin kullanilabilir.');
         $program = Program::query()->findOrFail($validated['program_id']);
 
         $attendance = Attendance::query()
             ->where('program_id', $program->id)
             ->where('user_id', $user->id)
+            ->where('is_valid', true)
             ->first();
 
         if (! $attendance) {
             return response()->json([
-                'message' => 'Sadece yoklamasi alinmis oturumlar icin degerlendirme gonderebilirsin.',
+                'message' => 'Sadece gecerli yoklamasi alinmis oturumlar icin degerlendirme gonderebilirsin.',
             ], 422);
         }
 

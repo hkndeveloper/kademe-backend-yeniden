@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -57,7 +58,18 @@ class ApplicationController extends Controller
         }
     }
 
-    private function createApplicationForUser(User $user, Project $project, array $formData): Application
+    private function fileMetadata(string $path, \Illuminate\Http\UploadedFile $file): array
+    {
+        return [
+            'path' => $path,
+            'url' => Storage::disk('public')->url($path),
+            'original_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+        ];
+    }
+
+    private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = []): Application
     {
         $this->ensureSingleProjectRule($user, $project);
 
@@ -87,7 +99,7 @@ class ApplicationController extends Controller
             ->latest()
             ->first();
 
-        $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData));
+        $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
 
         return Application::create([
             'user_id' => $user->id,
@@ -114,7 +126,7 @@ class ApplicationController extends Controller
         ]);
     }
 
-    private function validateDynamicFields(?ApplicationForm $form, array $formData): array
+    private function validateDynamicFields(?ApplicationForm $form, array $formData, array $formFiles = []): array
     {
         if (! $form) {
             return $formData;
@@ -132,7 +144,8 @@ class ApplicationController extends Controller
             $label = $field['label'] ?? $fieldId;
             $type = $field['type'] ?? 'text';
             $required = (bool) ($field['required'] ?? false);
-            $value = $formData[$fieldId] ?? null;
+            $uploadedFile = $formFiles[$fieldId] ?? null;
+            $value = $uploadedFile ?: ($formData[$fieldId] ?? null);
 
             if ($required) {
                 $isEmpty =
@@ -148,6 +161,27 @@ class ApplicationController extends Controller
 
             if ($value === null || $value === '') {
                 $normalized[$fieldId] = $type === 'checkbox' ? [] : $value;
+                continue;
+            }
+
+            if ($type === 'file') {
+                if ($uploadedFile instanceof \Illuminate\Http\UploadedFile) {
+                    $path = $uploadedFile->store('application-files', 'public');
+                    $normalized[$fieldId] = $this->fileMetadata($path, $uploadedFile);
+                    continue;
+                }
+
+                if (is_array($value) && isset($value['path'])) {
+                    $normalized[$fieldId] = $value;
+                    continue;
+                }
+
+                if (is_string($value)) {
+                    $normalized[$fieldId] = trim($value);
+                    continue;
+                }
+
+                $errors[$fieldId] = [$label . ' icin gecerli bir dosya bekleniyor.'];
                 continue;
             }
 
@@ -185,7 +219,9 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
-            'form_data' => 'required|array',
+            'form_data' => 'nullable|array',
+            'form_files' => 'nullable|array',
+            'form_files.*' => 'file|max:20480',
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
@@ -196,7 +232,7 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $application = $this->createApplicationForUser($request->user(), $project, $validated['form_data']);
+        $application = $this->createApplicationForUser($request->user(), $project, $validated['form_data'] ?? [], $request->file('form_files', []));
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',
@@ -208,7 +244,9 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
-            'form_data' => 'required|array',
+            'form_data' => 'nullable|array',
+            'form_files' => 'nullable|array',
+            'form_files.*' => 'file|max:20480',
             'applicant.name' => 'required|string|max:255',
             'applicant.surname' => 'required|string|max:255',
             'applicant.email' => 'required|email|max:255',
@@ -223,7 +261,7 @@ class ApplicationController extends Controller
         }
 
         $user = $this->resolveApplicantUser($validated['applicant']);
-        $application = $this->createApplicationForUser($user, $project, $validated['form_data']);
+        $application = $this->createApplicationForUser($user, $project, $validated['form_data'] ?? [], $request->file('form_files', []));
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',

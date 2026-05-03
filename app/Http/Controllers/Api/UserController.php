@@ -103,6 +103,14 @@ class UserController extends Controller
         $this->abortUnlessAllowed($request, $permission);
 
         $user = User::with('staffProfile')->findOrFail($id);
+        if ($needsRoleUpdate) {
+            abort_unless(
+                $this->permissionResolver->hasGlobalScope($request->user(), 'users.assign_role'),
+                403,
+                'Rol atama islemi icin tum sistem kapsami gerekir.'
+            );
+        }
+
         abort_unless(
             $this->permissionResolver->canAccessUser($request->user(), $permission, $user),
             403,

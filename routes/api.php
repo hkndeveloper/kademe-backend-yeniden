@@ -67,7 +67,7 @@ Route::post('/applications/public', [\App\Http\Controllers\Api\ApplicationContro
     ->middleware('throttle:10,1');
 
 // --- PROGRAM (ETKÄ°NLÄ°K) & YOKLAMA --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'kvkk', 'role:student|alumni'])->group(function () {
     
     // Ã–ÄŸrencinin kendi programlarÄ±nÄ± listelemesi
     Route::get('/programs', [\App\Http\Controllers\Api\ProgramController::class, 'myPrograms']);
@@ -78,6 +78,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->group(function () {
     
     // --- Ã–ÄRENCÄ° PANELÄ° (KREDÄ°, BOHÃ‡A, Ã–DEV) --- //
     Route::get('/dashboard/summary', [\App\Http\Controllers\Api\StudentDashboardController::class, 'summary']);
+    Route::get('/dashboard/projects', [\App\Http\Controllers\Api\StudentDashboardController::class, 'projects']);
+    Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'recipientAnnouncements']);
     
     Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'index']);
     Route::get('/certificates', [\App\Http\Controllers\Api\CertificateController::class, 'index']);

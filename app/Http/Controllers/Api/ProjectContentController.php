@@ -46,10 +46,17 @@ class ProjectContentController extends Controller
             'projects.content.update',
             'projects.application_form.update',
             'periods.view',
+            'periods.create',
+            'periods.update',
+            'periods.export',
             'digital_bohca.view',
             'digital_bohca.create',
             'assignments.view',
             'assignments.create',
+            'certificates.view',
+            'certificates.create',
+            'certificates.delete',
+            'certificates.export',
         ];
         $validated = $request->validate([
             'permission' => ['nullable', 'string', Rule::in($allowedPermissions)],

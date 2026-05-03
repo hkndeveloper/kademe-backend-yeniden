@@ -30,6 +30,54 @@ class CalendarController extends Controller
         return $this->permissionResolver->canAccessProject($user, 'calendar.assignments.manage', $program->project_id);
     }
 
+    private function viewableProjectIds(User $user): array
+    {
+        if (in_array($user->role, ['coordinator', 'staff'], true)) {
+            return Project::query()->pluck('id')->all();
+        }
+
+        return $this->permissionResolver->projectIdsForPermission($user, 'calendar.view');
+    }
+
+    private function assignableProjectIds(User $user): array
+    {
+        if ($this->permissionResolver->hasGlobalScope($user, 'calendar.assignments.manage')) {
+            return Project::query()->pluck('id')->all();
+        }
+
+        return $this->permissionResolver->projectIdsForPermission($user, 'calendar.assignments.manage');
+    }
+
+    private function isMediaUnit(User $user): bool
+    {
+        $unit = mb_strtolower((string) $user->staffProfile?->unit);
+        $markers = config('permission_catalog.media_unit_markers', ['medya', 'media']);
+
+        foreach ($markers as $marker) {
+            $marker = mb_strtolower((string) $marker);
+            if ($marker !== '' && str_contains($unit, $marker)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canBeAssignedToProject(User $candidate, int $projectId): bool
+    {
+        if ($this->isMediaUnit($candidate)) {
+            return true;
+        }
+
+        if ($candidate->coordinatedProjects->contains('id', $projectId)) {
+            return true;
+        }
+
+        return $candidate->participations->contains('project_id', $projectId)
+            || $this->permissionResolver->canAccessProject($candidate, 'calendar.view', $projectId)
+            || $this->permissionResolver->canAccessProject($candidate, 'projects.view', $projectId);
+    }
+
     private function mapAssignments(Collection $users): array
     {
         return $users
@@ -53,7 +101,7 @@ class CalendarController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
         ]);
-        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'calendar.view');
+        $projectIds = $this->viewableProjectIds($user);
 
         if (empty($projectIds)) {
             return response()->json([
@@ -163,10 +211,13 @@ class CalendarController extends Controller
             ->take(8)
             ->values();
 
-        $openSupportCount = SupportTicket::query()
-            ->whereIn('project_id', $projectIds)
-            ->whereIn('status', ['open', 'in_progress'])
-            ->count();
+        $supportProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.view');
+        $openSupportCount = empty($supportProjectIds)
+            ? 0
+            : SupportTicket::query()
+                ->whereIn('project_id', $supportProjectIds)
+                ->whereIn('status', ['open', 'in_progress'])
+                ->count();
 
         $syncedCount = $programs
             ->filter(fn (array $program) => !empty($program['calendar_event']['google_event_id']))
@@ -227,19 +278,23 @@ class CalendarController extends Controller
             );
         }
 
+        $assignableProjectIds = $projectId !== null ? [(int) $projectId] : $this->assignableProjectIds($user);
+
         $users = User::query()
-            ->with('staffProfile')
+            ->with(['staffProfile', 'coordinatedProjects:id', 'participations:id,user_id,project_id'])
             ->whereIn('role', ['coordinator', 'staff'])
             ->where('status', 'active')
             ->orderBy('name')
             ->get();
 
-        $users = $users->filter(function (User $candidate) use ($projectId) {
-            if ($projectId === null) {
-                return $this->permissionResolver->hasPermission($candidate, 'calendar.assignments.manage');
+        $users = $users->filter(function (User $candidate) use ($assignableProjectIds) {
+            foreach ($assignableProjectIds as $assignableProjectId) {
+                if ($this->canBeAssignedToProject($candidate, (int) $assignableProjectId)) {
+                    return true;
+                }
             }
 
-            return $this->permissionResolver->canAccessProject($candidate, 'calendar.assignments.manage', (int) $projectId);
+            return false;
         })->values();
 
         return response()->json([
@@ -264,11 +319,12 @@ class CalendarController extends Controller
             ->values();
 
         $allowedUsers = User::query()
+            ->with(['staffProfile', 'coordinatedProjects:id', 'participations:id,user_id,project_id'])
             ->whereIn('id', $assignedIds)
             ->whereIn('role', ['coordinator', 'staff'])
             ->where('status', 'active')
             ->get()
-            ->filter(fn (User $candidate) => $this->permissionResolver->canAccessProject($candidate, 'calendar.assignments.manage', $program->project_id))
+            ->filter(fn (User $candidate) => $this->canBeAssignedToProject($candidate, (int) $program->project_id))
             ->values();
 
         $allowedIds = $allowedUsers->pluck('id');

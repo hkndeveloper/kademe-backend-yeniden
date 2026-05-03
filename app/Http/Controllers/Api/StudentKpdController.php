@@ -15,6 +15,7 @@ class StudentKpdController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
+        abort_unless($user->role === 'student', 403, 'KPD randevulari yalnizca ogrenci paneli icin kullanilabilir.');
 
         $appointments = KpdAppointment::with([
             'counselor:id,name,surname,role',
@@ -57,6 +58,8 @@ class StudentKpdController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        abort_unless($request->user()->role === 'student', 403, 'KPD randevulari yalnizca ogrenci paneli icin kullanilabilir.');
+
         $validated = $request->validate([
             'counselor_id' => 'required|exists:users,id',
             'room_id' => 'required|exists:kpd_rooms,id',
@@ -115,6 +118,8 @@ class StudentKpdController extends Controller
 
     public function cancel(Request $request, int $id): JsonResponse
     {
+        abort_unless($request->user()->role === 'student', 403, 'KPD randevulari yalnizca ogrenci paneli icin kullanilabilir.');
+
         $appointment = KpdAppointment::query()
             ->where('counselee_id', $request->user()->id)
             ->findOrFail($id);

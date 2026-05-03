@@ -28,11 +28,37 @@ class AdminApplicationController extends Controller
         return $this->permissionResolver->projectIdsForPermission($request->user(), $permission);
     }
 
+    private function allowedStatusesFor(Application $application): array
+    {
+        $hasInterview = (bool) $application->project?->has_interview;
+
+        if (! $hasInterview) {
+            return ['accepted', 'rejected', 'waitlisted'];
+        }
+
+        return match ($application->status) {
+            'pending', 'waitlisted' => ['rejected', 'waitlisted', 'interview_planned'],
+            'interview_planned' => ['rejected', 'waitlisted', 'interview_passed', 'interview_failed'],
+            'interview_passed' => ['accepted', 'rejected', 'waitlisted'],
+            'interview_failed' => ['rejected', 'waitlisted'],
+            default => [],
+        };
+    }
+
+    private function assertStatusAllowed(Application $application, string $nextStatus): void
+    {
+        if (! in_array($nextStatus, $this->allowedStatusesFor($application), true)) {
+            throw ValidationException::withMessages([
+                'status' => ['Bu basvuru akisi icin secilen durum gecislerine izin verilmiyor.'],
+            ]);
+        }
+    }
+
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'applications.export');
 
-        $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'project:id,name']);
+        $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview']);
         $query->whereIn('project_id', $this->manageableProjectIdList($request, 'applications.export'));
 
         if ($request->filled('project_id')) {
@@ -86,7 +112,7 @@ class AdminApplicationController extends Controller
         $projectIds = $this->manageableProjectIdList($request, 'applications.view');
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name'])
+            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview'])
             ->whereIn('project_id', $projectIds);
 
         if ($request->filled('project_id')) {
@@ -119,7 +145,7 @@ class AdminApplicationController extends Controller
         $projectIds = $this->manageableProjectIdList($request, 'applications.export');
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name'])
+            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview'])
             ->whereIn('project_id', $projectIds);
 
         if ($request->filled('project_id')) {
@@ -186,13 +212,15 @@ class AdminApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'status' => 'nullable|string',
+            'search' => 'nullable|string|max:255',
+            'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
         $ids = $this->manageableProjectIdList($request, 'applications.view');
 
         $query = Application::query()
             ->whereIn('project_id', $ids)
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name']);
+            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview']);
 
         if (! empty($validated['project_id'])) {
             abort_unless(in_array((int) $validated['project_id'], $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
@@ -203,8 +231,28 @@ class AdminApplicationController extends Controller
             $query->where('status', $validated['status']);
         }
 
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
+            $query->where(function ($builder) use ($search) {
+                $builder
+                    ->whereHas('user', function ($userQuery) use ($search) {
+                        $userQuery
+                            ->where('name', 'like', "%$search%")
+                            ->orWhere('surname', 'like', "%$search%")
+                            ->orWhere('email', 'like', "%$search%")
+                            ->orWhere('phone', 'like', "%$search%");
+                    })
+                    ->orWhereHas('project', function ($projectQuery) use ($search) {
+                        $projectQuery->where('name', 'like', "%$search%");
+                    });
+            });
+        }
+
         return response()->json([
-            'applications' => $query->orderBy('created_at', 'desc')->paginate(20),
+            'applications' => $query
+                ->orderByDesc('created_at')
+                ->paginate($validated['per_page'] ?? 20)
+                ->withQueryString(),
         ]);
     }
 
@@ -217,19 +265,30 @@ class AdminApplicationController extends Controller
 
         $validated = $request->validate([
             'status' => 'required|in:accepted,rejected,waitlisted,interview_planned,interview_passed,interview_failed',
+            'interview_at' => 'nullable|date|after:now',
             'rejection_reason' => 'nullable|string',
             'evaluation_note' => 'nullable|string',
         ]);
 
-        $application = Application::with('period')->findOrFail($id);
+        $application = Application::with(['period', 'project:id,name,has_interview'])->findOrFail($id);
 
         $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
+        $this->assertStatusAllowed($application, $validated['status']);
+
+        if ($validated['status'] === 'interview_planned' && empty($validated['interview_at']) && empty($application->interview_at)) {
+            throw ValidationException::withMessages([
+                'interview_at' => ['Mulakat tarihi zorunludur.'],
+            ]);
+        }
 
         DB::beginTransaction();
         try {
             $application->update([
                 'status' => $validated['status'],
+                'interview_at' => $validated['status'] === 'interview_planned'
+                    ? ($validated['interview_at'] ?? $application->interview_at)
+                    : $application->interview_at,
                 'rejection_reason' => $validated['rejection_reason'] ?? $application->rejection_reason,
                 'evaluation_note' => $validated['evaluation_note'] ?? $application->evaluation_note,
             ]);
@@ -247,7 +306,7 @@ class AdminApplicationController extends Controller
                     ]);
                 }
 
-                Participant::firstOrCreate([
+                Participant::updateOrCreate([
                     'user_id' => $application->user_id,
                     'project_id' => $application->project_id,
                     'period_id' => $application->period_id,
@@ -286,7 +345,7 @@ class AdminApplicationController extends Controller
             'interview_at' => 'required|date|after:now',
         ]);
 
-        $application = Application::findOrFail($id);
+        $application = Application::with('project:id,name,has_interview')->findOrFail($id);
 
         abort_unless(
             $this->permissionResolver->canAccessProject(
@@ -297,6 +356,9 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
+
+        abort_unless((bool) $application->project?->has_interview, 422, 'Bu proje mulakatli basvuru akisi kullanmiyor.');
+        $this->assertStatusAllowed($application, 'interview_planned');
 
         $application->update([
             'status' => 'interview_planned',
@@ -316,7 +378,7 @@ class AdminApplicationController extends Controller
     {
         $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
 
-        $application = Application::findOrFail($id);
+        $application = Application::with('project:id,name,has_interview')->findOrFail($id);
 
         abort_unless(
             $this->permissionResolver->canAccessProject(
@@ -327,6 +389,8 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
+
+        $this->assertStatusAllowed($application, 'waitlisted');
 
         $application->update([
             'status' => 'waitlisted',

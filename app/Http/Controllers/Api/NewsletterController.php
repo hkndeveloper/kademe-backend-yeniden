@@ -25,6 +25,11 @@ class NewsletterController extends Controller
     public function adminSubscribers(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'newsletter.view');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'newsletter.view'),
+            403,
+            'E-bulten aboneleri icin tum sistem kapsami gerekir.'
+        );
 
         $query = NewsletterSubscriber::query()
             ->whereNull('unsubscribed_at')

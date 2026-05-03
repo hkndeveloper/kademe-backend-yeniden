@@ -51,6 +51,13 @@ class StaffController extends Controller
         return $query;
     }
 
+    private function normalizeUnit(?string $unit): ?string
+    {
+        $normalized = mb_strtolower(trim((string) $unit));
+
+        return $normalized === '' ? null : $normalized;
+    }
+
     /**
      * GET /staff/projects
      * Personelin gorev kapsamindaki projeleri dondurur.
@@ -293,18 +300,14 @@ class StaffController extends Controller
      * GET /admin/staff/active
      * Şu anda giriş yapmış (aktif) ve izinli personeller.
      */
-    public function active()
+    public function active(Request $request)
     {
-        abort_unless(
-            $this->permissionResolver->hasPermission(Auth::user(), 'staff.view'),
-            403,
-            'Bu islem icin yetkiniz bulunmuyor.'
-        );
+        $this->abortUnlessAllowed($request, 'staff.view');
         // Aktif personel: son 8 saat içinde token aktivitesi olanlar (yaklaşık)
         $activeStaff = User::with('staffProfile')
             ->whereIn('role', ['coordinator', 'staff'])
             ->whereHas('tokens', fn($q) => $q->where('last_used_at', '>=', now()->subHours(8)))
-            ->tap(fn ($query) => $this->applyCoordinatorUnitScope(request(), $query))
+            ->tap(fn ($query) => $this->applyCoordinatorUnitScope($request, $query))
             ->get(['id', 'name', 'surname', 'email', 'role', 'profile_photo_path']);
 
         // İzinli personeller
@@ -313,7 +316,7 @@ class StaffController extends Controller
               ->where('start_date', '<=', today())
               ->where('end_date', '>=', today())
         ])->whereIn('role', ['coordinator', 'staff'])
-          ->tap(fn ($query) => $this->applyCoordinatorUnitScope(request(), $query))
+          ->tap(fn ($query) => $this->applyCoordinatorUnitScope($request, $query))
           ->whereHas('leaveRequests', fn($q) =>
               $q->where('status', 'approved')
                 ->where('start_date', '<=', today())
@@ -349,7 +352,7 @@ class StaffController extends Controller
     public function update(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.update');
-        $user = User::whereIn('role', ['coordinator', 'staff'])->findOrFail($id);
+        $user = User::with('staffProfile')->whereIn('role', ['coordinator', 'staff'])->findOrFail($id);
         $this->abortUnlessUnitAllowed($request, 'staff.update', $user->staffProfile?->unit);
 
         $validated = $request->validate([
@@ -359,6 +362,19 @@ class StaffController extends Controller
             'start_date'    => 'nullable|date',
             'phone'         => 'nullable|string|max:20',
         ]);
+
+        if (! $this->permissionResolver->hasGlobalScope($request->user(), 'staff.update')) {
+            $currentUnit = $this->normalizeUnit($user->staffProfile?->unit);
+            $requestedUnit = array_key_exists('unit', $validated)
+                ? $this->normalizeUnit($validated['unit'])
+                : $currentUnit;
+
+            abort_unless(
+                $currentUnit !== null && $requestedUnit === $currentUnit,
+                403,
+                'Birim kapsami olan kullanici personeli baska birime tasiyamaz.'
+            );
+        }
 
         // StaffProfile güncelle veya oluştur
         $user->staffProfile()->updateOrCreate(
@@ -547,7 +563,7 @@ class StaffController extends Controller
     public function approveLeave(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.leave.approve');
-        $leave = LeaveRequest::findOrFail($id);
+        $leave = LeaveRequest::with('user.staffProfile')->findOrFail($id);
         $this->abortUnlessUnitAllowed($request, 'staff.leave.approve', $leave->user?->staffProfile?->unit);
         $leave->update(['status' => 'approved', 'approved_by' => Auth::id()]);
 
@@ -560,7 +576,7 @@ class StaffController extends Controller
     public function rejectLeave(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.leave.reject');
-        $leave = LeaveRequest::findOrFail($id);
+        $leave = LeaveRequest::with('user.staffProfile')->findOrFail($id);
         $this->abortUnlessUnitAllowed($request, 'staff.leave.reject', $leave->user?->staffProfile?->unit);
         $leave->update(['status' => 'rejected', 'approved_by' => Auth::id()]);
 

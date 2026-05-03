@@ -9,6 +9,19 @@ use Illuminate\Http\Request;
 
 class StudentDashboardController extends Controller
 {
+    private function participationQueryFor($user)
+    {
+        return Participant::where('user_id', $user->id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            });
+    }
+
     /**
      * Öğrencinin rozetleri, aktif kredi durumu ve kredi geçmişi
      */
@@ -17,8 +30,7 @@ class StudentDashboardController extends Controller
         $user = $request->user();
 
         // Öğrencinin kabul edildiği aktif proje dönemi bilgileri
-        $participations = Participant::where('user_id', $user->id)
-            ->where('status', 'active')
+        $participations = $this->participationQueryFor($user)
             ->with(['project', 'period'])
             ->get();
 
@@ -37,6 +49,32 @@ class StudentDashboardController extends Controller
             'recent_credit_history' => $creditHistory,
             'earned_badges' => $badges,
             'total_score' => $participations->sum('credit')
+        ]);
+    }
+
+    public function projects(Request $request)
+    {
+        $user = $request->user();
+
+        $participations = $this->participationQueryFor($user)
+            ->with('project:id,name,slug,type')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'projects' => $participations
+                ->filter(fn (Participant $participation) => $participation->project !== null)
+                ->map(fn (Participant $participation) => [
+                    'id' => $participation->project->id,
+                    'name' => $participation->project->name,
+                    'slug' => $participation->project->slug,
+                    'type' => $participation->project->type,
+                    'participation_status' => $participation->status,
+                    'graduation_status' => $participation->graduation_status,
+                    'graduated_at' => optional($participation->graduated_at)?->toIso8601String(),
+                ])
+                ->unique('id')
+                ->values(),
         ]);
     }
 }

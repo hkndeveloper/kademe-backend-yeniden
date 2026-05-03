@@ -28,7 +28,7 @@ class PermissionMatrixController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.matrix.view');
+        $this->abortUnlessGlobalPermission($request, 'permissions.matrix.view');
 
         [$roles, $permissions] = $this->ensureDefaults();
         $roleLabels = config('permission_catalog.role_labels', []);
@@ -78,7 +78,7 @@ class PermissionMatrixController extends Controller
 
     public function update(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+        $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
 
         $validated = $request->validate([
             'matrix' => 'sometimes|array|min:1',
@@ -193,7 +193,7 @@ class PermissionMatrixController extends Controller
 
     public function users(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.user_override.view');
+        $this->abortUnlessGlobalPermission($request, 'permissions.user_override.view');
 
         $query = User::query()
             ->with(['roles:id,name', 'staffProfile:user_id,unit,title'])
@@ -230,7 +230,7 @@ class PermissionMatrixController extends Controller
 
     public function showUserOverrides(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.user_override.view');
+        $this->abortUnlessGlobalPermission($request, 'permissions.user_override.view');
 
         $user = User::with(['roles:id,name', 'staffProfile:user_id,unit,title'])->findOrFail($id);
 
@@ -264,7 +264,7 @@ class PermissionMatrixController extends Controller
 
     public function updateUserOverrides(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.user_override.update');
+        $this->abortUnlessGlobalPermission($request, 'permissions.user_override.update');
 
         $user = User::findOrFail($id);
 
@@ -323,7 +323,7 @@ class PermissionMatrixController extends Controller
 
     public function roleCatalog(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.matrix.view');
+        $this->abortUnlessGlobalPermission($request, 'permissions.matrix.view');
 
         $roles = Role::query()
             ->with('permissions:id,name')
@@ -348,7 +348,7 @@ class PermissionMatrixController extends Controller
 
     public function createRole(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+        $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9_\\-]+$/', 'unique:roles,name'],
@@ -381,7 +381,7 @@ class PermissionMatrixController extends Controller
 
     public function updateRole(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+        $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
 
         $role = Role::query()->findOrFail($id);
         abort_if($this->isSystemRole($role->name), 422, 'Sistem rolleri buradan degistirilemez.');
@@ -407,7 +407,7 @@ class PermissionMatrixController extends Controller
 
     public function deleteRole(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.matrix.update');
+        $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
 
         $role = Role::query()->findOrFail($id);
         abort_if($this->isSystemRole($role->name), 422, 'Sistem rolleri silinemez.');
@@ -426,7 +426,7 @@ class PermissionMatrixController extends Controller
 
     public function assignUserRoles(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'permissions.user_override.update');
+        $this->abortUnlessGlobalPermission($request, 'permissions.user_override.update');
 
         $user = User::query()->with('roles:id,name')->findOrFail($id);
         $validated = $request->validate([
@@ -466,7 +466,12 @@ class PermissionMatrixController extends Controller
      */
     public function audit(Request $request): JsonResponse
     {
-        $this->abortUnlessAnyPermission($request, ['permissions.matrix.view', 'logs.view']);
+        abort_unless(
+            $this->hasGlobalPermission($request, 'permissions.matrix.view')
+                || $this->hasGlobalPermission($request, 'logs.view'),
+            403,
+            'Bu global kayitlari goruntuleme yetkiniz bulunmuyor.'
+        );
 
         try {
             $logs = Activity::query()
@@ -524,6 +529,26 @@ class PermissionMatrixController extends Controller
         } catch (\Throwable) {
             // activity_log tablosu veya paket yoksa panel islemi yine tamamlanir
         }
+    }
+
+    private function abortUnlessGlobalPermission(Request $request, string $permission): void
+    {
+        $this->abortUnlessAllowed($request, $permission);
+
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), $permission),
+            403,
+            'Bu islem icin tum sistem kapsami gerekir.'
+        );
+    }
+
+    private function hasGlobalPermission(Request $request, string $permission): bool
+    {
+        $user = $request->user();
+
+        return $user !== null
+            && $this->permissionResolver->hasPermission($user, $permission)
+            && $this->permissionResolver->hasGlobalScope($user, $permission);
     }
 
     private function ensureDefaults(): array

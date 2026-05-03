@@ -83,14 +83,27 @@ TXT;
         $project = $selectedProjects->first();
 
         if ($wantsFinancial) {
+            $selectedProjects = $this->filterProjectsForPermission($user, $selectedProjects, 'financial.view');
+            if ($selectedProjects->isEmpty()) {
+                return $this->permissionDeniedResponse('financial.view');
+            }
+
             return $this->buildFinancialSummary($user, $selectedProjects, $fromDate, $toDate, $dateLabel);
         }
 
         if ($wantsApplications) {
+            if (! $this->permissionResolver->canAccessProject($user, 'applications.view', $project->id)) {
+                return $this->permissionDeniedResponse('applications.view');
+            }
+
             return $this->buildApplicationStats($user, $project, $applicationStatusFilter, $fromDate, $toDate, $dateLabel);
         }
 
         if ($wantsList) {
+            if (! $this->permissionResolver->canAccessProject($user, 'projects.participants.view', $project->id)) {
+                return $this->permissionDeniedResponse('projects.participants.view');
+            }
+
             return $this->buildParticipantList($user, $project, $participantStatusFilter, $limit);
         }
 
@@ -117,6 +130,24 @@ TXT;
             ->whereIn('id', $ids)
             ->orderBy('name')
             ->get();
+    }
+
+    private function filterProjectsForPermission(User $user, Collection $projects, string $permission): Collection
+    {
+        return $projects
+            ->filter(fn (Project $project) => $this->permissionResolver->canAccessProject($user, $permission, $project->id))
+            ->values();
+    }
+
+    private function permissionDeniedResponse(string $permission): array
+    {
+        return $this->response(
+            "Bu veri icin gerekli yetki bulunmuyor: {$permission}.",
+            'permission_denied',
+            null,
+            null,
+            null,
+        );
     }
 
     private function normalize(string $message): string

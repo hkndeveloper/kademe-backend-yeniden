@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Models\SupportReply;
 use App\Models\SupportTicket;
+use App\Models\Participant;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\AdminExportResponder;
@@ -48,6 +49,22 @@ class SupportTicketController extends Controller
         }
 
         return $this->permissionResolver->canAccessProject($user, $permission, $ticket->project_id);
+    }
+
+    private function canUseProjectAsTicketOwner(User $user, int $projectId): bool
+    {
+        return Participant::query()
+            ->where('user_id', $user->id)
+            ->where('project_id', $projectId)
+            ->where(function (Builder $query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->exists();
     }
 
     private function pickLeastLoadedAssignee(array $candidateIds): ?int
@@ -208,15 +225,20 @@ class SupportTicketController extends Controller
             'message' => 'required|string',
         ]);
 
-        if (
-            ! empty($validated['project_id'])
-            && $this->permissionResolver->hasPermission($user, 'support.create')
-        ) {
-            abort_unless(
-                $this->permissionResolver->canAccessProject($user, 'support.create', (int) $validated['project_id']),
-                403,
-                'Bu proje icin destek talebi olusturma yetkiniz bulunmuyor.'
-            );
+        if (! empty($validated['project_id'])) {
+            if (in_array($user->role, ['student', 'alumni'], true)) {
+                abort_unless(
+                    $this->canUseProjectAsTicketOwner($user, (int) $validated['project_id']),
+                    403,
+                    'Bu proje icin destek talebi olusturma yetkiniz bulunmuyor.'
+                );
+            } elseif ($this->permissionResolver->hasPermission($user, 'support.create')) {
+                abort_unless(
+                    $this->permissionResolver->canAccessProject($user, 'support.create', (int) $validated['project_id']),
+                    403,
+                    'Bu proje icin destek talebi olusturma yetkiniz bulunmuyor.'
+                );
+            }
         }
 
         $autoAssigneeId = $this->resolveAutoAssignee($validated['project_id'] ?? null, $validated['category'] ?? null);
@@ -278,13 +300,17 @@ class SupportTicketController extends Controller
      */
     public function reply(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'support.reply');
         $validated = $request->validate([
             'message' => 'required|string',
         ]);
 
         $ticket = SupportTicket::findOrFail($id);
-        abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.reply'), 403, 'Bu ticket icin yanit yetkiniz yok.');
+        $user = $request->user();
+
+        if ((int) $ticket->user_id !== (int) $user->id) {
+            $this->abortUnlessAllowed($request, 'support.reply');
+            abort_unless($this->canAccessTicket($user, $ticket, 'support.reply'), 403, 'Bu ticket icin yanit yetkiniz yok.');
+        }
 
         $reply = SupportReply::create([
             'ticket_id' => $ticket->id,
@@ -434,6 +460,11 @@ class SupportTicketController extends Controller
     public function assignableUsers(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'support.assign');
+        $user = $request->user();
+        $validated = $request->validate([
+            'project_id' => 'nullable|integer|exists:projects,id',
+        ]);
+        $projectId = $validated['project_id'] ?? null;
 
         $users = User::query()
             ->select(['id', 'name', 'surname', 'role'])
@@ -442,6 +473,35 @@ class SupportTicketController extends Controller
             ->orderBy('name')
             ->orderBy('surname')
             ->get();
+
+        if (! $this->permissionResolver->hasGlobalScope($user, 'support.assign')) {
+            $assignableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.assign');
+
+            if ($projectId !== null) {
+                abort_unless(
+                    in_array((int) $projectId, $assignableProjectIds, true),
+                    403,
+                    'Bu proje icin destek atama yetkiniz yok.'
+                );
+                $assignableProjectIds = [(int) $projectId];
+            }
+
+            $users = $users
+                ->filter(function (User $candidate) use ($assignableProjectIds) {
+                    if ($candidate->role === 'super_admin') {
+                        return true;
+                    }
+
+                    foreach ($assignableProjectIds as $assignableProjectId) {
+                        if ($this->permissionResolver->canAccessProject($candidate, 'support.view', (int) $assignableProjectId)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                })
+                ->values();
+        }
 
         return response()->json(['users' => $users]);
     }
@@ -457,8 +517,23 @@ class SupportTicketController extends Controller
 
         $ticket = SupportTicket::findOrFail($id);
         abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.assign'), 403, 'Bu ticket icin atama yetkiniz yok.');
+
+        $assignee = User::query()
+            ->where('id', $request->integer('assigned_to'))
+            ->where('status', 'active')
+            ->whereIn('role', ['super_admin', 'coordinator', 'staff'])
+            ->firstOrFail();
+
+        if (! $this->permissionResolver->hasGlobalScope($request->user(), 'support.assign') && $ticket->project_id !== null) {
+            abort_unless(
+                $this->permissionResolver->canAccessProject($assignee, 'support.view', (int) $ticket->project_id),
+                422,
+                'Secilen kullanici bu destek talebinin proje kapsaminda goruntuleme yetkisine sahip degil.'
+            );
+        }
+
         $ticket->update([
-            'assigned_to' => $request->assigned_to,
+            'assigned_to' => $assignee->id,
             'status' => 'in_progress',
         ]);
 

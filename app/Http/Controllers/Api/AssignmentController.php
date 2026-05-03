@@ -30,7 +30,14 @@ class AssignmentController extends Controller
 
         // Aktif katılım sağladığı projelerin/dönemlerin ID'lerini bul
         $participations = Participant::where('user_id', $user->id)
-            ->where('status', 'active')
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
             ->get();
 
         $projectIds = $participations->pluck('project_id');
@@ -59,11 +66,33 @@ class AssignmentController extends Controller
         $validated = $request->validate([
             'title' => 'nullable|string',
             'description' => 'required|string',
-            'file_path' => 'nullable|string', // AWS S3 veya R2 URL'si olabilir
+            'file_path' => 'nullable|string',
+            'file' => 'nullable|file|max:20480',
         ]);
 
         $assignment = Assignment::findOrFail($id);
         $user = $request->user();
+
+        $canSubmit = Participant::query()
+            ->where('user_id', $user->id)
+            ->where('project_id', $assignment->project_id)
+            ->where('period_id', $assignment->period_id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->exists();
+
+        abort_unless($canSubmit, 403, 'Bu odev icin teslim yetkiniz bulunmuyor.');
+
+        $filePath = $validated['file_path'] ?? null;
+        if ($request->hasFile('file')) {
+            $filePath = $request->file('file')->store('assignment-submissions', 'public');
+        }
 
         // Daha önce teslim edilmiş mi kontrolü
         $existing = AssignmentSubmission::where('assignment_id', $assignment->id)
@@ -75,7 +104,7 @@ class AssignmentController extends Controller
             $existing->update([
                 'title' => $validated['title'] ?? $existing->title,
                 'description' => $validated['description'],
-                'file_path' => $validated['file_path'] ?? $existing->file_path,
+                'file_path' => $filePath ?? $existing->file_path,
                 'status' => 'submitted'
             ]);
             
@@ -86,9 +115,9 @@ class AssignmentController extends Controller
         $submission = AssignmentSubmission::create([
             'assignment_id' => $assignment->id,
             'user_id' => $user->id,
-            'title' => $validated['title'],
+            'title' => $validated['title'] ?? null,
             'description' => $validated['description'],
-            'file_path' => $validated['file_path'],
+            'file_path' => $filePath,
             'status' => 'submitted'
         ]);
 
