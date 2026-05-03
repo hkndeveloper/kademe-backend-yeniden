@@ -10,6 +10,7 @@ use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
@@ -349,6 +350,9 @@ class PermissionMatrixController extends Controller
     public function createRole(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
+        $request->merge([
+            'name' => $this->normalizeRoleName((string) $request->input('name', '')),
+        ]);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9_\\-]+$/', 'unique:roles,name'],
@@ -364,7 +368,7 @@ class PermissionMatrixController extends Controller
         ]);
 
         if (! empty($validated['permissions'])) {
-            $role->syncPermissions($validated['permissions']);
+            $role->syncPermissions($this->validGranularPermissions($validated['permissions']));
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -389,9 +393,19 @@ class PermissionMatrixController extends Controller
         $validated = $request->validate([
             'permissions' => 'nullable|array',
             'permissions.*' => 'string',
+            'scopes' => 'nullable|array',
+            'scopes.*.permission_name' => 'required_with:scopes|string',
+            'scopes.*.scope_type' => 'required_with:scopes|in:all,own_projects,assigned_projects,own_unit,selected_projects,self,none',
+            'scopes.*.scope_payload' => 'nullable|array',
         ]);
 
-        $role->syncPermissions($validated['permissions'] ?? []);
+        $role->syncPermissions($this->validGranularPermissions($validated['permissions'] ?? []));
+        if (array_key_exists('scopes', $validated)) {
+            $this->syncGranularScopes([[
+                'role' => $role->name,
+                'scopes' => $validated['scopes'] ?? [],
+            ]], $this->allGranularPermissionNames());
+        }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         $this->logPermissionActivity($request, null, 'role.custom.updated', [
@@ -438,9 +452,14 @@ class PermissionMatrixController extends Controller
         $roleNames = collect($validated['roles'])->unique()->values()->all();
         $user->syncRoles($roleNames);
 
-        $primaryRole = $validated['primary_role'] ?? ($user->roles->pluck('name')->first() ?? $roleNames[0]);
-        if (in_array($primaryRole, array_keys(config('permission_catalog.role_labels', [])), true)) {
-            $user->forceFill(['role' => $primaryRole])->save();
+        $primaryRole = $validated['primary_role'] ?? $roleNames[0];
+        if (in_array($primaryRole, $roleNames, true)) {
+            try {
+                $user->forceFill(['role' => $primaryRole])->save();
+            } catch (QueryException) {
+                // Eski enum role kolonuna sahip ortamlarda Spatie rol atamasi yine gecerlidir.
+                $user->refresh();
+            }
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -620,6 +639,27 @@ class PermissionMatrixController extends Controller
     private function isSystemRole(string $roleName): bool
     {
         return array_key_exists($roleName, config('permission_catalog.role_labels', []));
+    }
+
+    private function normalizeRoleName(string $name): string
+    {
+        return Str::of($name)
+            ->trim()
+            ->lower()
+            ->slug('_')
+            ->trim('_')
+            ->toString();
+    }
+
+    private function validGranularPermissions(array $permissions): array
+    {
+        $granularCatalog = $this->allGranularPermissionNames();
+
+        return collect($permissions)
+            ->filter(fn (string $name) => in_array($name, $granularCatalog, true))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

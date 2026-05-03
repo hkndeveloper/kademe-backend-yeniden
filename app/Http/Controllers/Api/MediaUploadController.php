@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\PermissionResolver;
+use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class MediaUploadController extends Controller
@@ -55,12 +55,12 @@ class MediaUploadController extends Controller
         $folder = Str::slug($validated['folder'] ?? 'general');
         $file = $validated['file'];
         $filename = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs("kademe-media/{$folder}", $filename, 'public');
+        $path = MediaStorage::putFileAs("kademe-media/{$folder}", $file, $filename);
 
         return response()->json([
             'message' => 'Dosya yuklendi.',
             'path' => $path,
-            'url' => Storage::disk('public')->url($path),
+            'url' => MediaStorage::url($path),
         ]);
     }
 }

@@ -82,7 +82,7 @@ class UserController extends Controller
 
         $documents = $user->staffProfile?->personal_documents ?? [];
         $creditScore = \App\Models\CreditLog::where('user_id', $user->id)->sum('amount');
-        $absentCount = \App\Models\Attendance::where('user_id', $user->id)->where('status', 'absent')->count();
+        $absentCount = \App\Models\Attendance::where('user_id', $user->id)->where('is_valid', false)->count();
 
         return response()->json([
             'user' => $user,

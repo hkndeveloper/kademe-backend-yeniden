@@ -8,11 +8,18 @@ use App\Models\Certificate;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
 class AdminCertificateController extends Controller
 {
     use AuthorizesGranularPermissions;
+
+    private const CERTIFICATE_TYPES = [
+        'participation',
+        'graduation',
+        'achievement',
+    ];
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -29,6 +36,18 @@ class AdminCertificateController extends Controller
         }
 
         return $query;
+    }
+
+    private function normalizeCertificateType(string $type): string
+    {
+        $normalized = Str::of($type)->lower()->ascii()->trim()->toString();
+
+        return match ($normalized) {
+            'katilim', 'katilim belgesi', 'participation' => 'participation',
+            'mezuniyet', 'mezuniyet belgesi', 'graduation' => 'graduation',
+            'basari', 'basari sertifikasi', 'onur', 'onur belgesi', 'achievement' => 'achievement',
+            default => $normalized,
+        };
     }
 
     /**
@@ -123,13 +142,17 @@ class AdminCertificateController extends Controller
     public function store(Request $request)
     {
         $this->abortUnlessAllowed($request, 'certificates.create');
+        $request->merge([
+            'type' => $this->normalizeCertificateType((string) $request->input('type', '')),
+        ]);
 
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
             'project_id' => 'required|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
-            'type' => 'required|string',
-            'file_path' => 'nullable|string',
+            'type' => ['required', 'string', Rule::in(self::CERTIFICATE_TYPES)],
+            'certificate_path' => 'nullable|string|max:2048',
+            'file_path' => 'nullable|string|max:2048',
         ]);
 
         abort_unless(
@@ -154,7 +177,7 @@ class AdminCertificateController extends Controller
             'type' => $validated['type'],
             'verification_code' => strtoupper(Str::random(10)),
             'issued_at' => now(),
-            'file_path' => $validated['file_path'] ?? null,
+            'certificate_path' => $validated['certificate_path'] ?? $validated['file_path'] ?? null,
         ]);
 
         return response()->json([

@@ -9,6 +9,7 @@ use App\Models\AssignmentSubmission;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Services\PermissionResolver;
+use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -91,7 +92,7 @@ class AssignmentController extends Controller
 
         $filePath = $validated['file_path'] ?? null;
         if ($request->hasFile('file')) {
-            $filePath = $request->file('file')->store('assignment-submissions', 'public');
+            $filePath = MediaStorage::putFile('assignment-submissions', $request->file('file'));
         }
 
         // Daha önce teslim edilmiş mi kontrolü

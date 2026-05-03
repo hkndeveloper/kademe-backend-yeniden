@@ -12,9 +12,9 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use App\Support\MediaStorage;
 
 class ApplicationController extends Controller
 {
@@ -62,7 +62,7 @@ class ApplicationController extends Controller
     {
         return [
             'path' => $path,
-            'url' => Storage::disk('public')->url($path),
+            'url' => MediaStorage::url($path),
             'original_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getClientMimeType(),
             'size' => $file->getSize(),
@@ -166,7 +166,7 @@ class ApplicationController extends Controller
 
             if ($type === 'file') {
                 if ($uploadedFile instanceof \Illuminate\Http\UploadedFile) {
-                    $path = $uploadedFile->store('application-files', 'public');
+                    $path = MediaStorage::putFile('application-files', $uploadedFile);
                     $normalized[$fieldId] = $this->fileMetadata($path, $uploadedFile);
                     continue;
                 }

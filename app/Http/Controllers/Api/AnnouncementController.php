@@ -8,6 +8,7 @@ use App\Models\Announcement;
 use App\Models\Participant;
 use App\Models\User;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -328,7 +329,7 @@ class AnnouncementController extends Controller
         if (!empty($validated['send_email']) && $validated['send_email']) {
             $attachmentPath = null;
             if ($request->hasFile('email_attachment')) {
-                $attachmentPath = $request->file('email_attachment')->store('announcement_attachments', 'public');
+                $attachmentPath = MediaStorage::putFile('announcement_attachments', $request->file('email_attachment'));
             }
             $this->dispatchEmail($targetUsers, $announcement, $attachmentPath);
         }
@@ -452,7 +453,7 @@ class AnnouncementController extends Controller
         $attachmentPath = null;
 
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('email_attachments', 'public');
+            $attachmentPath = MediaStorage::putFile('email_attachments', $request->file('attachment'));
         }
 
         $sent = $this->dispatchEmail($targetUsers, (object) [

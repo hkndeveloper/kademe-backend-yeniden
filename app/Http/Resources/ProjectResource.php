@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,11 +14,7 @@ class ProjectResource extends JsonResource
             return null;
         }
 
-        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
-            return $path;
-        }
-
-        return asset('storage/' . ltrim($path, '/'));
+        return MediaStorage::url($path);
     }
 
     public function toArray(Request $request): array

@@ -9,10 +9,10 @@ use App\Models\Project;
 use App\Models\Request as WorkflowRequest;
 use App\Models\User;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class RequestController extends Controller
 {
@@ -334,10 +334,10 @@ class RequestController extends Controller
         }
 
         if ($workflowRequest->response_file_path) {
-            Storage::disk('public')->delete($workflowRequest->response_file_path);
+            MediaStorage::delete($workflowRequest->response_file_path);
         }
 
-        $path = $request->file('response_file')->store('requests/responses', 'public');
+        $path = MediaStorage::putFile('requests/responses', $request->file('response_file'));
 
         $workflowRequest->update([
             'response_file_path' => $path,

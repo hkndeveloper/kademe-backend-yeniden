@@ -8,6 +8,7 @@ use App\Models\Participant;
 use App\Models\Project;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,11 +27,7 @@ class CoordinatorParticipantController extends Controller
             return null;
         }
 
-        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
-            return $path;
-        }
-
-        return asset('storage/' . ltrim($path, '/'));
+        return MediaStorage::url($path);
     }
 
     public function index(Request $request): JsonResponse

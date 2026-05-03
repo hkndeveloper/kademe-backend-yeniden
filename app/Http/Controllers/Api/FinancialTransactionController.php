@@ -7,10 +7,10 @@ use App\Http\Controllers\Controller;
 use App\Models\FinancialTransaction;
 use App\Models\Project;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 
 class FinancialTransactionController extends Controller
 {
@@ -148,7 +148,7 @@ class FinancialTransactionController extends Controller
 
         $invoicePath = null;
         if ($request->hasFile('invoice')) {
-            $invoicePath = $request->file('invoice')->store('invoices', 'public');
+            $invoicePath = MediaStorage::putFile('invoices', $request->file('invoice'));
         }
 
         $transaction = FinancialTransaction::create([
@@ -267,7 +267,7 @@ class FinancialTransactionController extends Controller
         }
 
         if ($transaction->invoice_path) {
-            Storage::disk('public')->delete($transaction->invoice_path);
+            MediaStorage::delete($transaction->invoice_path);
         }
 
         $transaction->delete();
@@ -284,11 +284,11 @@ class FinancialTransactionController extends Controller
         $transaction = FinancialTransaction::findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'financial.invoice.download', $transaction->project_id);
 
-        if (!$transaction->invoice_path || !Storage::disk('public')->exists($transaction->invoice_path)) {
+        if (!$transaction->invoice_path || !MediaStorage::exists($transaction->invoice_path)) {
             return response()->json(['message' => 'Fatura bulunamadı.'], 404);
         }
 
-        return Storage::disk('public')->download($transaction->invoice_path);
+        return MediaStorage::disk()->download($transaction->invoice_path);
     }
 
     /**

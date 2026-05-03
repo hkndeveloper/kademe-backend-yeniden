@@ -9,7 +9,7 @@ use App\Models\Participant;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Storage;
+use App\Support\MediaStorage;
 
 class DigitalBohcaController extends Controller
 {
@@ -54,7 +54,7 @@ class DigitalBohcaController extends Controller
             ->get()
             ->map(function (DigitalBohca $material) {
                 if ($material->file_path && ! str_starts_with($material->file_path, 'http://') && ! str_starts_with($material->file_path, 'https://')) {
-                    $material->file_url = Storage::disk('public')->url($material->file_path);
+                    $material->file_url = MediaStorage::url($material->file_path);
                 } else {
                     $material->file_url = $material->file_path;
                 }
@@ -115,7 +115,7 @@ class DigitalBohcaController extends Controller
         }
 
         $file = $request->file('file');
-        $path = $file->store('digital-bohca', 'public');
+        $path = MediaStorage::putFile('digital-bohca', $file);
 
         $material = DigitalBohca::query()->create([
             'project_id' => $validated['project_id'] ?? null,
@@ -145,7 +145,7 @@ class DigitalBohcaController extends Controller
             abort(403, 'Genel bohca materyali silmek icin global kapsam gerekir.');
         }
 
-        Storage::disk('public')->delete($material->file_path);
+        MediaStorage::delete($material->file_path);
         $material->delete();
 
         return response()->json(['message' => 'Dijital bohca materyali silindi.']);

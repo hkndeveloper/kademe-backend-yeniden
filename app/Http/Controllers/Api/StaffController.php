@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\StaffProfile;
 use App\Models\User;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -413,7 +414,7 @@ class StaffController extends Controller
         $this->abortUnlessUnitAllowed($request, 'staff.documents.upload', $user->staffProfile?->unit);
         $profile = $user->staffProfile()->firstOrCreate(['user_id' => $user->id]);
 
-        $path = $request->file('document')->store("staff/{$user->id}/documents", 'public');
+        $path = MediaStorage::putFile("staff/{$user->id}/documents", $request->file('document'));
 
         $docs = $profile->personal_documents ?? [];
         $docs[] = [
