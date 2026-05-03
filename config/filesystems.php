@@ -17,6 +17,8 @@ return [
 
     'media_disk' => env('MEDIA_DISK', 'public'),
 
+    'direct_media_downloads' => env('MEDIA_DIRECT_DOWNLOADS', false),
+
     /*
     |--------------------------------------------------------------------------
     | Filesystem Disks
@@ -71,7 +73,7 @@ return [
             'url' => env('R2_PUBLIC_URL'),
             'endpoint' => env('R2_ENDPOINT', env('R2_ACCOUNT_ID') ? 'https://' . env('R2_ACCOUNT_ID') . '.r2.cloudflarestorage.com' : null),
             'use_path_style_endpoint' => env('R2_USE_PATH_STYLE_ENDPOINT', true),
-            'visibility' => 'public',
+            'visibility' => 'private',
             'throw' => false,
             'report' => false,
         ],

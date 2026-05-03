@@ -21,12 +21,24 @@ class MediaStorage
 
     public static function putFile(string $directory, UploadedFile $file): string
     {
-        return self::ensureStoredPath($file->store($directory, self::diskName()));
+        try {
+            return self::ensureStoredPath($file->store($directory, self::diskName()));
+        } catch (HttpResponseException $exception) {
+            throw $exception;
+        } catch (\Throwable) {
+            self::throwStorageError();
+        }
     }
 
     public static function putFileAs(string $directory, UploadedFile $file, string $name): string
     {
-        return self::ensureStoredPath($file->storeAs($directory, $name, self::diskName()));
+        try {
+            return self::ensureStoredPath($file->storeAs($directory, $name, self::diskName()));
+        } catch (HttpResponseException $exception) {
+            throw $exception;
+        } catch (\Throwable) {
+            self::throwStorageError();
+        }
     }
 
     public static function delete(?string $path): bool
@@ -78,6 +90,11 @@ class MediaStorage
         return rtrim((string) config('filesystems.disks.' . self::diskName() . '.url'), '/') !== '';
     }
 
+    public static function directDownloadsEnabled(): bool
+    {
+        return (bool) config('filesystems.direct_media_downloads', false);
+    }
+
     private static function ensureStoredPath(mixed $path): string
     {
         if (is_string($path) && $path !== '') {
@@ -86,6 +103,13 @@ class MediaStorage
 
         throw new HttpResponseException(response()->json([
             'message' => 'Dosya yuklenemedi. Storage/R2 ayarlarini kontrol edin.',
+        ], 503));
+    }
+
+    private static function throwStorageError(): never
+    {
+        throw new HttpResponseException(response()->json([
+            'message' => 'Dosya yuklenemedi. Storage/R2 baglantisini ve Railway env ayarlarini kontrol edin.',
         ], 503));
     }
 

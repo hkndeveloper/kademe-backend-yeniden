@@ -288,7 +288,7 @@ class FinancialTransactionController extends Controller
             return response()->json(['message' => 'Fatura bulunamadı.'], 404);
         }
 
-        if (MediaStorage::publicUrlConfigured()) {
+        if (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured()) {
             return response()->json([
                 'download_url' => MediaStorage::url($transaction->invoice_path),
             ]);
