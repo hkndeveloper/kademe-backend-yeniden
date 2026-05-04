@@ -13,6 +13,7 @@ use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RequestController extends Controller
 {
@@ -69,6 +70,36 @@ class RequestController extends Controller
         }
 
         return $this->canAccessRequestProject($user, $permission, $workflowRequest->project_id);
+    }
+
+    private function streamResponseFile(WorkflowRequest $workflowRequest): JsonResponse|StreamedResponse
+    {
+        if (! $workflowRequest->response_file_path) {
+            return response()->json(['message' => 'Yanit dosyasi bulunamadi.'], 404);
+        }
+
+        if ($this->isUrl($workflowRequest->response_file_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json([
+                'download_url' => MediaStorage::url($workflowRequest->response_file_path),
+            ]);
+        }
+
+        if (! MediaStorage::exists($workflowRequest->response_file_path)) {
+            return response()->json(['message' => 'Yanit dosyasi storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($workflowRequest->response_file_path, PATHINFO_EXTENSION);
+        $filename = 'talep_yanit_' . $workflowRequest->id;
+
+        return MediaStorage::disk()->download(
+            $workflowRequest->response_file_path,
+            $filename . ($extension ? ".{$extension}" : '')
+        );
+    }
+
+    private function isUrl(string $path): bool
+    {
+        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
     public function index(Request $request): JsonResponse
@@ -352,5 +383,19 @@ class RequestController extends Controller
                 'project:id,name,slug,type',
             ])),
         ]);
+    }
+
+    public function downloadResponseFile(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $workflowRequest = WorkflowRequest::query()->findOrFail($id);
+
+        $canView = $workflowRequest->requester_id === $request->user()->id
+            || $this->canManageRequest($request->user(), $workflowRequest, 'requests.view')
+            || $this->canManageRequest($request->user(), $workflowRequest, 'requests.upload_response')
+            || $this->canManageRequest($request->user(), $workflowRequest, 'requests.update_status');
+
+        abort_unless($canView, 403, 'Bu talep dosyasini indirme yetkiniz yok.');
+
+        return $this->streamResponseFile($workflowRequest);
     }
 }

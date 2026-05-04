@@ -22,7 +22,10 @@ class RequestResource extends JsonResource
             'description' => $this->description,
             'status' => $this->status,
             'response_file_path' => $this->response_file_path,
-            'response_file_url' => MediaStorage::url($this->response_file_path),
+            'response_file_url' => MediaStorage::directDownloadsEnabled() ? MediaStorage::url($this->response_file_path) : null,
+            'response_file_download_url' => $this->response_file_path
+                ? "/requests/{$this->id}/response-file"
+                : null,
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'updated_at' => optional($this->updated_at)?->toIso8601String(),
             'requester' => $this->whenLoaded('requester', function () {

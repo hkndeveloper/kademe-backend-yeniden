@@ -5,13 +5,55 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\KpdAppointmentResource;
 use App\Models\KpdAppointment;
+use App\Models\KpdReport;
 use App\Models\KpdRoom;
 use App\Models\User;
+use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentKpdController extends Controller
 {
+    private function reportPayload(KpdReport $report): array
+    {
+        return [
+            'id' => $report->id,
+            'title' => $report->title,
+            'created_at' => optional($report->created_at)?->toIso8601String(),
+            'download_url' => $report->file_path ? "/kpd/reports/{$report->id}/download" : null,
+            'counselor' => $report->relationLoaded('counselor') ? $report->counselor : null,
+        ];
+    }
+
+    private function streamReport(KpdReport $report): JsonResponse|StreamedResponse
+    {
+        if (! $report->file_path) {
+            return response()->json(['message' => 'Rapor dosyasi bulunamadi.'], 404);
+        }
+
+        if ($this->isUrl($report->file_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json(['download_url' => MediaStorage::url($report->file_path)]);
+        }
+
+        if (! MediaStorage::exists($report->file_path)) {
+            return response()->json(['message' => 'Rapor dosyasi storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($report->file_path, PATHINFO_EXTENSION);
+        $filename = 'kpd_raporu_' . $report->id;
+
+        return MediaStorage::disk()->download(
+            $report->file_path,
+            $filename . ($extension ? ".{$extension}" : '')
+        );
+    }
+
+    private function isUrl(string $path): bool
+    {
+        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -53,7 +95,25 @@ class StudentKpdController extends Controller
             'appointments' => KpdAppointmentResource::collection($appointments),
             'counselors' => $counselors,
             'rooms' => $rooms,
+            'reports' => KpdReport::query()
+                ->with('counselor:id,name,surname,role')
+                ->where('user_id', $user->id)
+                ->latest()
+                ->get()
+                ->map(fn (KpdReport $report) => $this->reportPayload($report))
+                ->values(),
         ]);
+    }
+
+    public function downloadReport(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        abort_unless($request->user()->role === 'student', 403, 'KPD raporlari yalnizca ogrenci paneli icin kullanilabilir.');
+
+        $report = KpdReport::query()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        return $this->streamReport($report);
     }
 
     public function store(Request $request): JsonResponse

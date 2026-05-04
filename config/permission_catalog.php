@@ -235,6 +235,9 @@ return [
         'KPD' => [
             'kpd.appointments.view',
             'kpd.appointments.manage',
+            'kpd.reports.view',
+            'kpd.reports.create',
+            'kpd.reports.delete',
         ],
     ],
 
@@ -390,6 +393,9 @@ return [
         'manage kpd' => [
             'kpd.appointments.view',
             'kpd.appointments.manage',
+            'kpd.reports.view',
+            'kpd.reports.create',
+            'kpd.reports.delete',
         ],
     ],
 

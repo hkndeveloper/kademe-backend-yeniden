@@ -5,13 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
+use App\Models\CommunicationLog;
 use App\Models\Participant;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnnouncementController extends Controller
 {
@@ -95,6 +98,72 @@ class AnnouncementController extends Controller
                 ->whereIn('project_id', $manageableProjectIds)
                 ->orWhere('created_by', $user->id);
         });
+    }
+
+    private function communicationLogPayload(CommunicationLog $log): array
+    {
+        return [
+            'id' => $log->id,
+            'type' => $log->type,
+            'sender_id' => $log->sender_id,
+            'recipients_count' => $log->recipients_count,
+            'subject' => $log->subject,
+            'content' => $log->content,
+            'attachment_path' => $log->attachment_path,
+            'attachment_download_url' => $log->attachment_path ? "/announcements/communication-logs/{$log->id}/attachment" : null,
+            'status' => $log->status,
+            'project_id' => $log->project_id,
+            'created_at' => optional($log->created_at)?->toIso8601String(),
+            'sender' => $log->relationLoaded('sender') ? $log->sender : null,
+            'project' => $log->relationLoaded('project') ? $log->project : null,
+        ];
+    }
+
+    private function scopeCommunicationLogs(Request $request, $query, string $permission)
+    {
+        $user = $request->user();
+
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
+            return $query;
+        }
+
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, $permission);
+
+        return $query->where(function ($builder) use ($user, $projectIds) {
+            $builder->where('sender_id', $user->id);
+
+            if ($projectIds !== []) {
+                $builder->orWhereIn('project_id', $projectIds);
+            }
+        });
+    }
+
+    private function streamCommunicationAttachment(CommunicationLog $log): JsonResponse|StreamedResponse
+    {
+        if (! $log->attachment_path) {
+            return response()->json(['message' => 'Ek dosya bulunamadi.'], 404);
+        }
+
+        if ($this->isUrl($log->attachment_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json(['download_url' => MediaStorage::url($log->attachment_path)]);
+        }
+
+        if (! MediaStorage::exists($log->attachment_path)) {
+            return response()->json(['message' => 'Ek dosya storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($log->attachment_path, PATHINFO_EXTENSION);
+        $filename = 'duyuru_eki_' . $log->id;
+
+        return MediaStorage::disk()->download(
+            $log->attachment_path,
+            $filename . ($extension ? ".{$extension}" : '')
+        );
+    }
+
+    private function isUrl(string $path): bool
+    {
+        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
     /**
      * GET /staff/announcements
@@ -459,6 +528,7 @@ class AnnouncementController extends Controller
         $sent = $this->dispatchEmail($targetUsers, (object) [
             'title'   => $validated['subject'],
             'content' => $validated['body'],
+            'project_id' => $validated['project_id'] ?? null,
         ], $attachmentPath);
 
         return response()->json([
@@ -468,6 +538,48 @@ class AnnouncementController extends Controller
     }
 
     // ─── YARDIMCI METODLAR ────────────────────────────────────────────────────
+
+    public function communicationLogs(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'announcements.view');
+
+        $query = CommunicationLog::query()
+            ->with(['sender:id,name,surname,role', 'project:id,name'])
+            ->whereIn('type', ['email', 'sms'])
+            ->latest();
+
+        $query = $this->scopeCommunicationLogs($request, $query, 'announcements.view');
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->string('type')->toString());
+        }
+
+        if ($request->filled('project_id')) {
+            $projectId = (int) $request->project_id;
+            $this->assertProjectAnnouncementScope($request, $projectId, 'announcements.view');
+            $query->where('project_id', $projectId);
+        }
+
+        return response()->json([
+            'logs' => $query->limit(30)->get()->map(fn (CommunicationLog $log) => $this->communicationLogPayload($log))->values(),
+        ]);
+    }
+
+    public function downloadCommunicationAttachment(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $this->abortUnlessAllowed($request, 'announcements.view');
+
+        $log = CommunicationLog::query()->findOrFail($id);
+        $user = $request->user();
+
+        $canAccess = (int) $log->sender_id === (int) $user->id
+            || $this->permissionResolver->hasGlobalScope($user, 'announcements.view')
+            || ($log->project_id !== null && $this->permissionResolver->canAccessProject($user, 'announcements.view', (int) $log->project_id));
+
+        abort_unless($canAccess, 403, 'Bu ek dosyayi indirme yetkiniz yok.');
+
+        return $this->streamCommunicationAttachment($log);
+    }
 
     private function resolveTargetUsers(User $sender, array $validated, string $permission): \Illuminate\Database\Eloquent\Collection
     {
@@ -561,6 +673,7 @@ class AnnouncementController extends Controller
                 'subject'          => 'SMS',
                 'content'          => $message,
                 'status'           => 'queued',
+                'project_id'       => null,
             ]);
         }
         return $sent;
@@ -579,6 +692,7 @@ class AnnouncementController extends Controller
                 'content'          => substr($announcement->content, 0, 500),
                 'attachment_path'  => $attachmentPath,
                 'status'           => 'queued',
+                'project_id'       => $announcement->project_id ?? null,
             ]);
         }
         return $sent;

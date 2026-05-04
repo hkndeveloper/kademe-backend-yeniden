@@ -16,6 +16,7 @@ Route::get('/faqs', [\App\Http\Controllers\Api\Public\PublicContentController::c
 Route::get('/activities', [\App\Http\Controllers\Api\Public\PublicContentController::class, 'activities']);
 Route::get('/activities/{id}', [\App\Http\Controllers\Api\Public\PublicContentController::class, 'activityDetail']);
 Route::get('/certificates/verify/{verificationCode}', [\App\Http\Controllers\Api\CertificateController::class, 'verify']);
+Route::get('/certificates/{verificationCode}/download', [\App\Http\Controllers\Api\CertificateController::class, 'download']);
 Route::get('/site-config', [\App\Http\Controllers\Api\SiteSettingsController::class, 'public']);
 Route::post('/contact', [\App\Http\Controllers\Api\SupportTicketController::class, 'storePublic'])
     ->middleware('throttle:10,1');
@@ -91,20 +92,24 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk', 'role:student|alumni'])-
     Route::post('/requests', [\App\Http\Controllers\Api\RequestController::class, 'store']);
     Route::put('/requests/{id}/status', [\App\Http\Controllers\Api\RequestController::class, 'updateStatus']);
     Route::post('/requests/{id}/upload-response', [\App\Http\Controllers\Api\RequestController::class, 'uploadResponseFile']);
+    Route::get('/requests/{id}/response-file', [\App\Http\Controllers\Api\RequestController::class, 'downloadResponseFile']);
     Route::get('/kpd/appointments', [\App\Http\Controllers\Api\StudentKpdController::class, 'index']);
     Route::post('/kpd/appointments', [\App\Http\Controllers\Api\StudentKpdController::class, 'store']);
     Route::post('/kpd/appointments/{id}/cancel', [\App\Http\Controllers\Api\StudentKpdController::class, 'cancel']);
+    Route::get('/kpd/reports/{id}/download', [\App\Http\Controllers\Api\StudentKpdController::class, 'downloadReport']);
     Route::get('/volunteer/opportunities', [\App\Http\Controllers\Api\VolunteerController::class, 'index']);
     Route::post('/volunteer/opportunities/{id}/apply', [\App\Http\Controllers\Api\VolunteerController::class, 'apply']);
     
     Route::get('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'index']);
     Route::post('/assignments/{id}/submit', [\App\Http\Controllers\Api\AssignmentController::class, 'submit']);
+    Route::get('/assignment-submissions/{id}/download', [\App\Http\Controllers\Api\AssignmentController::class, 'downloadSubmission']);
     
     // Destek Talepleri (Ã–ÄŸrenci TarafÄ±)
     Route::get('/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'myTickets']);
     Route::get('/tickets/export', [\App\Http\Controllers\Api\SupportTicketController::class, 'exportMyTickets']);
     Route::post('/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'store']);
     Route::post('/tickets/{id}/reply', [\App\Http\Controllers\Api\SupportTicketController::class, 'reply']);
+    Route::get('/tickets/replies/{id}/attachment', [\App\Http\Controllers\Api\SupportTicketController::class, 'downloadReplyAttachment']);
 });
 
 // --- ADMIN / KOORDÄ°NATÃ–R PANELÄ° --- //
@@ -154,6 +159,10 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     // KPD YÃ¶netimi
     Route::get('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'index']);
     Route::post('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'store']);
+    Route::get('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'reports']);
+    Route::post('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'storeReport']);
+    Route::get('/kpd/reports/{id}/download', [\App\Http\Controllers\Api\AdminKpdController::class, 'downloadReport']);
+    Route::delete('/kpd/reports/{id}', [\App\Http\Controllers\Api\AdminKpdController::class, 'destroyReport']);
 
     // Site AyarlarÄ± & Ä°Ã§erik
     Route::get('/site-settings', [\App\Http\Controllers\Api\SiteSettingsController::class, 'admin']);
@@ -198,6 +207,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     // â”€â”€ DUYURULAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Route::post('/announcements/send-sms', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendSms']);
     Route::post('/announcements/send-email', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendEmail']);
+    Route::get('/announcements/communication-logs', [\App\Http\Controllers\Api\AnnouncementController::class, 'communicationLogs']);
+    Route::get('/announcements/communication-logs/{id}/attachment', [\App\Http\Controllers\Api\AnnouncementController::class, 'downloadCommunicationAttachment']);
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'index']);
     Route::get('/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'export']);
     Route::post('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'store']);
@@ -228,6 +239,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::get('/support/tickets/export', [\App\Http\Controllers\Api\SupportTicketController::class, 'export']);
     Route::put('/support/tickets/{id}/assign', [\App\Http\Controllers\Api\SupportTicketController::class, 'assign']);
     Route::put('/support/tickets/{id}/close', [\App\Http\Controllers\Api\SupportTicketController::class, 'close']);
+    Route::get('/tickets/replies/{id}/attachment', [\App\Http\Controllers\Api\SupportTicketController::class, 'downloadReplyAttachment']);
 });
 
 // Unified panel icin rol-prefix bagimsiz generic alias endpointleri.
@@ -273,7 +285,15 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::get('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelIndex']);
     Route::post('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelStore']);
     Route::delete('/assignments/{id}', [\App\Http\Controllers\Api\AssignmentController::class, 'panelDestroy']);
+    Route::get('/assignment-submissions/{id}/download', [\App\Http\Controllers\Api\AssignmentController::class, 'panelDownloadSubmission']);
     Route::put('/assignment-submissions/{id}/review', [\App\Http\Controllers\Api\AssignmentController::class, 'panelReviewSubmission']);
+
+    Route::get('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'index']);
+    Route::post('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'store']);
+    Route::get('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'reports']);
+    Route::post('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'storeReport']);
+    Route::get('/kpd/reports/{id}/download', [\App\Http\Controllers\Api\AdminKpdController::class, 'downloadReport']);
+    Route::delete('/kpd/reports/{id}', [\App\Http\Controllers\Api\AdminKpdController::class, 'destroyReport']);
 
     Route::get('/calendar/overview', [\App\Http\Controllers\Api\CalendarController::class, 'overview']);
     Route::get('/calendar/assignees', [\App\Http\Controllers\Api\CalendarController::class, 'assignees']);
@@ -290,6 +310,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     // Announcements
     Route::post('/announcements/send-sms', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendSms']);
     Route::post('/announcements/send-email', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendEmail']);
+    Route::get('/announcements/communication-logs', [\App\Http\Controllers\Api\AnnouncementController::class, 'communicationLogs']);
+    Route::get('/announcements/communication-logs/{id}/attachment', [\App\Http\Controllers\Api\AnnouncementController::class, 'downloadCommunicationAttachment']);
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'index']);
     Route::get('/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'export']);
     Route::post('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'store']);
@@ -327,6 +349,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::post('/requests', [\App\Http\Controllers\Api\RequestController::class, 'store']);
     Route::put('/requests/{id}/status', [\App\Http\Controllers\Api\RequestController::class, 'updateStatus']);
     Route::post('/requests/{id}/upload-response', [\App\Http\Controllers\Api\RequestController::class, 'uploadResponseFile']);
+    Route::get('/requests/{id}/response-file', [\App\Http\Controllers\Api\RequestController::class, 'downloadResponseFile']);
 
     // Staff management
     Route::get('/staff/export', [\App\Http\Controllers\Api\StaffController::class, 'export']);

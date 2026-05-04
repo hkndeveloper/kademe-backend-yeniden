@@ -20,7 +20,11 @@ class CertificateResource extends JsonResource
             'type' => $this->type,
             'verification_code' => $this->verification_code,
             'issued_at' => $this->issued_at,
-            'download_url' => MediaStorage::url($this->certificate_path),
+            'certificate_path' => $this->certificate_path,
+            'file_url' => MediaStorage::directDownloadsEnabled() ? MediaStorage::url($this->certificate_path) : null,
+            'download_url' => $this->certificate_path
+                ? url("/api/certificates/{$this->verification_code}/download")
+                : null,
             'project' => $this->whenLoaded('project', function () {
                 return [
                     'id' => $this->project?->id,

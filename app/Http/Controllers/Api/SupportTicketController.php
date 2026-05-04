@@ -10,12 +10,14 @@ use App\Models\Participant;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SupportTicketController extends Controller
 {
@@ -65,6 +67,75 @@ class SupportTicketController extends Controller
                 }
             })
             ->exists();
+    }
+
+    private function replyPayload(SupportReply $reply): array
+    {
+        return [
+            'id' => $reply->id,
+            'ticket_id' => $reply->ticket_id,
+            'user_id' => $reply->user_id,
+            'message' => $reply->message,
+            'attachment_path' => $reply->attachment_path,
+            'attachment_download_url' => $reply->attachment_path ? "/tickets/replies/{$reply->id}/attachment" : null,
+            'created_at' => optional($reply->created_at)?->toIso8601String(),
+            'updated_at' => optional($reply->updated_at)?->toIso8601String(),
+            'user' => $reply->relationLoaded('user') ? $reply->user : null,
+        ];
+    }
+
+    private function ticketPayload(SupportTicket $ticket): array
+    {
+        return [
+            'id' => $ticket->id,
+            'user_id' => $ticket->user_id,
+            'name' => $ticket->name,
+            'email' => $ticket->email,
+            'subject' => $ticket->subject,
+            'message' => $ticket->message,
+            'category' => $ticket->category,
+            'project_id' => $ticket->project_id,
+            'assigned_to' => $ticket->assigned_to,
+            'status' => $ticket->status,
+            'created_at' => optional($ticket->created_at)?->toIso8601String(),
+            'updated_at' => optional($ticket->updated_at)?->toIso8601String(),
+            'user' => $ticket->relationLoaded('user') ? $ticket->user : null,
+            'project' => $ticket->relationLoaded('project') ? $ticket->project : null,
+            'assignee' => $ticket->relationLoaded('assignee') ? $ticket->assignee : null,
+            'replies' => $ticket->relationLoaded('replies')
+                ? $ticket->replies->map(fn (SupportReply $reply) => $this->replyPayload($reply))->values()
+                : [],
+        ];
+    }
+
+    private function streamReplyAttachment(SupportReply $reply): JsonResponse|StreamedResponse
+    {
+        if (! $reply->attachment_path) {
+            return response()->json(['message' => 'Ek dosya bulunamadi.'], 404);
+        }
+
+        if ($this->isUrl($reply->attachment_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json([
+                'download_url' => MediaStorage::url($reply->attachment_path),
+            ]);
+        }
+
+        if (! MediaStorage::exists($reply->attachment_path)) {
+            return response()->json(['message' => 'Ek dosya storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($reply->attachment_path, PATHINFO_EXTENSION);
+        $filename = 'destek_ek_' . $reply->id;
+
+        return MediaStorage::disk()->download(
+            $reply->attachment_path,
+            $filename . ($extension ? ".{$extension}" : '')
+        );
+    }
+
+    private function isUrl(string $path): bool
+    {
+        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
     private function pickLeastLoadedAssignee(array $candidateIds): ?int
@@ -176,7 +247,9 @@ class SupportTicketController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        return response()->json(['tickets' => $tickets]);
+        return response()->json([
+            'tickets' => $tickets->map(fn (SupportTicket $ticket) => $this->ticketPayload($ticket))->values(),
+        ]);
     }
 
     public function exportMyTickets(Request $request)
@@ -302,6 +375,7 @@ class SupportTicketController extends Controller
     {
         $validated = $request->validate([
             'message' => 'required|string',
+            'attachment' => 'nullable|file|max:10240',
         ]);
 
         $ticket = SupportTicket::findOrFail($id);
@@ -312,17 +386,40 @@ class SupportTicketController extends Controller
             abort_unless($this->canAccessTicket($user, $ticket, 'support.reply'), 403, 'Bu ticket icin yanit yetkiniz yok.');
         }
 
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = MediaStorage::putFile('support-replies', $request->file('attachment'));
+        }
+
         $reply = SupportReply::create([
             'ticket_id' => $ticket->id,
             'user_id' => $request->user()->id,
             'message' => $validated['message'],
+            'attachment_path' => $attachmentPath,
         ]);
 
         if ($ticket->status === 'open') {
             $ticket->update(['status' => 'in_progress']);
         }
 
-        return response()->json(['reply' => $reply->load('user:id,name,surname,role')]);
+        return response()->json(['reply' => $this->replyPayload($reply->load('user:id,name,surname,role'))]);
+    }
+
+    public function downloadReplyAttachment(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $reply = SupportReply::query()
+            ->with('ticket')
+            ->findOrFail($id);
+
+        $ticket = $reply->ticket;
+        $user = $request->user();
+        $canDownload = (int) $ticket->user_id === (int) $user->id
+            || $this->canAccessTicket($user, $ticket, 'support.view')
+            || $this->canAccessTicket($user, $ticket, 'support.reply');
+
+        abort_unless($canDownload, 403, 'Bu ek dosyayi indirme yetkiniz yok.');
+
+        return $this->streamReplyAttachment($reply);
     }
 
     /**
@@ -380,7 +477,9 @@ class SupportTicketController extends Controller
             });
         }
 
-        return response()->json(['tickets' => $query->paginate(20)]);
+        return response()->json([
+            'tickets' => $query->paginate(20)->through(fn (SupportTicket $ticket) => $this->ticketPayload($ticket)),
+        ]);
     }
 
     public function export(Request $request)

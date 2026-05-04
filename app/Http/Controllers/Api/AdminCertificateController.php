@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Certificate;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
@@ -80,7 +81,18 @@ class AdminCertificateController extends Controller
             });
         }
 
-        $certificates = $query->orderByDesc('issued_at')->paginate(20);
+        $certificates = $query->orderByDesc('issued_at')->paginate(20)->through(fn (Certificate $certificate) => [
+            'id' => $certificate->id,
+            'type' => $certificate->type,
+            'verification_code' => $certificate->verification_code,
+            'issued_at' => $certificate->issued_at,
+            'certificate_path' => $certificate->certificate_path,
+            'download_url' => $certificate->certificate_path
+                ? url("/api/certificates/{$certificate->verification_code}/download")
+                : null,
+            'project' => $certificate->project,
+            'user' => $certificate->user,
+        ]);
 
         return response()->json([
             'certificates' => $certificates,
@@ -153,6 +165,7 @@ class AdminCertificateController extends Controller
             'type' => ['required', 'string', Rule::in(self::CERTIFICATE_TYPES)],
             'certificate_path' => 'nullable|string|max:2048',
             'file_path' => 'nullable|string|max:2048',
+            'certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:20480',
         ]);
 
         abort_unless(
@@ -170,6 +183,11 @@ class AdminCertificateController extends Controller
             return response()->json(['message' => 'Bu kullanıcıya bu projeden zaten bu türde bir sertifika verilmiş.'], 400);
         }
 
+        $certificatePath = $validated['certificate_path'] ?? $validated['file_path'] ?? null;
+        if ($request->hasFile('certificate_file')) {
+            $certificatePath = MediaStorage::putFile('certificates', $request->file('certificate_file'));
+        }
+
         $certificate = Certificate::create([
             'user_id' => $validated['user_id'],
             'project_id' => $validated['project_id'],
@@ -177,7 +195,8 @@ class AdminCertificateController extends Controller
             'type' => $validated['type'],
             'verification_code' => strtoupper(Str::random(10)),
             'issued_at' => now(),
-            'certificate_path' => $validated['certificate_path'] ?? $validated['file_path'] ?? null,
+            'certificate_path' => $certificatePath,
+            'created_by' => $request->user()->id,
         ]);
 
         return response()->json([
@@ -201,6 +220,7 @@ class AdminCertificateController extends Controller
             'Bu sertifikayi silme yetkiniz yok.',
         );
 
+        MediaStorage::delete($certificate->certificate_path);
         $certificate->delete();
 
         return response()->json(['message' => 'Sertifika başarıyla iptal edildi/silindi.']);
