@@ -9,9 +9,12 @@ use App\Models\Participant;
 use App\Models\Project;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminApplicationController extends Controller
 {
@@ -52,6 +55,59 @@ class AdminApplicationController extends Controller
                 'status' => ['Bu basvuru akisi icin secilen durum gecislerine izin verilmiyor.'],
             ]);
         }
+    }
+
+    private function isUrl(string $path): bool
+    {
+        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
+    }
+
+    private function formEntries(Application $application): array
+    {
+        $fields = collect($application->form?->fields ?? [])
+            ->mapWithKeys(function (array $field) {
+                $id = $field['id'] ?? $field['key'] ?? null;
+
+                return $id ? [$id => $field] : [];
+            });
+
+        return collect($application->form_data ?? [])
+            ->map(function (mixed $value, string $key) use ($fields, $application) {
+                $field = $fields->get($key, []);
+                $type = $field['type'] ?? (is_array($value) && isset($value['path']) ? 'file' : 'text');
+                $isFile = is_array($value) && isset($value['path']);
+
+                return [
+                    'id' => $key,
+                    'label' => $field['label'] ?? $key,
+                    'type' => $type,
+                    'value' => $isFile ? null : $value,
+                    'file' => $isFile ? [
+                        'original_name' => $value['original_name'] ?? basename((string) $value['path']),
+                        'mime_type' => $value['mime_type'] ?? null,
+                        'size' => $value['size'] ?? null,
+                        'download_url' => "/panel/applications/{$application->id}/form-files/" . rawurlencode($key),
+                    ] : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function formatApplication(Application $application): array
+    {
+        return [
+            'id' => $application->id,
+            'user' => $application->user,
+            'period' => $application->period,
+            'project' => $application->project,
+            'status' => $application->status,
+            'created_at' => optional($application->created_at)?->toISOString(),
+            'interview_at' => optional($application->interview_at)?->toISOString(),
+            'evaluation_note' => $application->evaluation_note,
+            'rejection_reason' => $application->rejection_reason,
+            'form_entries' => $this->formEntries($application),
+        ];
     }
 
     public function export(Request $request)
@@ -220,7 +276,7 @@ class AdminApplicationController extends Controller
 
         $query = Application::query()
             ->whereIn('project_id', $ids)
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview']);
+            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview', 'form:id,fields']);
 
         if (! empty($validated['project_id'])) {
             abort_unless(in_array((int) $validated['project_id'], $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
@@ -248,12 +304,46 @@ class AdminApplicationController extends Controller
             });
         }
 
-        return response()->json([
-            'applications' => $query
+        $applications = $query
                 ->orderByDesc('created_at')
                 ->paginate($validated['per_page'] ?? 20)
-                ->withQueryString(),
+                ->withQueryString();
+
+        $applications->getCollection()->transform(fn (Application $application) => $this->formatApplication($application));
+
+        return response()->json([
+            'applications' => $applications,
         ]);
+    }
+
+    public function downloadFormFile(Request $request, int $id, string $field): JsonResponse|StreamedResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.view');
+
+        $application = Application::query()->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.view', (int) $application->project_id),
+            403,
+            'Bu basvuru icin yetkiniz bulunmuyor.'
+        );
+
+        $fieldKey = rawurldecode($field);
+        $value = ($application->form_data ?? [])[$fieldKey] ?? null;
+
+        abort_unless(is_array($value) && ! empty($value['path']), 404, 'Basvuru dosyasi bulunamadi.');
+
+        $path = (string) $value['path'];
+        if ($this->isUrl($path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json(['download_url' => MediaStorage::url($path)]);
+        }
+
+        if (! MediaStorage::exists($path)) {
+            return response()->json(['message' => 'Basvuru dosyasi depolamada bulunamadi.'], 404);
+        }
+
+        $filename = $value['original_name'] ?? ('basvuru_dosyasi_' . $application->id);
+
+        return MediaStorage::disk()->download($path, $filename);
     }
 
     /**

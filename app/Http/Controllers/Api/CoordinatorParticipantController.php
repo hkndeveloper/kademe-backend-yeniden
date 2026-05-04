@@ -30,9 +30,38 @@ class CoordinatorParticipantController extends Controller
         return MediaStorage::url($path);
     }
 
+    /** @return int[] */
+    private function projectIdsForAnyPermission(Request $request, array $permissions): array
+    {
+        return collect($permissions)
+            ->filter(fn (string $permission) => $this->permissionResolver->hasPermission($request->user(), $permission))
+            ->flatMap(fn (string $permission) => $this->permissionResolver->projectIdsForPermission($request->user(), $permission))
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function canAccessProjectWithAnyPermission(Request $request, array $permissions, int $projectId): bool
+    {
+        foreach ($permissions as $permission) {
+            if ($this->permissionResolver->canAccessProject($request->user(), $permission, $projectId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'projects.participants.view');
+        $viewPermissions = [
+            'projects.participants.view',
+            'projects.alumni.view',
+            'projects.student_cv.view',
+        ];
+        $this->abortUnlessAnyPermission($request, $viewPermissions);
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'status' => 'nullable|string|max:50',
@@ -40,7 +69,9 @@ class CoordinatorParticipantController extends Controller
             'search' => 'nullable|string|max:255',
         ]);
         $coordinator = $request->user();
-        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.participants.view');
+        $manageableProjectIds = $this->projectIdsForAnyPermission($request, $viewPermissions);
+        $canViewParticipants = $this->permissionResolver->hasPermission($coordinator, 'projects.participants.view');
+        $canViewAlumni = $this->permissionResolver->hasPermission($coordinator, 'projects.alumni.view');
         $canViewCv = $this->permissionResolver->hasPermission($coordinator, 'projects.student_cv.view');
 
         $query = Participant::with([
@@ -51,16 +82,36 @@ class CoordinatorParticipantController extends Controller
         ])->whereIn('project_id', $manageableProjectIds);
 
         if (! empty($validated['project_id'])) {
-            $this->abortUnlessProjectAllowed($request, 'projects.participants.view', (int) $validated['project_id']);
+            abort_unless(
+                $this->canAccessProjectWithAnyPermission($request, $viewPermissions, (int) $validated['project_id']),
+                403,
+                'Bu proje icin yetkiniz bulunmuyor.'
+            );
             $query->where('project_id', (int) $validated['project_id']);
         }
 
-        if (! empty($validated['status'])) {
+        if (! empty($validated['status']) && in_array($validated['status'], ['graduated', 'completed'], true)) {
+            $validated['graduation_status'] = $validated['status'];
+        } elseif (! empty($validated['status'])) {
             $query->where('status', $validated['status']);
         }
 
         if (! empty($validated['graduation_status'])) {
             $query->where('graduation_status', $validated['graduation_status']);
+        }
+
+        if (! $canViewParticipants && $canViewAlumni) {
+            $query->where(function ($builder) {
+                $builder
+                    ->where('graduation_status', 'graduated')
+                    ->orWhereNotNull('graduated_at');
+            });
+        }
+
+        if (! $canViewParticipants && ! $canViewAlumni && $canViewCv) {
+            $query->whereHas('user.profile', function ($builder) {
+                $builder->whereNotNull('digital_cv_data');
+            });
         }
 
         if (! empty($validated['search'])) {
@@ -93,8 +144,16 @@ class CoordinatorParticipantController extends Controller
                     ? round($participants->avg('credit') ?? 0, 1)
                     : 0,
             ],
-            'participants' => $participants->map(function ($participant) use ($coordinator, $canViewCv) {
+            'participants' => $participants->map(function ($participant) use ($coordinator, $canViewCv, $canViewParticipants, $canViewAlumni) {
                 $user = $participant->user;
+                $profileAllowed = (
+                    $canViewParticipants
+                    && $this->permissionResolver->canAccessProject($coordinator, 'projects.participants.view', (int) $participant->project_id)
+                ) || (
+                    $canViewAlumni
+                    && $this->permissionResolver->canAccessProject($coordinator, 'projects.alumni.view', (int) $participant->project_id)
+                    && (! is_null($participant->graduated_at) || $participant->graduation_status === 'graduated')
+                );
                 $cvAllowed = $canViewCv
                     && $this->permissionResolver->canAccessProject($coordinator, 'projects.student_cv.view', (int) $participant->project_id);
 
@@ -118,8 +177,8 @@ class CoordinatorParticipantController extends Controller
                         'id' => $user?->id,
                         'name' => $user?->name,
                         'surname' => $user?->surname,
-                        'email' => $user?->email,
-                        'phone' => $user?->phone,
+                        'email' => $profileAllowed ? $user?->email : null,
+                        'phone' => $profileAllowed ? $user?->phone : null,
                         'university' => $user?->university,
                         'department' => $user?->department,
                         'class_year' => $user?->class_year,
@@ -143,6 +202,7 @@ class CoordinatorParticipantController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'status' => 'nullable|string|max:50',
+            'graduation_status' => 'nullable|string|max:50',
             'search' => 'nullable|string|max:255',
             'format' => 'nullable|string|max:20',
         ]);
@@ -160,8 +220,14 @@ class CoordinatorParticipantController extends Controller
             $query->where('project_id', (int) $validated['project_id']);
         }
 
-        if (! empty($validated['status'])) {
+        if (! empty($validated['status']) && in_array($validated['status'], ['graduated', 'completed'], true)) {
+            $validated['graduation_status'] = $validated['status'];
+        } elseif (! empty($validated['status'])) {
             $query->where('status', $validated['status']);
+        }
+
+        if (! empty($validated['graduation_status'])) {
+            $query->where('graduation_status', $validated['graduation_status']);
         }
 
         if (! empty($validated['search'])) {

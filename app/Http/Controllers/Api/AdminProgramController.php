@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\CreditLog;
 use App\Models\Feedback;
+use App\Models\Participant;
 use App\Models\Program;
 use App\Models\Project;
 use App\Support\AdminExportResponder;
@@ -15,6 +16,7 @@ use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -225,11 +227,57 @@ class AdminProgramController extends Controller
         $program = Program::with('project')->findOrFail($id);
         $this->abortIfUnauthorized($request->user(), $program->project, 'programs.complete');
 
-        $program->update([
-            'status' => 'completed',
-            'qr_token' => null,
-            'qr_expires_at' => null,
-        ]);
+        $creditDeduction = max((int) ($program->credit_deduction ?? 0), 0);
+        $deductedCount = 0;
+
+        DB::transaction(function () use ($program, $request, $creditDeduction, &$deductedCount) {
+            $program->update([
+                'status' => 'completed',
+                'qr_token' => null,
+                'qr_expires_at' => null,
+            ]);
+
+            if ($creditDeduction === 0) {
+                return;
+            }
+
+            $participants = Participant::query()
+                ->where('project_id', $program->project_id)
+                ->where('status', 'active')
+                ->when(
+                    $program->period_id,
+                    fn ($query) => $query->where('period_id', $program->period_id),
+                    fn ($query) => $query->whereNull('period_id')
+                )
+                ->get();
+
+            foreach ($participants as $participant) {
+                $alreadyDeducted = CreditLog::query()
+                    ->where('participant_id', $participant->id)
+                    ->where('program_id', $program->id)
+                    ->where('type', 'deduction')
+                    ->exists();
+
+                if ($alreadyDeducted) {
+                    continue;
+                }
+
+                CreditLog::create([
+                    'participant_id' => $participant->id,
+                    'user_id' => $participant->user_id,
+                    'project_id' => $program->project_id,
+                    'period_id' => $program->period_id,
+                    'program_id' => $program->id,
+                    'amount' => -$creditDeduction,
+                    'type' => 'deduction',
+                    'reason' => 'Etkinlik tamamlandi, degerlendirme bekleniyor',
+                    'created_by' => $request->user()->id,
+                ]);
+
+                $participant->decrement('credit', $creditDeduction);
+                $deductedCount++;
+            }
+        });
 
         try {
             $googleCalendar->syncProgram($program->fresh(['project:id,name', 'period:id,name']));
@@ -242,6 +290,7 @@ class AdminProgramController extends Controller
 
         return response()->json([
             'message' => 'Etkinlik ve yoklama alimi basariyla sonlandirildi.',
+            'deducted_participant_count' => $deductedCount,
         ]);
     }
 
@@ -256,20 +305,39 @@ class AdminProgramController extends Controller
             ->where('program_id', $program->id)
             ->orderByDesc('created_at')
             ->get();
+        $participants = Participant::query()
+            ->with('user:id,name,surname,email')
+            ->where('project_id', $program->project_id)
+            ->when(
+                $program->period_id,
+                fn ($query) => $query->where('period_id', $program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get();
+        $attendanceByUserId = $attendances->keyBy('user_id');
 
-        $feedbackByUserId = [];
+        $restoredUserIds = CreditLog::query()
+            ->where('program_id', $program->id)
+            ->where('type', 'restore')
+            ->pluck('user_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+        $deductedUserIds = CreditLog::query()
+            ->where('program_id', $program->id)
+            ->where('type', 'deduction')
+            ->pluck('user_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
         $feedbackCount = Feedback::query()->where('program_id', $program->id)->count();
-        if ($feedbackCount > 0) {
-            $participantIds = $attendances->pluck('user_id')->filter()->values()->all();
-            if ($participantIds !== []) {
-                $logs = CreditLog::query()
-                    ->where('program_id', $program->id)
-                    ->where('type', 'restore')
-                    ->whereIn('user_id', $participantIds)
-                    ->get();
-                $feedbackByUserId = $logs->groupBy('user_id')->map(fn ($group) => $group->count())->all();
-            }
-        }
 
         return response()->json([
             'program' => [
@@ -282,20 +350,33 @@ class AdminProgramController extends Controller
             ],
             'summary' => [
                 'attendance_count' => $attendances->count(),
+                'participant_count' => $participants->count(),
+                'absent_count' => max($participants->count() - $attendances->where('is_valid', true)->count(), 0),
                 'feedback_count' => $feedbackCount,
+                'deduction_count' => count($deductedUserIds),
+                'restore_count' => count($restoredUserIds),
             ],
-            'records' => $attendances->map(function (Attendance $attendance) use ($feedbackByUserId) {
-                $uid = (int) $attendance->user_id;
+            'records' => $participants->map(function (Participant $participant) use ($attendanceByUserId, $restoredUserIds, $deductedUserIds) {
+                $uid = (int) $participant->user_id;
+                $attendance = $attendanceByUserId->get($uid);
+                $isValid = (bool) ($attendance?->is_valid ?? false);
+                $creditDeducted = in_array($uid, $deductedUserIds, true);
+                $creditRestored = in_array($uid, $restoredUserIds, true);
+
                 return [
-                    'id' => $attendance->id,
-                    'student' => $attendance->user ? trim($attendance->user->name . ' ' . $attendance->user->surname) : 'Silinmis kullanici',
-                    'email' => $attendance->user?->email,
-                    'method' => $attendance->method,
-                    'is_valid' => (bool) $attendance->is_valid,
-                    'latitude' => $attendance->latitude,
-                    'longitude' => $attendance->longitude,
-                    'feedback_submitted' => ($feedbackByUserId[$uid] ?? 0) > 0,
-                    'recorded_at' => optional($attendance->created_at)?->toIso8601String(),
+                    'id' => $attendance?->id,
+                    'participant_id' => $participant->id,
+                    'student' => $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
+                    'email' => $participant->user?->email,
+                    'method' => $attendance?->method,
+                    'is_valid' => $isValid,
+                    'attendance_status' => $isValid ? 'present' : 'absent',
+                    'latitude' => $attendance?->latitude,
+                    'longitude' => $attendance?->longitude,
+                    'feedback_submitted' => $creditRestored,
+                    'credit_deducted' => $creditDeducted,
+                    'credit_restored' => $creditRestored,
+                    'recorded_at' => optional($attendance?->created_at)?->toIso8601String(),
                 ];
             })->values(),
         ]);
@@ -312,8 +393,20 @@ class AdminProgramController extends Controller
             ->where('program_id', $program->id)
             ->orderByDesc('created_at')
             ->get();
+        $participants = Participant::query()
+            ->with('user:id,name,surname,email')
+            ->where('project_id', $program->project_id)
+            ->when(
+                $program->period_id,
+                fn ($query) => $query->where('period_id', $program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get();
+        $attendanceByUserId = $attendances->keyBy('user_id');
 
-        $feedbackUserIds = CreditLog::query()
+        $restoredUserIds = CreditLog::query()
             ->where('program_id', $program->id)
             ->where('type', 'restore')
             ->pluck('user_id')
@@ -321,19 +414,34 @@ class AdminProgramController extends Controller
             ->unique()
             ->values()
             ->all();
+        $deductedUserIds = CreditLog::query()
+            ->where('program_id', $program->id)
+            ->where('type', 'deduction')
+            ->pluck('user_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
 
-        $headings = ['Yoklama ID', 'Ogrenci', 'E-posta', 'Yontem', 'Konum Dogrulamasi', 'Feedback', 'Enlem', 'Boylam', 'Kayit Zamani'];
-        $rows = $attendances->map(function (Attendance $attendance) use ($feedbackUserIds) {
+        $headings = ['Yoklama ID', 'Ogrenci', 'E-posta', 'Durum', 'Yontem', 'Konum Dogrulamasi', 'Feedback', 'Kredi Kesildi', 'Kredi Iade', 'Enlem', 'Boylam', 'Kayit Zamani'];
+        $rows = $participants->map(function (Participant $participant) use ($attendanceByUserId, $restoredUserIds, $deductedUserIds) {
+            $uid = (int) $participant->user_id;
+            $attendance = $attendanceByUserId->get($uid);
+
             return [
-                $attendance->id,
-                $attendance->user ? trim($attendance->user->name . ' ' . $attendance->user->surname) : 'Silinmis kullanici',
-                $attendance->user?->email ?? '-',
-                $attendance->method,
-                $attendance->is_valid ? 'dogrulandi' : 'alan disi',
-                in_array((int) $attendance->user_id, $feedbackUserIds, true) ? 'gonderildi' : 'bekliyor',
-                $attendance->latitude ?? '-',
-                $attendance->longitude ?? '-',
-                optional($attendance->created_at)?->format('d.m.Y H:i:s') ?? '-',
+                $attendance?->id ?? '-',
+                $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
+                $participant->user?->email ?? '-',
+                $attendance?->is_valid ? 'geldi' : 'gelmedi',
+                $attendance?->method ?? '-',
+                $attendance ? ($attendance->is_valid ? 'dogrulandi' : 'alan disi') : '-',
+                in_array($uid, $restoredUserIds, true) ? 'gonderildi' : 'bekliyor',
+                in_array($uid, $deductedUserIds, true) ? 'evet' : 'hayir',
+                in_array($uid, $restoredUserIds, true) ? 'evet' : 'hayir',
+                $attendance?->latitude ?? '-',
+                $attendance?->longitude ?? '-',
+                optional($attendance?->created_at)?->format('d.m.Y H:i:s') ?? '-',
             ];
         })->all();
 

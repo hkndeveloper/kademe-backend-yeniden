@@ -4,11 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
-use App\Models\CreditLog;
 use App\Models\Participant;
 use App\Models\Program;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class AttendanceController extends Controller
@@ -89,46 +87,19 @@ class AttendanceController extends Controller
             }
         }
 
-        DB::beginTransaction();
+        Attendance::create([
+            'program_id' => $program->id,
+            'user_id' => $user->id,
+            'method' => 'qr',
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'is_valid' => true,
+        ]);
 
-        try {
-            Attendance::create([
-                'program_id' => $program->id,
-                'user_id' => $user->id,
-                'method' => 'qr',
-                'latitude' => $latitude,
-                'longitude' => $longitude,
-                'is_valid' => true,
-            ]);
-
-            $creditDeduction = max((int) ($program->credit_deduction ?? 10), 0);
-
-            CreditLog::create([
-                'participant_id' => $participant->id,
-                'user_id' => $user->id,
-                'project_id' => $program->project_id,
-                'period_id' => $program->period_id,
-                'program_id' => $program->id,
-                'amount' => -$creditDeduction,
-                'type' => 'deduction',
-                'reason' => 'Oturum yoklamasi alindi, degerlendirme bekleniyor',
-            ]);
-
-            if ($creditDeduction > 0) {
-                $participant->decrement('credit', $creditDeduction);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'Yoklamaniz basariyla alindi.',
-                'current_credit' => $participant->credit,
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json(['message' => 'Yoklama alinirken bir hata olustu.'], 500);
-        }
+        return response()->json([
+            'message' => 'Yoklamaniz basariyla alindi. Etkinlik tamamlandiktan sonra degerlendirme formu acilacaktir.',
+            'current_credit' => $participant->credit,
+        ]);
     }
 
     /**

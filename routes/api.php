@@ -123,6 +123,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     // BaÅŸvurularÄ± YÃ¶net
     Route::get('/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'index']);
     Route::get('/applications/export', [\App\Http\Controllers\Api\AdminApplicationController::class, 'export']);
+    Route::get('/applications/{id}/form-files/{field}', [\App\Http\Controllers\Api\AdminApplicationController::class, 'downloadFormFile']);
     Route::put('/applications/{id}/status', [\App\Http\Controllers\Api\AdminApplicationController::class, 'updateStatus']);
     Route::put('/applications/{id}/interview', [\App\Http\Controllers\Api\AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [\App\Http\Controllers\Api\AdminApplicationController::class, 'addToWaitlist']);
@@ -147,6 +148,20 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::delete('/certificates/{id}', [\App\Http\Controllers\Api\AdminCertificateController::class, 'destroy']);
     Route::get('/projects/manageable', [\App\Http\Controllers\Api\ProjectContentController::class, 'manageable']);
     Route::get('/projects/export', [\App\Http\Controllers\Api\ProjectContentController::class, 'exportManageable']);
+    Route::get('/projects/{id}/modules', [\App\Http\Controllers\Api\ProjectContentController::class, 'modules']);
+    Route::get('/projects/{id}/special-modules', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'index']);
+    Route::post('/projects/{id}/special-modules/internships', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeInternship']);
+    Route::put('/projects/{id}/special-modules/internships/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateInternship']);
+    Route::delete('/projects/{id}/special-modules/internships/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyInternship']);
+    Route::post('/projects/{id}/special-modules/mentors', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeMentor']);
+    Route::put('/projects/{id}/special-modules/mentors/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateMentor']);
+    Route::delete('/projects/{id}/special-modules/mentors/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyMentor']);
+    Route::post('/projects/{id}/special-modules/eurodesk-projects', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeEurodeskProject']);
+    Route::put('/projects/{id}/special-modules/eurodesk-projects/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateEurodeskProject']);
+    Route::delete('/projects/{id}/special-modules/eurodesk-projects/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyEurodeskProject']);
+    Route::post('/projects/{id}/special-modules/reward-tiers', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeRewardTier']);
+    Route::put('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateRewardTier']);
+    Route::delete('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyRewardTier']);
     Route::get('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'update']);
     Route::get('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'applicationForm']);
@@ -256,6 +271,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 
     Route::get('/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'index']);
     Route::get('/applications/export', [\App\Http\Controllers\Api\AdminApplicationController::class, 'export']);
+    Route::get('/applications/{id}/form-files/{field}', [\App\Http\Controllers\Api\AdminApplicationController::class, 'downloadFormFile']);
     Route::put('/applications/{id}/status', [\App\Http\Controllers\Api\AdminApplicationController::class, 'updateStatus']);
     Route::put('/applications/{id}/interview', [\App\Http\Controllers\Api\AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [\App\Http\Controllers\Api\AdminApplicationController::class, 'addToWaitlist']);
@@ -272,6 +288,20 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 
     Route::get('/projects/manageable', [\App\Http\Controllers\Api\ProjectContentController::class, 'manageable']);
     Route::get('/projects/export', [\App\Http\Controllers\Api\ProjectContentController::class, 'exportManageable']);
+    Route::get('/projects/{id}/modules', [\App\Http\Controllers\Api\ProjectContentController::class, 'modules']);
+    Route::get('/projects/{id}/special-modules', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'index']);
+    Route::post('/projects/{id}/special-modules/internships', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeInternship']);
+    Route::put('/projects/{id}/special-modules/internships/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateInternship']);
+    Route::delete('/projects/{id}/special-modules/internships/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyInternship']);
+    Route::post('/projects/{id}/special-modules/mentors', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeMentor']);
+    Route::put('/projects/{id}/special-modules/mentors/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateMentor']);
+    Route::delete('/projects/{id}/special-modules/mentors/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyMentor']);
+    Route::post('/projects/{id}/special-modules/eurodesk-projects', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeEurodeskProject']);
+    Route::put('/projects/{id}/special-modules/eurodesk-projects/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateEurodeskProject']);
+    Route::delete('/projects/{id}/special-modules/eurodesk-projects/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyEurodeskProject']);
+    Route::post('/projects/{id}/special-modules/reward-tiers', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeRewardTier']);
+    Route::put('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateRewardTier']);
+    Route::delete('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyRewardTier']);
     Route::get('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'update']);
     Route::get('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'applicationForm']);

@@ -34,7 +34,14 @@ class MediaUploadController extends Controller
             }
         }
 
-        foreach (['projects.content.update', 'projects.gallery.update'] as $permission) {
+        foreach ([
+            'projects.content.update',
+            'projects.gallery.update',
+            'projects.internships.manage',
+            'projects.mentors.manage',
+            'projects.eurodesk.manage',
+            'projects.rewards.manage',
+        ] as $permission) {
             if ($this->permissionResolver->projectIdsForPermission($user, $permission) !== []) {
                 return true;
             }
@@ -48,7 +55,7 @@ class MediaUploadController extends Controller
         abort_unless($this->canUpload($request), 403, 'Bu islem icin yetkiniz bulunmuyor.');
 
         $validated = $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,webp|max:5120',
+            'file' => 'required|file|mimes:jpg,jpeg,png,webp,pdf,doc,docx|max:20480',
             'folder' => 'nullable|string|max:100',
         ]);
 
