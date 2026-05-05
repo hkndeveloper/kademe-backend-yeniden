@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Participant;
 use App\Models\Project;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
@@ -21,8 +22,25 @@ class AdminApplicationController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
+    }
+
+    private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): void
+    {
+        $email = $application->user?->email;
+        if (! $email) {
+            return;
+        }
+
+        $this->notificationService->sendEmail(
+            [$email],
+            $subject,
+            $body,
+            $application->project_id,
+            $senderId
+        );
     }
 
     /** @return int[] */
@@ -409,6 +427,14 @@ class AdminApplicationController extends Controller
 
             DB::commit();
 
+            $application->loadMissing(['user:id,email', 'project:id,name']);
+            $this->notifyApplicationUser(
+                $application,
+                'Basvuru durumunuz guncellendi',
+                "Proje: " . ($application->project?->name ?? '-') . "\nYeni durum: {$application->status}",
+                $request->user()->id
+            );
+
             return response()->json([
                 'message' => 'Başvuru durumu başarıyla güncellendi.',
                 'application' => $application,
@@ -455,6 +481,14 @@ class AdminApplicationController extends Controller
             'interview_at' => $validated['interview_at'],
         ]);
 
+        $application->loadMissing(['user:id,email', 'project:id,name']);
+        $this->notifyApplicationUser(
+            $application,
+            'Mulakat planlandi',
+            "Proje: " . ($application->project?->name ?? '-') . "\nMulakat tarihi: {$validated['interview_at']}",
+            $request->user()->id
+        );
+
         return response()->json([
             'message' => 'Mülakat tarihi başarıyla planlandı.',
             'application' => $application,
@@ -486,6 +520,14 @@ class AdminApplicationController extends Controller
             'status' => 'waitlisted',
             'evaluation_note' => $request->evaluation_note ?? $application->evaluation_note,
         ]);
+
+        $application->loadMissing(['user:id,email', 'project:id,name']);
+        $this->notifyApplicationUser(
+            $application,
+            'Basvurunuz yedek listeye alindi',
+            "Proje: " . ($application->project?->name ?? '-') . "\nDurum: yedek listede.",
+            $request->user()->id
+        );
 
         return response()->json([
             'message' => 'Başvuru yedeğe alındı.',

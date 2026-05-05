@@ -9,6 +9,7 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
@@ -18,6 +19,11 @@ use App\Support\MediaStorage;
 
 class ApplicationController extends Controller
 {
+    public function __construct(
+        private readonly NotificationService $notificationService
+    ) {
+    }
+
     private function resolveApplicantUser(array $applicant): User
     {
         $email = Str::lower(trim($applicant['email']));
@@ -101,7 +107,7 @@ class ApplicationController extends Controller
 
         $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
 
-        return Application::create([
+        $application = Application::create([
             'user_id' => $user->id,
             'project_id' => $project->id,
             'period_id' => $currentPeriod->id,
@@ -109,6 +115,33 @@ class ApplicationController extends Controller
             'form_data' => $normalizedFormData,
             'status' => 'pending',
         ]);
+
+        $this->notificationService->sendEmail(
+            array_filter([$user->email]),
+            'Basvurunuz alindi',
+            "Proje: {$project->name}\nBasvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz.",
+            $project->id,
+            $user->id
+        );
+
+        $project->loadMissing('coordinators:id,email,name,surname');
+        $coordinatorEmails = $project->coordinators
+            ->pluck('email')
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($coordinatorEmails !== []) {
+            $this->notificationService->sendEmail(
+                $coordinatorEmails,
+                'Yeni basvuru alindi',
+                "Proje: {$project->name}\nYeni bir basvuru sisteme dustu. Basvuru ID: {$application->id}",
+                $project->id,
+                $user->id
+            );
+        }
+
+        return $application;
     }
 
     /**

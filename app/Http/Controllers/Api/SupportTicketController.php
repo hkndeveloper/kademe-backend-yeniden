@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -24,8 +25,44 @@ class SupportTicketController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
+    }
+
+    private function notifyTicketAssignee(SupportTicket $ticket): void
+    {
+        if (! $ticket->assigned_to) {
+            return;
+        }
+        $assignee = User::query()->find($ticket->assigned_to);
+        if (! $assignee?->email) {
+            return;
+        }
+
+        $this->notificationService->sendEmail(
+            [$assignee->email],
+            'Yeni destek talebi atandi',
+            "Konu: {$ticket->subject}\nDurum: {$ticket->status}\nLutfen panelden inceleyin.",
+            $ticket->project_id,
+            $ticket->user_id ?: null
+        );
+    }
+
+    private function notifyTicketOwner(SupportTicket $ticket, string $subject, string $body): void
+    {
+        $ownerEmail = $ticket->user?->email ?? $ticket->email;
+        if (! $ownerEmail) {
+            return;
+        }
+
+        $this->notificationService->sendEmail(
+            [$ownerEmail],
+            $subject,
+            $body,
+            $ticket->project_id,
+            $ticket->assigned_to ?: null
+        );
     }
 
     private function canAccessTicket(User $user, SupportTicket $ticket, string $permission): bool
@@ -328,6 +365,13 @@ class SupportTicketController extends Controller
             'status' => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
 
+        $this->notifyTicketAssignee($ticket);
+        $this->notifyTicketOwner(
+            $ticket->fresh(['user:id,email']),
+            'Destek talebiniz alindi',
+            "Konu: {$ticket->subject}\nTalebiniz sisteme kaydedildi. Durum: {$ticket->status}."
+        );
+
         return response()->json([
             'message' => 'Destek talebiniz basariyla alindi.',
             'ticket' => $ticket->fresh(['project:id,name']),
@@ -361,6 +405,13 @@ class SupportTicketController extends Controller
             'message' => $validated['message'],
             'status' => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
+
+        $this->notifyTicketAssignee($ticket);
+        $this->notifyTicketOwner(
+            $ticket,
+            'Mesajiniz alindi',
+            "Konu: {$ticket->subject}\nMesajiniz sisteme kaydedildi. En kisa surede geri donulecektir."
+        );
 
         return response()->json([
             'message' => 'Mesajiniz basariyla alindi. En kisa surede sizinle iletisime gececegiz.',
@@ -400,6 +451,26 @@ class SupportTicketController extends Controller
 
         if ($ticket->status === 'open') {
             $ticket->update(['status' => 'in_progress']);
+        }
+
+        $ticket->loadMissing('user:id,email');
+        if ((int) $ticket->user_id === (int) $user->id) {
+            $assignee = $ticket->assignee ?? User::query()->find($ticket->assigned_to);
+            if ($assignee?->email) {
+                $this->notificationService->sendEmail(
+                    [$assignee->email],
+                    'Destek talebine yeni yanit var',
+                    "Konu: {$ticket->subject}\nTalep sahibi yeni bir yanit ekledi.",
+                    $ticket->project_id,
+                    $user->id
+                );
+            }
+        } else {
+            $this->notifyTicketOwner(
+                $ticket,
+                'Destek talebinize yanit verildi',
+                "Konu: {$ticket->subject}\nTalebinize yeni bir yanit eklendi. Panelden goruntuleyebilirsiniz."
+            );
         }
 
         return response()->json(['reply' => $this->replyPayload($reply->load('user:id,name,surname,role'))]);
@@ -636,6 +707,21 @@ class SupportTicketController extends Controller
             'status' => 'in_progress',
         ]);
 
+        $this->notificationService->sendEmail(
+            array_filter([$assignee->email]),
+            'Destek talebi size atandi',
+            "Konu: {$ticket->subject}\nDestek talebi tarafiniza atandi. Lutfen panelden takip edin.",
+            $ticket->project_id,
+            $request->user()->id
+        );
+
+        $ticket->loadMissing('user:id,email');
+        $this->notifyTicketOwner(
+            $ticket,
+            'Destek talebiniz isleme alindi',
+            "Konu: {$ticket->subject}\nTalebiniz bir yetkiliye atandi ve isleme alindi."
+        );
+
         return response()->json([
             'message' => 'Ticket atandi.',
             'ticket' => $ticket->fresh('assignee:id,name,surname'),
@@ -652,6 +738,13 @@ class SupportTicketController extends Controller
         abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.close'), 403, 'Bu ticketi kapatma yetkiniz yok.');
 
         $ticket->update(['status' => 'closed']);
+
+        $ticket->loadMissing('user:id,email');
+        $this->notifyTicketOwner(
+            $ticket,
+            'Destek talebiniz kapatildi',
+            "Konu: {$ticket->subject}\nDestek talebiniz tamamlandi ve kapatildi."
+        );
 
         return response()->json([
             'message' => 'Ticket kapatildi.',

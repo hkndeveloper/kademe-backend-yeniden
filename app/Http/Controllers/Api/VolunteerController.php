@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\VolunteerOpportunityResource;
 use App\Models\VolunteerApplication;
 use App\Models\VolunteerOpportunity;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,8 @@ class VolunteerController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -118,6 +120,15 @@ class VolunteerController extends Controller
             'status' => 'pending',
         ]);
 
+        $request->user()->loadMissing('email');
+        $this->notificationService->sendEmail(
+            array_filter([$request->user()->email]),
+            'Gonullu basvurunuz alindi',
+            "Ilan: {$opportunity->title}\nBasvurunuz alinmistir. Degerlendirme sonrasi bilgilendirileceksiniz.",
+            $opportunity->project_id,
+            $request->user()->id
+        );
+
         return response()->json([
             'message' => 'Gonullu basvurun alindi.',
             'application' => [
@@ -216,6 +227,15 @@ class VolunteerController extends Controller
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $application->opportunity->project_id);
 
         $application->update($validated);
+
+        $application->loadMissing(['user:id,email,name', 'opportunity:id,title,project_id']);
+        $this->notificationService->sendEmail(
+            array_filter([$application->user?->email]),
+            'Gonullu basvuru durumunuz guncellendi',
+            "Ilan: {$application->opportunity?->title}\nYeni durum: {$application->status}",
+            $application->opportunity?->project_id,
+            $request->user()->id
+        );
 
         return response()->json([
             'message' => 'Gonullu basvurusu guncellendi.',

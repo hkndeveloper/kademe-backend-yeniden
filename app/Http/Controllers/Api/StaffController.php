@@ -10,6 +10,7 @@ use App\Models\StaffProfile;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,8 +20,43 @@ class StaffController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
+    }
+
+    private function notifyLeaveApprovers(LeaveRequest $leaveRequest): void
+    {
+        $leaveRequest->loadMissing('user.staffProfile');
+        $unit = $leaveRequest->user?->staffProfile?->unit;
+
+        $emails = User::query()
+            ->where('status', 'active')
+            ->where(function ($query) use ($unit) {
+                $query->where('role', 'super_admin');
+                if ($unit) {
+                    $query->orWhere(function ($inner) use ($unit) {
+                        $inner->where('role', 'coordinator')
+                            ->whereHas('staffProfile', fn ($builder) => $builder->where('unit', $unit));
+                    });
+                }
+            })
+            ->pluck('email')
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($emails === []) {
+            return;
+        }
+
+        $this->notificationService->sendEmail(
+            $emails,
+            'Yeni izin talebi',
+            "Personel: {$leaveRequest->user?->name} {$leaveRequest->user?->surname}\nBaslangic: {$leaveRequest->start_date}\nBitis: {$leaveRequest->end_date}",
+            null,
+            $leaveRequest->user_id
+        );
     }
 
     private function visibleProjectIdsForStaff(User $user): \Illuminate\Support\Collection
@@ -569,6 +605,9 @@ class StaffController extends Controller
             'status'     => 'pending',
         ]);
 
+        $leave->loadMissing('user:id,name,surname,email');
+        $this->notifyLeaveApprovers($leave);
+
         return response()->json(['message' => 'İzin talebiniz iletildi.', 'leave_request' => $leave], 201);
     }
 
@@ -582,6 +621,15 @@ class StaffController extends Controller
         $this->abortUnlessUnitAllowed($request, 'staff.leave.approve', $leave->user?->staffProfile?->unit);
         $leave->update(['status' => 'approved', 'approved_by' => Auth::id()]);
 
+        $leave->loadMissing('user:id,email,name,surname');
+        $this->notificationService->sendEmail(
+            array_filter([$leave->user?->email]),
+            'Izin talebiniz onaylandi',
+            "Sayin {$leave->user?->name}, {$leave->start_date} - {$leave->end_date} tarihli izin talebiniz onaylanmistir.",
+            null,
+            $request->user()->id
+        );
+
         return response()->json(['message' => 'İzin talebi onaylandı.', 'leave_request' => $leave]);
     }
 
@@ -594,6 +642,15 @@ class StaffController extends Controller
         $leave = LeaveRequest::with('user.staffProfile')->findOrFail($id);
         $this->abortUnlessUnitAllowed($request, 'staff.leave.reject', $leave->user?->staffProfile?->unit);
         $leave->update(['status' => 'rejected', 'approved_by' => Auth::id()]);
+
+        $leave->loadMissing('user:id,email,name,surname');
+        $this->notificationService->sendEmail(
+            array_filter([$leave->user?->email]),
+            'Izin talebiniz reddedildi',
+            "Sayin {$leave->user?->name}, {$leave->start_date} - {$leave->end_date} tarihli izin talebiniz reddedilmistir.",
+            null,
+            $request->user()->id
+        );
 
         return response()->json(['message' => 'İzin talebi reddedildi.', 'leave_request' => $leave]);
     }
