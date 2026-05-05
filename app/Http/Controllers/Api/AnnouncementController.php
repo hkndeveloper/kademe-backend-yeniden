@@ -14,6 +14,8 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnnouncementController extends Controller
@@ -532,7 +534,9 @@ class AnnouncementController extends Controller
         ], $attachmentPath);
 
         return response()->json([
-            'message' => 'E-posta gönderimi tamamlandı.',
+            'message' => $sent > 0
+                ? 'E-posta gonderimi tamamlandi.'
+                : 'E-posta gonderimi basarisiz veya alici e-postasi bulunamadi.',
             'sent_to' => $sent,
         ]);
     }
@@ -681,20 +685,106 @@ class AnnouncementController extends Controller
 
     private function dispatchEmail(\Illuminate\Database\Eloquent\Collection $users, object $announcement, ?string $attachmentPath): int
     {
-        // E-posta entegrasyonu (Faz 5'te Laravel Mail + queue eklenecek)
-        $sent = $users->count();
-        if ($sent > 0) {
-            \App\Models\CommunicationLog::create([
-                'type'             => 'email',
-                'sender_id'        => Auth::id(),
-                'recipients_count' => $sent,
-                'subject'          => $announcement->title,
-                'content'          => substr($announcement->content, 0, 500),
-                'attachment_path'  => $attachmentPath,
-                'status'           => 'queued',
-                'project_id'       => $announcement->project_id ?? null,
-            ]);
+        $emails = $users
+            ->pluck('email')
+            ->filter(fn ($email) => is_string($email) && $email !== '')
+            ->unique()
+            ->values();
+
+        if ($emails->isEmpty()) {
+            return 0;
         }
-        return $sent;
+
+        $apiKey = (string) config('services.resend.key');
+        $fromAddress = (string) config('services.resend.from', config('mail.from.address'));
+        $fromName = (string) config('services.resend.from_name', config('mail.from.name'));
+        $from = $fromName !== '' ? "{$fromName} <{$fromAddress}>" : $fromAddress;
+        $subject = (string) ($announcement->title ?? 'Duyuru');
+        $rawContent = (string) ($announcement->content ?? '');
+        $textContent = trim(strip_tags($rawContent));
+        $htmlContent = nl2br(e($rawContent));
+
+        if ($apiKey === '' || $fromAddress === '') {
+            Log::warning('resend.missing_configuration', [
+                'has_api_key' => $apiKey !== '',
+                'from_address' => $fromAddress,
+            ]);
+
+            CommunicationLog::create([
+                'type' => 'email',
+                'sender_id' => Auth::id(),
+                'recipients_count' => 0,
+                'subject' => $subject,
+                'content' => substr($rawContent, 0, 500),
+                'attachment_path' => $attachmentPath,
+                'status' => 'failed',
+                'project_id' => $announcement->project_id ?? null,
+            ]);
+
+            return 0;
+        }
+
+        $attachments = [];
+        if ($attachmentPath && MediaStorage::exists($attachmentPath)) {
+            try {
+                $attachments[] = [
+                    'filename' => basename($attachmentPath),
+                    'content' => base64_encode(MediaStorage::disk()->get($attachmentPath)),
+                ];
+            } catch (\Throwable $exception) {
+                Log::warning('resend.attachment_read_failed', [
+                    'path' => $attachmentPath,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        $successCount = 0;
+        foreach ($emails as $email) {
+            $payload = [
+                'from' => $from,
+                'to' => [$email],
+                'subject' => $subject,
+                'text' => $textContent,
+                'html' => $htmlContent,
+            ];
+            if ($attachments !== []) {
+                $payload['attachments'] = $attachments;
+            }
+
+            try {
+                $response = Http::withToken($apiKey)
+                    ->acceptJson()
+                    ->post('https://api.resend.com/emails', $payload);
+
+                if ($response->successful()) {
+                    $successCount++;
+                } else {
+                    Log::warning('resend.send_failed', [
+                        'email' => $email,
+                        'status' => $response->status(),
+                        'body' => $response->json() ?? $response->body(),
+                    ]);
+                }
+            } catch (\Throwable $exception) {
+                Log::warning('resend.send_exception', [
+                    'email' => $email,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        CommunicationLog::create([
+            'type' => 'email',
+            'sender_id' => Auth::id(),
+            'recipients_count' => $successCount,
+            'subject' => $subject,
+            'content' => substr($rawContent, 0, 500),
+            'attachment_path' => $attachmentPath,
+            'status' => $successCount > 0 ? 'sent' : 'failed',
+            'project_id' => $announcement->project_id ?? null,
+        ]);
+
+        return $successCount;
     }
 }

@@ -20,6 +20,8 @@ return [
 
     'resend' => [
         'key' => env('RESEND_API_KEY'),
+        'from' => env('RESEND_FROM_EMAIL', env('MAIL_FROM_ADDRESS')),
+        'from_name' => env('RESEND_FROM_NAME', env('MAIL_FROM_NAME')),
     ],
 
     'ses' => [
