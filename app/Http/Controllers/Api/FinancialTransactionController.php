@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use App\Services\PermissionResolver;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -50,6 +51,15 @@ class FinancialTransactionController extends Controller
         $query->whereIn('project_id', $ids);
     }
 
+    private function canAccessFinancialProject(User $user, string $permissionName, ?int $projectId): bool
+    {
+        if ($projectId === null) {
+            return $this->permissionResolver->hasPermission($user, $permissionName);
+        }
+
+        return $this->permissionResolver->canAccessProject($user, $permissionName, $projectId);
+    }
+
     /**
      * GET /admin/financials
      * Tüm finansal işlemleri listele (filtrelenebilir).
@@ -57,13 +67,14 @@ class FinancialTransactionController extends Controller
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'financial.view');
+        $user = $request->user();
         $query = FinancialTransaction::with([
             'project:id,name',
             'period:id,name',
             'submitter:id,name,surname',
             'approver:id,name,surname',
         ]);
-        $this->scopeFinancialTransactionsForUser($query, $request->user(), 'financial.view');
+        $this->scopeFinancialTransactionsForUser($query, $user, 'financial.view');
 
         // Filtreler
         if ($request->filled('project_id')) {
@@ -92,26 +103,40 @@ class FinancialTransactionController extends Controller
 
         // Toplam tutar hesaplama
         $totalQuery = FinancialTransaction::query();
-        $this->scopeFinancialTransactionsForUser($totalQuery, $request->user(), 'financial.view');
+        $this->scopeFinancialTransactionsForUser($totalQuery, $user, 'financial.view');
         if ($request->filled('project_id')) $totalQuery->where('project_id', $request->project_id);
         if ($request->filled('status')) $totalQuery->where('status', $request->status);
+        if ($request->filled('category')) $totalQuery->where('category', $request->category);
+        if ($request->filled('type')) $totalQuery->where('type', $request->type);
+        if ($request->filled('payee')) $totalQuery->where('payee_name', 'like', '%' . $request->payee . '%');
         if ($request->filled('date_from')) $totalQuery->where('submitted_at', '>=', $request->date_from);
         if ($request->filled('date_to')) $totalQuery->where('submitted_at', '<=', $request->date_to . ' 23:59:59');
         $totalAmount = $totalQuery->sum('amount');
 
         // Kategori bazlı infografik
         $categoryStats = FinancialTransaction::query()
-            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $request->user(), 'financial.view'))
+            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $user, 'financial.view'))
             ->selectRaw('category, SUM(amount) as total, COUNT(*) as count')
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->project_id))
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
+            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
+            ->when($request->filled('payee'), fn ($q) => $q->where('payee_name', 'like', '%' . $request->payee . '%'))
+            ->when($request->filled('date_from'), fn ($q) => $q->where('submitted_at', '>=', $request->date_from))
+            ->when($request->filled('date_to'), fn ($q) => $q->where('submitted_at', '<=', $request->date_to . ' 23:59:59'))
             ->groupBy('category')
             ->get();
 
         // Proje bazlı harcama
         $projectStats = FinancialTransaction::query()
-            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $request->user(), 'financial.view'))
+            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $user, 'financial.view'))
             ->with('project:id,name')
             ->selectRaw('project_id, SUM(amount) as total')
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
+            ->when($request->filled('category'), fn ($q) => $q->where('category', $request->category))
+            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
+            ->when($request->filled('payee'), fn ($q) => $q->where('payee_name', 'like', '%' . $request->payee . '%'))
+            ->when($request->filled('date_from'), fn ($q) => $q->where('submitted_at', '>=', $request->date_from))
+            ->when($request->filled('date_to'), fn ($q) => $q->where('submitted_at', '<=', $request->date_to . ' 23:59:59'))
             ->groupBy('project_id')
             ->get();
 
@@ -182,7 +207,11 @@ class FinancialTransactionController extends Controller
             'approver:id,name,surname',
         ])->findOrFail($id);
 
-        $this->abortUnlessProjectAllowed($request, 'financial.view', $transaction->project_id);
+        abort_unless(
+            $this->canAccessFinancialProject($request->user(), 'financial.view', $transaction->project_id),
+            403,
+            'Bu isleme erisim yetkiniz yok.'
+        );
 
         return response()->json(['transaction' => $transaction]);
     }
@@ -194,7 +223,11 @@ class FinancialTransactionController extends Controller
     {
         $this->abortUnlessAllowed($request, 'financial.approve');
         $transaction = FinancialTransaction::findOrFail($id);
-        $this->abortUnlessProjectAllowed($request, 'financial.approve', $transaction->project_id);
+        abort_unless(
+            $this->canAccessFinancialProject($request->user(), 'financial.approve', $transaction->project_id),
+            403,
+            'Bu islem icin onay yetkiniz yok.'
+        );
 
         if ($transaction->status !== 'pending') {
             return response()->json(['message' => 'Bu işlem zaten işlenmiş.'], 422);
@@ -219,7 +252,11 @@ class FinancialTransactionController extends Controller
     {
         $this->abortUnlessAllowed($request, 'financial.reject');
         $transaction = FinancialTransaction::findOrFail($id);
-        $this->abortUnlessProjectAllowed($request, 'financial.reject', $transaction->project_id);
+        abort_unless(
+            $this->canAccessFinancialProject($request->user(), 'financial.reject', $transaction->project_id),
+            403,
+            'Bu islem icin red yetkiniz yok.'
+        );
 
         if ($transaction->status !== 'pending') {
             return response()->json(['message' => 'Bu işlem zaten işlenmiş.'], 422);
@@ -241,7 +278,11 @@ class FinancialTransactionController extends Controller
     {
         $this->abortUnlessAllowed($request, 'financial.mark_paid');
         $transaction = FinancialTransaction::findOrFail($id);
-        $this->abortUnlessProjectAllowed($request, 'financial.mark_paid', $transaction->project_id);
+        abort_unless(
+            $this->canAccessFinancialProject($request->user(), 'financial.mark_paid', $transaction->project_id),
+            403,
+            'Bu islem icin odeme yetkiniz yok.'
+        );
 
         if ($transaction->status !== 'approved') {
             return response()->json(['message' => 'Sadece onaylanan işlemler ödenmiş olarak işaretlenebilir.'], 422);
@@ -259,7 +300,11 @@ class FinancialTransactionController extends Controller
     {
         $this->abortUnlessAllowed($request, 'financial.delete');
         $transaction = FinancialTransaction::findOrFail($id);
-        $this->abortUnlessProjectAllowed($request, 'financial.delete', $transaction->project_id);
+        abort_unless(
+            $this->canAccessFinancialProject($request->user(), 'financial.delete', $transaction->project_id),
+            403,
+            'Bu islem icin silme yetkiniz yok.'
+        );
 
         // Sadece pending işlemler silinebilir
         if ($transaction->status !== 'pending') {
@@ -282,7 +327,11 @@ class FinancialTransactionController extends Controller
     {
         $this->abortUnlessAllowed($request, 'financial.invoice.download');
         $transaction = FinancialTransaction::findOrFail($id);
-        $this->abortUnlessProjectAllowed($request, 'financial.invoice.download', $transaction->project_id);
+        abort_unless(
+            $this->canAccessFinancialProject($request->user(), 'financial.invoice.download', $transaction->project_id),
+            403,
+            'Bu fatura icin erisim yetkiniz yok.'
+        );
 
         if (!$transaction->invoice_path) {
             return response()->json(['message' => 'Fatura bulunamadı.'], 404);
