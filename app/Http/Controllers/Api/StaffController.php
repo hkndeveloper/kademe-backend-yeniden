@@ -197,12 +197,12 @@ class StaffController extends Controller
             ]);
         }
 
-        $this->abortUnlessUnitAllowed($request, 'staff.view', $unit);
-
         $query = User::with('staffProfile')
             ->whereIn('role', ['coordinator', 'staff'])
-            ->where('status', '!=', 'banned')
-            ->whereHas('staffProfile', fn($q) => $q->where('unit', $unit));
+            ->where('status', '!=', 'banned');
+
+        // Scope kurali own_unit/all durumuna gore tek noktadan uygulanir.
+        $this->permissionResolver->applyUserScope($query, $user, 'staff.view');
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -229,12 +229,12 @@ class StaffController extends Controller
         $unit = $user->staffProfile?->unit;
 
         abort_if(! $unit, 422, 'Kullaniciya bagli birim bilgisi bulunmuyor.');
-        $this->abortUnlessUnitAllowed($request, 'staff.export', $unit);
 
         $query = User::with('staffProfile')
             ->whereIn('role', ['coordinator', 'staff'])
-            ->where('status', '!=', 'banned')
-            ->whereHas('staffProfile', fn($q) => $q->where('unit', $unit));
+            ->where('status', '!=', 'banned');
+
+        $this->permissionResolver->applyUserScope($query, $user, 'staff.export');
 
         if ($request->filled('search')) {
             $search = $request->search;
