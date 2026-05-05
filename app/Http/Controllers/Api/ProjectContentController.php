@@ -137,7 +137,9 @@ class ProjectContentController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $project = Project::with(['periods', 'participants.user'])->findOrFail($id);
-        $this->abortUnlessAllowedForProject($request, 'projects.view', $project);
+        $canView = $this->permissionResolver->canAccessProject($request->user(), 'projects.view', (int) $project->id);
+        $canEdit = $this->permissionResolver->canAccessProject($request->user(), 'projects.content.update', (int) $project->id);
+        abort_unless($canView || $canEdit, 403, 'Bu proje icerigini goruntuleme yetkiniz yok.');
 
         $applicationForm = ApplicationForm::where('project_id', $project->id)
             ->where('is_active', true)
