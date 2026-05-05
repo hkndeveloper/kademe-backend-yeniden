@@ -391,9 +391,12 @@ class AnnouncementController extends Controller
             'expires_at'   => $validated['expires_at'] ?? null,
         ]);
 
+        $smsSent = 0;
+        $emailSent = 0;
+
         // SMS gönder
         if (!empty($validated['send_sms']) && $validated['send_sms']) {
-            $this->dispatchSms($targetUsers, $validated['title'] . ': ' . substr($validated['content'], 0, 140));
+            $smsSent = $this->dispatchSms($targetUsers, $validated['title'] . ': ' . substr($validated['content'], 0, 140));
         }
 
         // E-posta gönder
@@ -402,13 +405,17 @@ class AnnouncementController extends Controller
             if ($request->hasFile('email_attachment')) {
                 $attachmentPath = MediaStorage::putFile('announcement_attachments', $request->file('email_attachment'));
             }
-            $this->dispatchEmail($targetUsers, $announcement, $attachmentPath);
+            $emailSent = $this->dispatchEmail($targetUsers, $announcement, $attachmentPath);
         }
 
         return response()->json([
-            'message'      => 'Duyuru oluşturuldu.',
+            'message'      => (!empty($validated['send_email']) && $validated['send_email'] && $emailSent === 0)
+                ? 'Duyuru olusturuldu ancak e-posta alicisi bulunamadi veya gonderim basarisiz oldu.'
+                : 'Duyuru oluşturuldu.',
             'announcement' => $announcement->load(['project:id,name', 'creator:id,name,surname']),
             'target_count' => $targetUsers->count(),
+            'email_sent_to' => $emailSent,
+            'sms_sent_to' => $smsSent,
         ], 201);
     }
 
@@ -692,6 +699,11 @@ class AnnouncementController extends Controller
             ->values();
 
         if ($emails->isEmpty()) {
+            Log::warning('resend.no_recipients', [
+                'subject' => (string) ($announcement->title ?? 'Duyuru'),
+                'project_id' => $announcement->project_id ?? null,
+                'candidate_user_count' => $users->count(),
+            ]);
             CommunicationLog::create([
                 'type' => 'email',
                 'sender_id' => Auth::id(),
@@ -704,6 +716,12 @@ class AnnouncementController extends Controller
             ]);
             return 0;
         }
+
+        Log::info('resend.dispatch.start', [
+            'subject' => $subject,
+            'project_id' => $announcement->project_id ?? null,
+            'recipient_count' => $emails->count(),
+        ]);
 
         $apiKey = (string) config('services.resend.key');
         $fromAddress = (string) config('services.resend.from', config('mail.from.address'));
@@ -793,6 +811,13 @@ class AnnouncementController extends Controller
             'attachment_path' => $attachmentPath,
             'status' => $successCount > 0 ? 'sent' : 'failed',
             'project_id' => $announcement->project_id ?? null,
+        ]);
+
+        Log::info('resend.dispatch.result', [
+            'subject' => $subject,
+            'project_id' => $announcement->project_id ?? null,
+            'recipient_count' => $emails->count(),
+            'success_count' => $successCount,
         ]);
 
         return $successCount;
