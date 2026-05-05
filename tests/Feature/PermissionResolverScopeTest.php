@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Project;
+use App\Models\RolePermissionScope;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
@@ -213,5 +214,47 @@ class PermissionResolverScopeTest extends TestCase
         $this->assertTrue($resolver->canAccessProject($coordinator, 'projects.view', $ownProject->id));
         $this->assertFalse($resolver->canAccessProject($coordinator, 'projects.view', $otherProject->id));
         $this->assertTrue($resolver->canAccessProject($coordinator, 'calendar.view', $otherProject->id));
+    }
+
+    public function test_own_projects_scope_payload_does_not_override_real_assignments(): void
+    {
+        Permission::findOrCreate('projects.view', 'web');
+
+        $coordinator = User::factory()->create([
+            'name' => 'Payload',
+            'surname' => 'Ignore',
+            'email' => 'coordinator-payload@test.local',
+            'role' => 'coordinator',
+        ]);
+        Role::findOrCreate('coordinator', 'web');
+        $coordinator->assignRole('coordinator');
+        $coordinator->givePermissionTo('projects.view');
+
+        $ownProject = Project::query()->create([
+            'name' => 'Assigned Project',
+            'slug' => 'assigned-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $otherProject = Project::query()->create([
+            'name' => 'Payload Project',
+            'slug' => 'payload-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $coordinator->coordinatedProjects()->attach($ownProject->id);
+
+        RolePermissionScope::query()->create([
+            'role_name' => 'coordinator',
+            'permission_name' => 'projects.view',
+            'scope_type' => 'own_projects',
+            'scope_payload' => ['project_ids' => [$otherProject->id]],
+        ]);
+
+        $coordinator->refresh();
+        $resolver = $this->resolver();
+
+        $this->assertTrue($resolver->canAccessProject($coordinator, 'projects.view', $ownProject->id));
+        $this->assertFalse($resolver->canAccessProject($coordinator, 'projects.view', $otherProject->id));
     }
 }

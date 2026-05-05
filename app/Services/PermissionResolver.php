@@ -48,12 +48,7 @@ class PermissionResolver
         $scopeType = $scope['scope_type'] ?? 'none';
         $scopePayload = $scope['scope_payload'] ?? [];
 
-        $scopedProjectIds = collect($scopePayload['project_ids'] ?? [])
-            ->filter(fn ($id) => is_numeric($id))
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
+        $scopedProjectIds = $this->projectIdsForPermission($user, $permissionName);
 
         return match ($scopeType) {
             'all' => true,
@@ -228,9 +223,9 @@ class PermissionResolver
         }
 
         $payload = (array) ($best->scope_payload ?? []);
-        if (in_array($best->scope_type, ['selected_projects', 'own_projects', 'assigned_projects'], true)) {
+        if ($best->scope_type === 'selected_projects') {
             $projectIds = $scopeRows
-                ->filter(fn ($row) => in_array($row->scope_type, ['selected_projects', 'own_projects', 'assigned_projects'], true))
+                ->filter(fn ($row) => $row->scope_type === 'selected_projects')
                 ->flatMap(fn ($row) => (array) (($row->scope_payload ?? [])['project_ids'] ?? []))
                 ->filter(fn ($id) => is_numeric($id))
                 ->map(fn ($id) => (int) $id)
@@ -409,7 +404,8 @@ class PermissionResolver
 
         return match ($scopeType) {
             'all' => Project::query()->pluck('id')->all(),
-            'own_projects', 'assigned_projects', 'selected_projects' => collect($payload['project_ids'] ?? [])
+            'own_projects', 'assigned_projects' => $this->manageableProjectIds($user),
+            'selected_projects' => collect($payload['project_ids'] ?? [])
                 ->filter(fn ($id) => is_numeric($id))
                 ->map(fn ($id) => (int) $id)
                 ->unique()

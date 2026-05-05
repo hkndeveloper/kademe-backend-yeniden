@@ -291,11 +291,12 @@ class PermissionMatrixController extends Controller
         $user->permissionOverrides()->delete();
 
         foreach ($validated['overrides'] as $override) {
+            $scopeType = $override['scope_type'] ?? null;
             $user->permissionOverrides()->create([
                 'permission_name' => $override['permission_name'],
                 'effect' => $override['effect'],
-                'scope_type' => $override['scope_type'] ?? null,
-                'scope_payload' => $override['scope_payload'] ?? [],
+                'scope_type' => $scopeType,
+                'scope_payload' => $this->sanitizeScopePayload($scopeType, $override['scope_payload'] ?? []),
             ]);
         }
 
@@ -770,9 +771,34 @@ class PermissionMatrixController extends Controller
                     'role_name' => $roleName,
                     'permission_name' => $permissionName,
                     'scope_type' => $scopeType,
-                    'scope_payload' => $scopeRow['scope_payload'] ?? [],
+                    'scope_payload' => $this->sanitizeScopePayload($scopeType, $scopeRow['scope_payload'] ?? []),
                 ]);
             }
         }
+    }
+
+    private function sanitizeScopePayload(?string $scopeType, array $scopePayload): array
+    {
+        if (! is_string($scopeType) || $scopeType === '' || $scopeType === 'all' || $scopeType === 'none' || $scopeType === 'self') {
+            return [];
+        }
+
+        if ($scopeType === 'own_unit') {
+            $unit = isset($scopePayload['unit']) ? trim((string) $scopePayload['unit']) : '';
+            return $unit !== '' ? ['unit' => $unit] : [];
+        }
+
+        if ($scopeType === 'selected_projects') {
+            $projectIds = collect($scopePayload['project_ids'] ?? [])
+                ->filter(fn ($id) => is_numeric($id))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+            return ['project_ids' => $projectIds];
+        }
+
+        // own_projects / assigned_projects dynamic olarak resolver tarafından türetilir.
+        return [];
     }
 }

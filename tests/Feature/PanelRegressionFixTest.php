@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Attendance;
 use App\Models\Application;
 use App\Models\ApplicationForm;
+use App\Models\Badge;
 use App\Models\Certificate;
 use App\Models\CreditLog;
 use App\Models\Feedback;
@@ -466,5 +467,78 @@ class PanelRegressionFixTest extends TestCase
 
         $this->assertTrue($specialModulesResponse['access']['projects.mentors.manage'] ?? false);
         $this->assertFalse($specialModulesResponse['access']['projects.mentors.view'] ?? true);
+    }
+
+    public function test_student_dashboard_summary_filters_badges_by_kademe_plus_and_returns_monthly_titles(): void
+    {
+        $projectKademePlus = Project::query()->create([
+            'name' => 'Kademe Plus',
+            'slug' => 'kademe-plus',
+            'type' => 'kademe_plus',
+            'status' => 'active',
+        ]);
+        $projectOther = Project::query()->create([
+            'name' => 'Diplomasi360',
+            'slug' => 'diplomasi-360',
+            'type' => 'diplomasi360',
+            'status' => 'active',
+        ]);
+
+        $period = Period::query()->create([
+            'project_id' => $projectKademePlus->id,
+            'name' => '2026 Plus',
+            'start_date' => now()->subWeek()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $student = User::factory()->create([
+            'name' => 'Summary',
+            'surname' => 'Student',
+            'role' => 'student',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $projectKademePlus->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 120,
+        ]);
+
+        $plusBadge = Badge::query()->create([
+            'name' => 'Plus Rozeti',
+            'project_id' => $projectKademePlus->id,
+            'tier' => 'gold',
+        ]);
+        $otherBadge = Badge::query()->create([
+            'name' => 'Diger Rozet',
+            'project_id' => $projectOther->id,
+            'tier' => 'silver',
+        ]);
+        $titleBadge = Badge::query()->create([
+            'name' => 'Ayin Rozeti',
+            'project_id' => $projectKademePlus->id,
+            'tier' => 'platinum',
+            'title_label' => 'Ayin Pergellisi',
+        ]);
+
+        $student->badges()->attach($plusBadge->id, ['project_id' => $projectKademePlus->id, 'awarded_at' => now()->subDay()]);
+        $student->badges()->attach($otherBadge->id, ['project_id' => $projectOther->id, 'awarded_at' => now()->subDays(2)]);
+        $student->badges()->attach($titleBadge->id, ['project_id' => $projectKademePlus->id, 'awarded_at' => now()]);
+
+        Sanctum::actingAs($student);
+        $response = $this->getJson('/api/dashboard/summary')
+            ->assertOk()
+            ->json();
+
+        $badgeNames = collect($response['earned_badges'] ?? [])->pluck('name')->all();
+        $this->assertContains('Plus Rozeti', $badgeNames);
+        $this->assertContains('Ayin Rozeti', $badgeNames);
+        $this->assertNotContains('Diger Rozet', $badgeNames);
+        $this->assertContains('Ayin Pergellisi', $response['monthly_titles'] ?? []);
     }
 }

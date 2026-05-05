@@ -12,6 +12,12 @@ return [
         'content',
     ],
 
+    /**
+     * Takvimde etkinlik cakismalarini gorebilmek icin coordinator/personel tum projeleri gorebilir.
+     * false yapilirse calendar.view scope kurali birebir uygulanir.
+     */
+    'calendar_cross_project_view_for_staff_coordinator' => true,
+
     'role_labels' => [
         'super_admin' => 'Ust Admin',
         'coordinator' => 'Koordinator',

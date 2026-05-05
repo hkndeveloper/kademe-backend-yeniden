@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Participant;
 use App\Models\CreditLog;
+use App\Models\Badge;
 use Illuminate\Http\Request;
 
 class StudentDashboardController extends Controller
@@ -41,13 +42,50 @@ class StudentDashboardController extends Controller
             ->take(10)
             ->get();
 
-        // Kazanılan rozetleri getir
-        $badges = $user->badges()->get();
+        $kademePlusProjectIds = $participations
+            ->filter(fn (Participant $participation) => $participation->project !== null)
+            ->filter(function (Participant $participation) {
+                $type = mb_strtolower((string) ($participation->project?->type ?? ''));
+                $name = mb_strtolower((string) ($participation->project?->name ?? ''));
+
+                return str_contains($type, 'kademe_plus')
+                    || str_contains($type, 'kademe+')
+                    || str_contains($name, 'kademe plus')
+                    || str_contains($name, 'kademe+');
+            })
+            ->pluck('project_id')
+            ->unique()
+            ->values();
+
+        // KADEME+ disindaki rozetler ogrenci dashboard'inda gosterilmez.
+        $badges = $user->badges()
+            ->when(
+                $kademePlusProjectIds->isNotEmpty(),
+                fn ($query) => $query->where(function ($inner) use ($kademePlusProjectIds) {
+                    $inner->whereNull('badges.project_id')->orWhereIn('badges.project_id', $kademePlusProjectIds->all());
+                }),
+                fn ($query) => $query->whereNull('badges.project_id')
+            )
+            ->get();
+
+        $latestAwardedIds = $user->badges()
+            ->whereNotNull('badges.title_label')
+            ->whereIn('badges.title_label', ['Ayin Pergellisi', 'Ayin Konusmacisi'])
+            ->orderByDesc('user_badges.awarded_at')
+            ->pluck('badges.id');
+
+        $monthlyTitles = Badge::query()
+            ->whereIn('id', $latestAwardedIds)
+            ->pluck('title_label')
+            ->filter()
+            ->unique()
+            ->values();
 
         return response()->json([
             'participations' => $participations,
             'recent_credit_history' => $creditHistory,
             'earned_badges' => $badges,
+            'monthly_titles' => $monthlyTitles,
             'total_score' => $participations->sum('credit')
         ]);
     }

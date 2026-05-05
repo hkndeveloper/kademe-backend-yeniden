@@ -72,7 +72,7 @@ class SiteSettingsController extends Controller
                 'footer_project_links' => [],
             ],
             'homepage' => [
-                'block_order' => ['hero', 'intro', 'stats', 'projects', 'activities', 'about', 'blog', 'newsletter'],
+                'block_order' => ['hero', 'intro', 'stats', 'projects', 'activities', 'about', 'blog', 'newsletter', 'certificate_verify'],
                 'block_visibility' => [
                     'hero' => true,
                     'intro' => true,
@@ -82,6 +82,7 @@ class SiteSettingsController extends Controller
                     'about' => true,
                     'blog' => true,
                     'newsletter' => true,
+                    'certificate_verify' => true,
                 ],
                 'hero_badge' => 'KADEME: Gelecegin Liderlik Okulu',
                 'hero_title_line_1' => 'YETENEGINI',
@@ -132,6 +133,10 @@ class SiteSettingsController extends Controller
                 'featured_blog_slugs' => [],
                 'newsletter_title' => 'KADEME E-Bultenine Katil',
                 'newsletter_description' => 'Yeni faaliyetler, proje duyurulari ve blog icerikleri yayinlandiginda ilk sen haberdar ol.',
+                'certificate_verify_title' => 'Sertifika Dogrula',
+                'certificate_verify_description' => 'KADEME tarafindan verilen sertifikalari dogrulama kodu ile kamusal olarak sorgulayabilirsiniz.',
+                'certificate_verify_cta_label' => 'Dogrulama Ekranina Git',
+                'certificate_verify_cta_href' => '/certificates/verify',
                 'footer_description' => 'T3 Vakfi Kariyer Gelisim Merkezi. Gelecegin liderlerini bugunden yetistiriyoruz.',
                 'footer_copyright' => '© 2026 KADEME YONETIM SISTEMI | T3 VAKFI. TUM HAKLARI SAKLIDIR.',
                 'stats' => [

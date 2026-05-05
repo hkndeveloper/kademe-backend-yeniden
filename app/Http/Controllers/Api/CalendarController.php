@@ -32,7 +32,9 @@ class CalendarController extends Controller
 
     private function viewableProjectIds(User $user): array
     {
-        if (in_array($user->role, ['coordinator', 'staff'], true)) {
+        // Is kurali: coordinator/personel, etkinlik cakisma kontrolu icin tum projeleri gorebilir.
+        $allowCrossProjectCalendarView = (bool) config('permission_catalog.calendar_cross_project_view_for_staff_coordinator', true);
+        if ($allowCrossProjectCalendarView && in_array($user->role, ['coordinator', 'staff'], true)) {
             return Project::query()->pluck('id')->all();
         }
 
