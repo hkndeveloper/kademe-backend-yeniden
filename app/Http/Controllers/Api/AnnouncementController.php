@@ -692,6 +692,16 @@ class AnnouncementController extends Controller
             ->values();
 
         if ($emails->isEmpty()) {
+            CommunicationLog::create([
+                'type' => 'email',
+                'sender_id' => Auth::id(),
+                'recipients_count' => 0,
+                'subject' => (string) ($announcement->title ?? 'Duyuru'),
+                'content' => mb_substr((string) ($announcement->content ?? ''), 0, 500),
+                'attachment_path' => $attachmentPath,
+                'status' => 'failed',
+                'project_id' => $announcement->project_id ?? null,
+            ]);
             return 0;
         }
 
