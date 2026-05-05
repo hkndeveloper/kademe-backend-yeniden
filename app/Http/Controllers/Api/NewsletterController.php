@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Models\NewsletterSubscriber;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,8 @@ class NewsletterController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -62,6 +64,14 @@ class NewsletterController extends Controller
                 'subscribed_at' => now(),
                 'unsubscribed_at' => null,
             ],
+        );
+
+        $this->notificationService->sendEmail(
+            [$subscriber->email],
+            'E-bulten aboneligi basarili',
+            "Merhaba " . ($subscriber->name ?: 'degerli kullanici') . ",\nKADEME e-bulten aboneliginiz aktif edildi.",
+            null,
+            null
         );
 
         return response()->json([

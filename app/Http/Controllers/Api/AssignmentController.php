@@ -8,6 +8,7 @@ use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
 use App\Models\Participant;
 use App\Models\Period;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,8 @@ class AssignmentController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -191,6 +193,18 @@ class AssignmentController extends Controller
                 'status' => 'submitted',
             ]);
 
+            $assignment->loadMissing('creator:id,email,name,surname');
+            $creatorEmail = $assignment->creator?->email;
+            if ($creatorEmail) {
+                $this->notificationService->sendEmail(
+                    [$creatorEmail],
+                    'Odev teslimi guncellendi',
+                    "Odev: {$assignment->title}\nOgrenci: {$user->name} {$user->surname}\nTeslim guncellendi.",
+                    $assignment->project_id,
+                    $user->id
+                );
+            }
+
             return response()->json([
                 'message' => 'Odev tesliminiz guncellendi.',
                 'submission' => $this->submissionPayload($existing->fresh(), '/assignment-submissions'),
@@ -205,6 +219,18 @@ class AssignmentController extends Controller
             'file_path' => $filePath,
             'status' => 'submitted',
         ]);
+
+        $assignment->loadMissing('creator:id,email,name,surname');
+        $creatorEmail = $assignment->creator?->email;
+        if ($creatorEmail) {
+            $this->notificationService->sendEmail(
+                [$creatorEmail],
+                'Yeni odev teslimi',
+                "Odev: {$assignment->title}\nOgrenci: {$user->name} {$user->surname}\nYeni teslim eklendi.",
+                $assignment->project_id,
+                $user->id
+            );
+        }
 
         return response()->json([
             'message' => 'Odeviniz basariyla sisteme yuklendi.',
@@ -293,6 +319,26 @@ class AssignmentController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        $participantEmails = Participant::query()
+            ->where('project_id', (int) $validated['project_id'])
+            ->where('period_id', (int) $validated['period_id'])
+            ->where('status', 'active')
+            ->with('user:id,email')
+            ->get()
+            ->pluck('user.email')
+            ->filter()
+            ->values()
+            ->all();
+        if ($participantEmails !== []) {
+            $this->notificationService->sendEmail(
+                $participantEmails,
+                'Yeni odev tanimlandi',
+                "Odev: {$assignment->title}\nSon teslim: " . ($assignment->due_date ?? 'belirtilmedi') . "\nLutfen panelden detaylari inceleyin.",
+                (int) $validated['project_id'],
+                $request->user()->id
+            );
+        }
+
         return response()->json([
             'message' => 'Odev olusturuldu.',
             'assignment' => $assignment->load(['project:id,name', 'period:id,name', 'program:id,title,start_at', 'creator:id,name,surname']),
@@ -330,6 +376,18 @@ class AssignmentController extends Controller
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+
+        $submission->loadMissing(['user:id,email,name,surname', 'assignment:id,title,project_id']);
+        $studentEmail = $submission->user?->email;
+        if ($studentEmail) {
+            $this->notificationService->sendEmail(
+                [$studentEmail],
+                'Odev tesliminiz degerlendirildi',
+                "Odev: {$submission->assignment?->title}\nYeni durum: {$validated['status']}\nNot: " . ($validated['reviewer_note'] ?? '-'),
+                $submission->assignment?->project_id,
+                $request->user()->id
+            );
+        }
 
         return response()->json([
             'message' => 'Odev teslimi guncellendi.',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Models\Certificate;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
@@ -23,7 +24,8 @@ class AdminCertificateController extends Controller
     ];
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -198,6 +200,18 @@ class AdminCertificateController extends Controller
             'certificate_path' => $certificatePath,
             'created_by' => $request->user()->id,
         ]);
+
+        $certificate->loadMissing(['user:id,email,name,surname', 'project:id,name']);
+        $email = $certificate->user?->email;
+        if ($email) {
+            $this->notificationService->sendEmail(
+                [$email],
+                'Sertifikaniz olusturuldu',
+                "Merhaba {$certificate->user?->name},\nProje: {$certificate->project?->name}\nSertifika turu: {$certificate->type}\nDogrulama kodu: {$certificate->verification_code}",
+                $certificate->project_id,
+                $request->user()->id
+            );
+        }
 
         return response()->json([
             'message' => 'Sertifika başarıyla oluşturuldu.',
