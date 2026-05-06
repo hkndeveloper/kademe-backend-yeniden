@@ -553,6 +553,16 @@ class AnnouncementController extends Controller
     public function communicationLogs(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'announcements.view');
+        $validated = $request->validate([
+            'type' => 'nullable|in:email,sms',
+            'status' => 'nullable|string|max:50',
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'sender_id' => 'nullable|integer|exists:users,id',
+            'search' => 'nullable|string|max:255',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
 
         $query = CommunicationLog::query()
             ->with(['sender:id,name,surname,role', 'project:id,name'])
@@ -561,19 +571,124 @@ class AnnouncementController extends Controller
 
         $query = $this->scopeCommunicationLogs($request, $query, 'announcements.view');
 
-        if ($request->filled('type')) {
-            $query->where('type', $request->string('type')->toString());
+        if (! empty($validated['type'])) {
+            $query->where('type', $validated['type']);
         }
 
-        if ($request->filled('project_id')) {
-            $projectId = (int) $request->project_id;
+        if (! empty($validated['project_id'])) {
+            $projectId = (int) $validated['project_id'];
             $this->assertProjectAnnouncementScope($request, $projectId, 'announcements.view');
             $query->where('project_id', $projectId);
         }
 
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
+        }
+
+        if (! empty($validated['sender_id'])) {
+            $query->where('sender_id', (int) $validated['sender_id']);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
+            $query->where(function ($builder) use ($search) {
+                $builder->where('subject', 'like', '%' . $search . '%')
+                    ->orWhere('content', 'like', '%' . $search . '%');
+            });
+        }
+
+        if (! empty($validated['date_from'])) {
+            $query->where('created_at', '>=', $validated['date_from']);
+        }
+
+        if (! empty($validated['date_to'])) {
+            $query->where('created_at', '<=', $validated['date_to']);
+        }
+
+        $logs = $query
+            ->paginate((int) ($validated['per_page'] ?? 20))
+            ->through(fn (CommunicationLog $log) => $this->communicationLogPayload($log));
+
         return response()->json([
-            'logs' => $query->limit(30)->get()->map(fn (CommunicationLog $log) => $this->communicationLogPayload($log))->values(),
+            'logs' => $logs,
         ]);
+    }
+
+    public function exportCommunicationLogs(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'announcements.view');
+        $validated = $request->validate([
+            'type' => 'nullable|in:email,sms',
+            'status' => 'nullable|string|max:50',
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'sender_id' => 'nullable|integer|exists:users,id',
+            'search' => 'nullable|string|max:255',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        $query = CommunicationLog::query()
+            ->with(['sender:id,name,surname,role', 'project:id,name'])
+            ->whereIn('type', ['email', 'sms'])
+            ->latest();
+
+        $query = $this->scopeCommunicationLogs($request, $query, 'announcements.view');
+
+        if (! empty($validated['type'])) {
+            $query->where('type', $validated['type']);
+        }
+
+        if (! empty($validated['project_id'])) {
+            $projectId = (int) $validated['project_id'];
+            $this->assertProjectAnnouncementScope($request, $projectId, 'announcements.view');
+            $query->where('project_id', $projectId);
+        }
+
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
+        }
+
+        if (! empty($validated['sender_id'])) {
+            $query->where('sender_id', (int) $validated['sender_id']);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
+            $query->where(function ($builder) use ($search) {
+                $builder->where('subject', 'like', '%' . $search . '%')
+                    ->orWhere('content', 'like', '%' . $search . '%');
+            });
+        }
+
+        if (! empty($validated['date_from'])) {
+            $query->where('created_at', '>=', $validated['date_from']);
+        }
+
+        if (! empty($validated['date_to'])) {
+            $query->where('created_at', '<=', $validated['date_to']);
+        }
+
+        $logs = $query->get();
+        $headings = ['ID', 'Kanal', 'Durum', 'Alici Sayisi', 'Konu', 'Icerik (kisa)', 'Proje', 'Gonderen', 'Tarih'];
+        $rows = $logs->map(fn (CommunicationLog $log) => [
+            $log->id,
+            $log->type,
+            $log->status,
+            $log->recipients_count,
+            $log->subject ?? '-',
+            mb_substr((string) ($log->content ?? ''), 0, 120),
+            $log->project?->name ?? '-',
+            $log->sender ? trim($log->sender->name . ' ' . $log->sender->surname) : '-',
+            $log->created_at?->format('d.m.Y H:i') ?? '-',
+        ])->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'iletisim_loglari_' . now()->format('Ymd_His'),
+            'Iletisim Loglari',
+            $headings,
+            $rows,
+        );
     }
 
     public function downloadCommunicationAttachment(Request $request, int $id): JsonResponse|StreamedResponse

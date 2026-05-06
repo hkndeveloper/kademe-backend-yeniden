@@ -364,16 +364,17 @@ class RequestController extends Controller
             ], 403);
         }
 
-        if ($workflowRequest->response_file_path) {
-            MediaStorage::delete($workflowRequest->response_file_path);
-        }
-
+        $oldPath = $workflowRequest->response_file_path;
         $path = MediaStorage::putFile('requests/responses', $request->file('response_file'));
 
         $workflowRequest->update([
             'response_file_path' => $path,
             'status' => 'completed',
         ]);
+
+        if ($oldPath && $oldPath !== $path) {
+            MediaStorage::delete($oldPath);
+        }
 
         return response()->json([
             'message' => 'Dosya basariyla yuklendi ve talep tamamlandi.',

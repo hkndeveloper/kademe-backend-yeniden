@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DigitalBohca;
 use App\Models\Participant;
 use App\Services\PermissionResolver;
+use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Support\MediaStorage;
@@ -130,6 +131,51 @@ class DigitalBohcaController extends Controller
                 '/panel/digital-bohca'
             ),
         ], 201);
+    }
+
+    public function panelExport(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'digital_bohca.view');
+        $user = $request->user();
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'digital_bohca.view');
+
+        $query = DigitalBohca::query()
+            ->with(['project:id,name', 'user:id,name,surname,email', 'uploader:id,name,surname'])
+            ->orderByDesc('created_at');
+
+        if (! $this->permissionResolver->hasGlobalScope($user, 'digital_bohca.view')) {
+            $query->where(function ($builder) use ($projectIds, $user) {
+                $builder->whereIn('project_id', $projectIds);
+                $builder->orWhere('uploaded_by', $user->id);
+            });
+        }
+
+        if ($request->filled('project_id')) {
+            $projectId = $request->integer('project_id');
+            $query->where('project_id', $projectId);
+        }
+
+        $materials = $query->get();
+
+        $headings = ['Kayit ID', 'Baslik', 'Proje', 'Hedef Kullanici', 'Dosya Tipi', 'Ogrenciye Gorunur', 'Yukleyen', 'Olusturma Tarihi'];
+        $rows = $materials->map(fn (DigitalBohca $material) => [
+            $material->id,
+            $material->title,
+            $material->project?->name ?? 'Genel',
+            $material->user ? trim($material->user->name . ' ' . $material->user->surname) : '-',
+            $material->file_type ?? '-',
+            $material->visible_to_student ? 'Evet' : 'Hayir',
+            $material->uploader ? trim($material->uploader->name . ' ' . $material->uploader->surname) : '-',
+            $material->created_at?->format('d.m.Y H:i') ?? '-',
+        ])->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'digital_bohca_' . now()->format('Ymd_His'),
+            'Digital Bohca',
+            $headings,
+            $rows,
+        );
     }
 
     public function download(Request $request, int $id): JsonResponse|StreamedResponse

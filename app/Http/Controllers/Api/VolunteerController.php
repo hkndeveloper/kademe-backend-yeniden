@@ -9,6 +9,7 @@ use App\Models\VolunteerApplication;
 use App\Models\VolunteerOpportunity;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
+use App\Support\AdminExportResponder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -196,7 +197,7 @@ class VolunteerController extends Controller
             'start_at' => 'nullable|date',
             'end_at' => 'nullable|date|after_or_equal:start_at',
             'quota' => 'nullable|integer|min:1',
-            'status' => 'required|in:open,closed,draft',
+            'status' => 'required|in:open,closed,archived',
         ]);
 
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $validated['project_id']);
@@ -212,11 +213,71 @@ class VolunteerController extends Controller
         ], 201);
     }
 
+    public function panelExport(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'volunteer.view');
+        $user = $request->user();
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'volunteer.view');
+
+        $query = VolunteerOpportunity::query()
+            ->with(['project:id,name', 'creator:id,name,surname', 'applications.user:id,name,surname,email'])
+            ->withCount('applications')
+            ->orderByDesc('created_at');
+
+        if (! $this->permissionResolver->hasGlobalScope($user, 'volunteer.view')) {
+            $query->whereIn('project_id', $projectIds);
+        }
+
+        if ($request->filled('project_id')) {
+            $projectId = $request->integer('project_id');
+            $this->abortUnlessProjectAllowed($request, 'volunteer.view', $projectId);
+            $query->where('project_id', $projectId);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status')->toString());
+        }
+
+        $opportunities = $query->get();
+
+        $headings = [
+            'Ilan ID', 'Ilan Basligi', 'Proje', 'Durum', 'Kontenjan', 'Baslangic', 'Bitis',
+            'Basvuru Sayisi', 'Olusturan', 'Olusturma Tarihi', 'Basvuranlar',
+        ];
+        $rows = $opportunities->map(function (VolunteerOpportunity $opportunity) {
+            $applicantSummary = $opportunity->applications
+                ->map(fn (VolunteerApplication $application) => trim(($application->user?->name ?? '-') . ' ' . ($application->user?->surname ?? '')) . " ({$application->status})")
+                ->implode('; ');
+
+            return [
+                $opportunity->id,
+                $opportunity->title,
+                $opportunity->project?->name ?? '-',
+                $opportunity->status,
+                $opportunity->quota ?? '-',
+                $opportunity->start_at?->format('d.m.Y H:i') ?? '-',
+                $opportunity->end_at?->format('d.m.Y H:i') ?? '-',
+                $opportunity->applications_count,
+                $opportunity->creator ? trim($opportunity->creator->name . ' ' . $opportunity->creator->surname) : '-',
+                $opportunity->created_at?->format('d.m.Y H:i') ?? '-',
+                $applicantSummary !== '' ? $applicantSummary : '-',
+            ];
+        })->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'gonullu_ilanlari_' . now()->format('Ymd_His'),
+            'Gonullu Ilanlari',
+            $headings,
+            $rows,
+        );
+    }
+
     public function panelUpdateApplication(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'volunteer.manage');
         $validated = $request->validate([
-            'status' => 'required|in:pending,accepted,rejected',
+            'status' => 'required|in:pending,accepted,waitlisted,rejected',
             'evaluation_note' => 'nullable|string|max:3000',
         ]);
 

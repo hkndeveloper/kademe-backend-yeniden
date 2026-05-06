@@ -197,6 +197,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::delete('/content/faqs/{id}', [\App\Http\Controllers\Api\ContentManagementController::class, 'deleteFaq']);
 
     Route::get('/newsletter/subscribers', [\App\Http\Controllers\Api\NewsletterController::class, 'adminSubscribers']);
+    Route::get('/newsletter/subscribers/export', [\App\Http\Controllers\Api\NewsletterController::class, 'exportSubscribers']);
 
     // â”€â”€ MALÄ° Ä°ÅLEMLER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Route::get('/financials/export', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'export']);
@@ -223,6 +224,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
     Route::post('/announcements/send-sms', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendSms']);
     Route::post('/announcements/send-email', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendEmail']);
     Route::get('/announcements/communication-logs', [\App\Http\Controllers\Api\AnnouncementController::class, 'communicationLogs']);
+    Route::get('/announcements/communication-logs/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'exportCommunicationLogs']);
     Route::get('/announcements/communication-logs/{id}/attachment', [\App\Http\Controllers\Api\AnnouncementController::class, 'downloadCommunicationAttachment']);
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'index']);
     Route::get('/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'export']);
@@ -277,6 +279,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::post('/applications/{id}/waitlist', [\App\Http\Controllers\Api\AdminApplicationController::class, 'addToWaitlist']);
 
     Route::get('/volunteer/opportunities', [\App\Http\Controllers\Api\VolunteerController::class, 'panelIndex']);
+    Route::get('/volunteer/opportunities/export', [\App\Http\Controllers\Api\VolunteerController::class, 'panelExport']);
     Route::post('/volunteer/opportunities', [\App\Http\Controllers\Api\VolunteerController::class, 'panelStore']);
     Route::put('/volunteer/applications/{id}', [\App\Http\Controllers\Api\VolunteerController::class, 'panelUpdateApplication']);
     Route::delete('/volunteer/opportunities/{id}', [\App\Http\Controllers\Api\VolunteerController::class, 'panelDestroy']);
@@ -308,11 +311,13 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::put('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'updateApplicationForm']);
 
     Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelIndex']);
+    Route::get('/digital-bohca/export', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelExport']);
     Route::post('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelStore']);
     Route::get('/digital-bohca/{id}/download', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelDownload']);
     Route::delete('/digital-bohca/{id}', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'panelDestroy']);
 
     Route::get('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelIndex']);
+    Route::get('/assignments/export', [\App\Http\Controllers\Api\AssignmentController::class, 'panelExport']);
     Route::post('/assignments', [\App\Http\Controllers\Api\AssignmentController::class, 'panelStore']);
     Route::delete('/assignments/{id}', [\App\Http\Controllers\Api\AssignmentController::class, 'panelDestroy']);
     Route::get('/assignment-submissions/{id}/download', [\App\Http\Controllers\Api\AssignmentController::class, 'panelDownloadSubmission']);
@@ -341,6 +346,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::post('/announcements/send-sms', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendSms']);
     Route::post('/announcements/send-email', [\App\Http\Controllers\Api\AnnouncementController::class, 'sendEmail']);
     Route::get('/announcements/communication-logs', [\App\Http\Controllers\Api\AnnouncementController::class, 'communicationLogs']);
+    Route::get('/announcements/communication-logs/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'exportCommunicationLogs']);
     Route::get('/announcements/communication-logs/{id}/attachment', [\App\Http\Controllers\Api\AnnouncementController::class, 'downloadCommunicationAttachment']);
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'index']);
     Route::get('/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'export']);
@@ -395,6 +401,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 
     // Newsletter
     Route::get('/newsletter/subscribers', [\App\Http\Controllers\Api\NewsletterController::class, 'adminSubscribers']);
+    Route::get('/newsletter/subscribers/export', [\App\Http\Controllers\Api\NewsletterController::class, 'exportSubscribers']);
 
     // Site settings & media
     Route::get('/site-settings', [\App\Http\Controllers\Api\SiteSettingsController::class, 'admin']);

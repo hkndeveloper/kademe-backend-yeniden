@@ -10,6 +10,7 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
+use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -343,6 +344,67 @@ class AssignmentController extends Controller
             'message' => 'Odev olusturuldu.',
             'assignment' => $assignment->load(['project:id,name', 'period:id,name', 'program:id,title,start_at', 'creator:id,name,surname']),
         ], 201);
+    }
+
+    public function panelExport(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'assignments.view');
+        $user = $request->user();
+        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'assignments.view');
+
+        $query = Assignment::query()
+            ->with([
+                'project:id,name',
+                'period:id,name',
+                'program:id,title,start_at',
+                'creator:id,name,surname',
+                'submissions.user:id,name,surname',
+            ])
+            ->withCount('submissions')
+            ->orderByDesc('created_at');
+
+        if (! $this->permissionResolver->hasGlobalScope($user, 'assignments.view')) {
+            $query->whereIn('project_id', $projectIds);
+        }
+
+        if ($request->filled('project_id')) {
+            $projectId = $request->integer('project_id');
+            $this->abortUnlessProjectAllowed($request, 'assignments.view', $projectId);
+            $query->where('project_id', $projectId);
+        }
+
+        $assignments = $query->get();
+
+        $headings = [
+            'Odev ID', 'Baslik', 'Proje', 'Donem', 'Program', 'Teslim Tarihi',
+            'Teslim Sayisi', 'Olusturan', 'Olusturma Tarihi', 'Teslimler',
+        ];
+        $rows = $assignments->map(function (Assignment $assignment) {
+            $submissionSummary = $assignment->submissions
+                ->map(fn (AssignmentSubmission $submission) => trim(($submission->user?->name ?? '-') . ' ' . ($submission->user?->surname ?? '')) . " ({$submission->status})")
+                ->implode('; ');
+
+            return [
+                $assignment->id,
+                $assignment->title,
+                $assignment->project?->name ?? '-',
+                $assignment->period?->name ?? '-',
+                $assignment->program?->title ?? '-',
+                $assignment->due_date?->format('d.m.Y H:i') ?? '-',
+                $assignment->submissions_count,
+                $assignment->creator ? trim($assignment->creator->name . ' ' . $assignment->creator->surname) : '-',
+                $assignment->created_at?->format('d.m.Y H:i') ?? '-',
+                $submissionSummary !== '' ? $submissionSummary : '-',
+            ];
+        })->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'odevler_' . now()->format('Ymd_His'),
+            'Odevler',
+            $headings,
+            $rows,
+        );
     }
 
     public function panelDestroy(Request $request, int $id): JsonResponse
