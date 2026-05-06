@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\NotificationService;
+use Illuminate\Auth\Passwords\CanResetPassword;
+use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -9,8 +12,9 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable
+class User extends Authenticatable implements CanResetPasswordContract
 {
+    use CanResetPassword;
     use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes;
 
     protected $fillable = [
@@ -18,6 +22,7 @@ class User extends Authenticatable
         'surname',
         'email',
         'password',
+        'must_change_password',
         'phone',
         'address',
         'tc_no',
@@ -54,6 +59,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
             'tc_no' => 'encrypted', // KVKK kapsamında şifreli saklanır
             'birth_date' => 'date',
             'blacklisted_until' => 'datetime',
@@ -138,5 +144,38 @@ class User extends Authenticatable
     public function permissionOverrides()
     {
         return $this->hasMany(UserPermissionOverride::class);
+    }
+
+    /**
+     * Laravel Password broker token + Resend uzerinden sifre belirleme baglantisi.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $frontend = rtrim((string) config('services.frontend.url', config('app.url')), '/');
+        $resetUrl = $frontend . '/auth/reset-password?token=' . urlencode($token) . '&email=' . urlencode($this->email);
+        $loginUrl = $frontend . '/auth/login';
+
+        $body = implode("\n", [
+            "Merhaba {$this->name} {$this->surname},",
+            '',
+            'KADEME portal hesabiniz yonetici tarafindan acildi.',
+            "E-posta (giris): {$this->email}",
+            '',
+            'Guvenliginiz icin asagidaki baglanti ile kendi sifrenizi belirlemeniz gerekmektedir. Bu adimi tamamlamadan panele ve uygulama ozelliklerine erisemezsiniz.',
+            '',
+            "Sifre belirle: {$resetUrl}",
+            '',
+            "Sifre belirledikten sonra giris sayfasi: {$loginUrl}",
+            '',
+            'Baglanti sinirli sure icin gecerlidir. Bu e-postayi beklemiyorsaniz yok sayabilirsiniz.',
+        ]);
+
+        app(NotificationService::class)->sendEmail(
+            [$this->email],
+            'KADEME - Hesabiniz acildi, sifrenizi belirleyin',
+            $body,
+            null,
+            null
+        );
     }
 }

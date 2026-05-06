@@ -42,6 +42,7 @@ class ApplicationController extends Controller
             'role' => 'student',
             'status' => 'active',
             'email_verified_at' => now(),
+            'must_change_password' => false,
         ]);
 
         $user->syncRoles(['student']);

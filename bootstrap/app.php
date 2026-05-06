@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'blacklist' => \App\Http\Middleware\CheckBlacklist::class,
             'kvkk' => \App\Http\Middleware\CheckKvkkConsent::class,
             'audit.action' => \App\Http\Middleware\AuditAdminActions::class,
+            'password.not_pending_setup' => \App\Http\Middleware\DenyIfPasswordSetupPending::class,
         ]);
         
         // API grubuna global olarak bazılarını ekleyebiliriz veya Route tarafında kullanırız.

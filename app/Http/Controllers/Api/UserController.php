@@ -9,7 +9,10 @@ use App\Support\AdminExportResponder;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -24,6 +27,109 @@ class UserController extends Controller
      * GET /admin/users
      * Kullanici listesi.
      */
+    /**
+     * GET /admin/users/create-options
+     * Yeni kullanici formu icin Spatie rol listesi (users.create + global kapsam).
+     */
+    public function createOptions(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'users.create');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'users.create'),
+            403,
+            'Kullanici olusturmak icin tum sistem kapsami gerekir.'
+        );
+
+        $roles = Role::query()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role) => [
+                'name' => $role->name,
+                'label' => config('permission_catalog.role_labels.' . $role->name) ?? Str::headline($role->name),
+            ])
+            ->values();
+
+        return response()->json(['roles' => $roles]);
+    }
+
+    /**
+     * POST /admin/users
+     * Panelden kullanici olusturma. Sifre bos ise guclu rastgele sifre uretilir (yanitta bir kez doner).
+     */
+    public function storeUser(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'users.create');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'users.create'),
+            403,
+            'Kullanici olusturmak icin tum sistem kapsami gerekir.'
+        );
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'surname' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'phone' => 'nullable|string|max:20',
+            'tc_no' => 'nullable|string|size:11',
+            'role' => 'required|string|exists:roles,name',
+        ]);
+
+        $roleName = $validated['role'];
+        if ($roleName === 'super_admin') {
+            abort_unless(
+                $request->user()->hasRole('super_admin'),
+                403,
+                'Ust admin hesabi yalnizca ust admin tarafindan olusturulabilir.'
+            );
+        }
+
+        $passwordPlain = Str::password(24);
+
+        $user = User::create([
+            'name' => trim($validated['name']),
+            'surname' => trim($validated['surname']),
+            'email' => Str::lower(trim($validated['email'])),
+            'phone' => isset($validated['phone']) ? trim((string) $validated['phone']) : null,
+            'tc_no' => $validated['tc_no'] ?? null,
+            'password' => Hash::make($passwordPlain),
+            'role' => $roleName,
+            'status' => 'active',
+            'email_verified_at' => now(),
+            'must_change_password' => true,
+        ]);
+
+        $user->syncRoles([$roleName]);
+
+        if (in_array($roleName, ['student', 'alumni'], true)) {
+            $user->profile()->firstOrCreate(
+                ['user_id' => $user->id],
+                []
+            );
+        }
+
+        if (in_array($roleName, ['coordinator', 'staff'], true)) {
+            $user->staffProfile()->firstOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'title' => $roleName === 'coordinator' ? 'coordinator' : 'specialist',
+                    'unit' => 'Genel',
+                    'contract_type' => 'full_time',
+                    'start_date' => now()->toDateString(),
+                ]
+            );
+        }
+
+        $linkStatus = Password::sendResetLink(['email' => $user->email]);
+
+        return response()->json([
+            'message' => $linkStatus === Password::RESET_LINK_SENT
+                ? 'Kullanici olusturuldu. Sifre belirleme baglantisi e-posta ile gonderildi.'
+                : 'Kullanici olusturuldu. E-posta gonderilemedi; kullanici "Sifremi unuttum" ile baglanti talep edebilir.',
+            'user' => $user->fresh(['roles:id,name']),
+            'reset_email_status' => $linkStatus,
+        ], 201);
+    }
+
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'users.view');
@@ -263,6 +369,7 @@ class UserController extends Controller
 
         $user->update([
             'password' => Hash::make($validated['password']),
+            'must_change_password' => false,
         ]);
 
         return response()->json([

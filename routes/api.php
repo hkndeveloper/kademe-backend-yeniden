@@ -27,17 +27,20 @@ Route::post('/newsletter/subscribe', [\App\Http\Controllers\Api\NewsletterContro
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
-    // Oturum gerektiren Auth iÅŸlemleri
     Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
-        Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::middleware('password.not_pending_setup')->group(function () {
+            Route::get('/me', [AuthController::class, 'me']);
+        });
     });
 });
 
 // --- KULLANICI & PROFÄ°L --- //
 // KVKK onay endpointi haricindekilere 'kvkk' kÄ±sÄ±tlamasÄ± getiriyoruz
-Route::middleware(['auth:sanctum', 'blacklist'])->prefix('user')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->prefix('user')->group(function () {
     Route::post('/consent-kvkk', [\App\Http\Controllers\Api\UserController::class, 'consentKvkk']);
     
     Route::middleware('kvkk')->group(function () {
@@ -57,7 +60,7 @@ Route::prefix('projects')->group(function () {
 });
 
 // BaÅŸvuru iÅŸlemleri (Oturum gerektirir)
-Route::middleware(['auth:sanctum', 'blacklist', 'kvkk'])->prefix('applications')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk'])->prefix('applications')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\ApplicationController::class, 'myApplications']);
     Route::get('/{id}', [\App\Http\Controllers\Api\ApplicationController::class, 'show']);
     Route::post('/', [\App\Http\Controllers\Api\ApplicationController::class, 'store']);
@@ -68,7 +71,7 @@ Route::post('/applications/public', [\App\Http\Controllers\Api\ApplicationContro
     ->middleware('throttle:10,1');
 
 // --- PROGRAM (ETKÄ°NLÄ°K) & YOKLAMA --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'kvkk', 'role:student|alumni'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'role:student|alumni'])->group(function () {
     
     // Ã–ÄŸrencinin kendi programlarÄ±nÄ± listelemesi
     Route::get('/programs', [\App\Http\Controllers\Api\ProgramController::class, 'myPrograms']);
@@ -113,7 +116,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'kvkk', 'role:student|alumni'])-
 });
 
 // --- ADMIN / KOORDÄ°NATÃ–R PANELÄ° --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|staff', 'audit.action'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'role:super_admin|coordinator|staff', 'audit.action'])->prefix('admin')->group(function () {
 
     // Dashboard Ä°statistikleri
     Route::get('/dashboard/stats', [\App\Http\Controllers\Api\AdminDashboardController::class, 'stats']);
@@ -235,6 +238,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
 
     // â”€â”€ KULLANICI YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Route::get('/users/export', [\App\Http\Controllers\Api\UserController::class, 'exportUsers']);
+    Route::get('/users/create-options', [\App\Http\Controllers\Api\UserController::class, 'createOptions']);
+    Route::post('/users', [\App\Http\Controllers\Api\UserController::class, 'storeUser']);
     Route::get('/users', [\App\Http\Controllers\Api\UserController::class, 'index']);
     Route::get('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'showUser']);
     Route::put('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'updateUser']);
@@ -261,7 +266,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'role:super_admin|coordinator|st
 
 // Unified panel icin rol-prefix bagimsiz generic alias endpointleri.
 // /admin/* endpointleri geriye donuk uyumluluk icin oldugu gibi korunur.
-Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('panel')->group(function () {
     Route::get('/programs', [\App\Http\Controllers\Api\AdminProgramController::class, 'index']);
     Route::get('/programs/export', [\App\Http\Controllers\Api\AdminProgramController::class, 'export']);
     Route::post('/programs', [\App\Http\Controllers\Api\AdminProgramController::class, 'store']);
@@ -358,6 +363,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 
     // Users & permissions matrix
     Route::get('/users/export', [\App\Http\Controllers\Api\UserController::class, 'exportUsers']);
+    Route::get('/users/create-options', [\App\Http\Controllers\Api\UserController::class, 'createOptions']);
+    Route::post('/users', [\App\Http\Controllers\Api\UserController::class, 'storeUser']);
     Route::get('/users', [\App\Http\Controllers\Api\UserController::class, 'index']);
     Route::get('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'showUser']);
     Route::put('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'updateUser']);
@@ -449,7 +456,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
 });
 
 // â”€â”€ KOORDÄ°NATÃ–R Ã–ZEL (sadece coordinator) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->group(function () {
     // KoordinatÃ¶rÃ¼n mali iÅŸlemleri (kendi projesi)
     Route::get('/coordinator/financials', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'myFinancials']);
     Route::get('/coordinator/financials/export', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'exportMyFinancials']);
@@ -459,12 +466,12 @@ Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
 });
 
 // â”€â”€ PERSONEL / KOORDÄ°NATÃ–R (Ä°zin Talepleri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->group(function () {
     Route::post('/leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'storeLeaveRequest']);
     Route::get('/my-leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'myLeaveRequests']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->group(function () {
     Route::get('/staff/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'myAnnouncements']);
     Route::get('/staff/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'exportMyAnnouncements']);
     Route::get('/staff/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'staffIndex']);
@@ -476,7 +483,7 @@ Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
     Route::get('/staff/projects/export', [\App\Http\Controllers\Api\StaffController::class, 'exportMyProjects']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist'])->prefix('calendar')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->prefix('calendar')->group(function () {
     Route::get('/overview', [\App\Http\Controllers\Api\CalendarController::class, 'overview']);
     Route::get('/assignees', [\App\Http\Controllers\Api\CalendarController::class, 'assignees']);
     Route::get('/google/status', [\App\Http\Controllers\Api\CalendarController::class, 'googleStatus']);
@@ -484,6 +491,6 @@ Route::middleware(['auth:sanctum', 'blacklist'])->prefix('calendar')->group(func
     Route::post('/google/sync', [\App\Http\Controllers\Api\CalendarController::class, 'googleSync']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist'])->prefix('calendar')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->prefix('calendar')->group(function () {
     Route::put('/programs/{id}/assignments', [\App\Http\Controllers\Api\CalendarController::class, 'updateAssignments']);
 });

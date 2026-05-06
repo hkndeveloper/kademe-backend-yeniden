@@ -24,6 +24,11 @@ return [
         'from_name' => env('RESEND_FROM_NAME', env('MAIL_FROM_NAME')),
     ],
 
+    /** Next.js / portal URL (sifre sifirlama baglantilari icin) */
+    'frontend' => [
+        'url' => env('FRONTEND_URL', env('NEXT_PUBLIC_APP_URL', 'http://localhost:3000')),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
