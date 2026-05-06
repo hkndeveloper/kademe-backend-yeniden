@@ -335,6 +335,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->prefix('panel'
     Route::get('/calendar/google/status', [\App\Http\Controllers\Api\CalendarController::class, 'googleStatus']);
     Route::get('/calendar/google/connect', [\App\Http\Controllers\Api\CalendarController::class, 'googleConnect']);
     Route::post('/calendar/google/sync', [\App\Http\Controllers\Api\CalendarController::class, 'googleSync']);
+    Route::get('/calendar/export', [\App\Http\Controllers\Api\CalendarController::class, 'export']);
     Route::put('/calendar/programs/{id}/assignments', [\App\Http\Controllers\Api\CalendarController::class, 'updateAssignments']);
 
     // Dashboard

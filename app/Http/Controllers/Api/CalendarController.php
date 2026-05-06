@@ -9,6 +9,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Support\AdminExportResponder;
 use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
@@ -390,5 +391,92 @@ class CalendarController extends Controller
             'result' => $result,
             'google_calendar' => $googleCalendar->getStatus(),
         ]);
+    }
+
+    public function export(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'calendar.export');
+        $user = $request->user();
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+        ]);
+
+        $projectIds = $this->permissionResolver->hasGlobalScope($user, 'calendar.export')
+            ? Project::query()->pluck('id')->all()
+            : $this->permissionResolver->projectIdsForPermission($user, 'calendar.export');
+
+        if (empty($projectIds)) {
+            $projectIds = [0];
+        }
+
+        $query = Program::query()
+            ->with([
+                'project:id,name',
+                'period:id,name',
+                'calendarEvent:id,program_id,google_event_id,assigned_users',
+            ])
+            ->whereIn('project_id', $projectIds)
+            ->orderByDesc('start_at');
+
+        if (! empty($validated['project_id'])) {
+            abort_unless(
+                in_array((int) $validated['project_id'], $projectIds, true),
+                403,
+                'Bu proje icin takvim export yetkiniz yok.'
+            );
+            $query->where('project_id', (int) $validated['project_id']);
+        }
+
+        $programs = $query->get();
+        $assignedUserIds = $programs
+            ->pluck('calendarEvent.assigned_users')
+            ->filter()
+            ->flatten()
+            ->unique()
+            ->values();
+
+        $assignedUsers = User::query()
+            ->whereIn('id', $assignedUserIds)
+            ->get()
+            ->keyBy('id');
+
+        $headings = ['ID', 'Proje', 'Donem', 'Baslik', 'Konum', 'Baslangic', 'Bitis', 'Durum', 'Google', 'Atanan Kisi Sayisi', 'Atanan Kisiler'];
+        $rows = $programs->map(function (Program $program) use ($assignedUsers) {
+            $assignedIds = collect($program->calendarEvent?->assigned_users ?? [])
+                ->filter(fn ($value) => is_numeric($value))
+                ->map(fn ($value) => (int) $value)
+                ->values();
+
+            $assignedNames = $assignedIds
+                ->map(function (int $userId) use ($assignedUsers) {
+                    $user = $assignedUsers->get($userId);
+                    return $user ? trim($user->name . ' ' . $user->surname) : null;
+                })
+                ->filter()
+                ->values()
+                ->implode(', ');
+
+            return [
+                $program->id,
+                $program->project?->name ?? '-',
+                $program->period?->name ?? '-',
+                $program->title,
+                $program->location ?? '-',
+                optional($program->start_at)?->format('d.m.Y H:i') ?? '-',
+                optional($program->end_at)?->format('d.m.Y H:i') ?? '-',
+                $program->status ?? '-',
+                $program->calendarEvent?->google_event_id ? 'senkron' : 'bekliyor',
+                $assignedIds->count(),
+                $assignedNames !== '' ? $assignedNames : '-',
+            ];
+        })->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'takvim_programlari_' . now()->format('Ymd_His'),
+            'Takvim Programlari',
+            $headings,
+            $rows,
+        );
     }
 }

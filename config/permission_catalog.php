@@ -152,6 +152,7 @@ return [
         ],
         'Calendar' => [
             'calendar.view',
+            'calendar.export',
             'calendar.assignments.manage',
             'calendar.google.connect',
             'calendar.google.sync',
@@ -315,6 +316,7 @@ return [
             'programs.qr.manage',
             'programs.export',
             'calendar.view',
+            'calendar.export',
             'calendar.assignments.manage',
             'calendar.google.connect',
             'calendar.google.sync',
