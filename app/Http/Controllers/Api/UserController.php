@@ -124,7 +124,7 @@ class UserController extends Controller
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $query->where('status', $this->normalizeUserStatus((string) $request->status));
         }
 
         if ($request->filled('search')) {
@@ -212,8 +212,12 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'role' => 'sometimes|string|in:student,alumni|exists:roles,name',
-            'status' => 'sometimes|in:active,inactive,banned',
+            'status' => 'sometimes|in:active,passive,blacklisted,alumni,inactive,banned',
         ]);
+
+        if (isset($validated['status'])) {
+            $validated['status'] = $this->normalizeUserStatus((string) $validated['status']);
+        }
 
         $columnUpdates = collect($validated)
             ->except(['role'])
@@ -285,7 +289,7 @@ class UserController extends Controller
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $query->where('status', $this->normalizeUserStatus((string) $request->status));
         }
 
         if ($request->filled('search')) {
@@ -342,20 +346,20 @@ class UserController extends Controller
         $user = $request->user();
 
         $validatedUser = $request->validate([
-            'phone' => 'sometimes|string|max:20',
-            'address' => 'sometimes|string',
-            'birth_date' => 'sometimes|date',
-            'university' => 'sometimes|string|max:255',
-            'department' => 'sometimes|string|max:255',
-            'class_year' => 'sometimes|string|max:50',
-            'hometown' => 'sometimes|string|max:100',
+            'phone' => 'sometimes|nullable|string|max:20',
+            'address' => 'sometimes|nullable|string',
+            'birth_date' => 'sometimes|nullable|date',
+            'university' => 'sometimes|nullable|string|max:255',
+            'department' => 'sometimes|nullable|string|max:255',
+            'class_year' => 'sometimes|nullable|string|max:50',
+            'hometown' => 'sometimes|nullable|string|max:100',
         ]);
 
         $validatedProfile = $request->validate([
-            'motivation_message' => 'sometimes|string',
-            'linkedin_url' => 'sometimes|url|nullable',
-            'github_url' => 'sometimes|url|nullable',
-            'instagram_url' => 'sometimes|url|nullable',
+            'motivation_message' => 'sometimes|nullable|string',
+            'linkedin_url' => 'sometimes|nullable|string|max:255',
+            'github_url' => 'sometimes|nullable|string|max:255',
+            'instagram_url' => 'sometimes|nullable|string|max:255',
         ]);
 
         $user->update($validatedUser);
@@ -417,5 +421,14 @@ class UserController extends Controller
         return response()->json([
             'message' => 'KVKK aydinlatma metni basariyla onaylandi.',
         ]);
+    }
+
+    private function normalizeUserStatus(string $status): string
+    {
+        return match ($status) {
+            'inactive' => 'passive',
+            'banned' => 'blacklisted',
+            default => $status,
+        };
     }
 }

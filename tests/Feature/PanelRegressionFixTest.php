@@ -616,4 +616,59 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('certificates.0.verification_code', 'CV-VERIFY-1')
             ->assertJsonPath('credit_history.0.reason', 'Yoklama puan kesintisi');
     }
+
+    public function test_panel_user_status_update_accepts_legacy_inactive_alias_without_500(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $student = User::factory()->create([
+            'name' => 'Status',
+            'surname' => 'User',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        Sanctum::actingAs($admin);
+
+        $this->putJson("/api/panel/users/{$student->id}", ['status' => 'inactive'])
+            ->assertOk()
+            ->assertJsonPath('user.status', 'passive');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $student->id,
+            'status' => 'passive',
+        ]);
+    }
+
+    public function test_user_profile_update_accepts_social_handles_and_empty_optional_fields(): void
+    {
+        $student = User::factory()->create([
+            'name' => 'Profile',
+            'surname' => 'User',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        Sanctum::actingAs($student);
+
+        $this->putJson('/api/user/profile', [
+            'phone' => '',
+            'hometown' => '',
+            'university' => 'KADEME Universitesi',
+            'department' => 'Liderlik',
+            'class_year' => '',
+            'motivation_message' => 'Kisa ozet',
+            'linkedin_url' => 'linkedin.com/in/kademe',
+            'github_url' => 'kademe-user',
+            'instagram_url' => '',
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.profile.linkedin_url', 'linkedin.com/in/kademe')
+            ->assertJsonPath('user.profile.github_url', 'kademe-user');
+    }
 }
