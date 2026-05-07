@@ -41,6 +41,7 @@ class UserController extends Controller
         );
 
         $roles = Role::query()
+            ->whereIn('name', ['student', 'alumni'])
             ->orderBy('name')
             ->get()
             ->map(fn (Role $role) => [
@@ -71,17 +72,10 @@ class UserController extends Controller
             'email' => 'required|string|email|max:255|unique:users,email',
             'phone' => 'nullable|string|max:20',
             'tc_no' => 'nullable|string|size:11',
-            'role' => 'required|string|exists:roles,name',
+            'role' => 'required|string|in:student,alumni|exists:roles,name',
         ]);
 
         $roleName = $validated['role'];
-        if ($roleName === 'super_admin') {
-            abort_unless(
-                $request->user()->hasRole('super_admin'),
-                403,
-                'Ust admin hesabi yalnizca ust admin tarafindan olusturulabilir.'
-            );
-        }
 
         $passwordPlain = Str::password(24);
 
@@ -107,18 +101,6 @@ class UserController extends Controller
             );
         }
 
-        if (in_array($roleName, ['coordinator', 'staff'], true)) {
-            $user->staffProfile()->firstOrCreate(
-                ['user_id' => $user->id],
-                [
-                    'title' => $roleName === 'coordinator' ? 'coordinator' : 'specialist',
-                    'unit' => 'Genel',
-                    'contract_type' => 'full_time',
-                    'start_date' => now()->toDateString(),
-                ]
-            );
-        }
-
         $linkStatus = Password::sendResetLink(['email' => $user->email]);
 
         return response()->json([
@@ -135,6 +117,7 @@ class UserController extends Controller
         $this->abortUnlessAllowed($request, 'users.view');
         $query = User::with('profile')->withTrashed(false);
         $this->permissionResolver->applyUserScope($query, $request->user(), 'users.view');
+        $query->whereIn('role', ['student', 'alumni']);
 
         if ($request->filled('role')) {
             $query->where('role', $request->role);
@@ -177,8 +160,12 @@ class UserController extends Controller
             'applications.applicationForm.project:id,name',
             'attendances.program:id,title,start_at',
             'certificates.project:id,name',
+            'coordinatedProjects:id,name',
+            'assignedProjects:id,name',
             'roles:id,name',
         ])->findOrFail($id);
+
+        abort_unless(in_array($user->role, ['student', 'alumni'], true), 404);
 
         abort_unless(
             $this->permissionResolver->canAccessUser(request()->user(), 'users.view', $user),
@@ -224,7 +211,7 @@ class UserController extends Controller
         );
 
         $validated = $request->validate([
-            'role' => 'sometimes|string|exists:roles,name',
+            'role' => 'sometimes|string|in:student,alumni|exists:roles,name',
             'status' => 'sometimes|in:active,inactive,banned',
         ]);
 
@@ -249,6 +236,40 @@ class UserController extends Controller
     }
 
     /**
+     * PUT /admin/users/{id}/coordinated-projects
+     * Koordinatorun yonettigi projeleri project_coordinators uzerinden senkronize eder.
+     */
+    public function syncCoordinatedProjects(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'users.assign_role');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'users.assign_role'),
+            403,
+            'Koordinator proje atamasi icin tum sistem kapsami gerekir.'
+        );
+
+        $user = User::findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessUser($request->user(), 'users.assign_role', $user),
+            403,
+            'Bu kullaniciyi guncelleme yetkiniz bulunmuyor.'
+        );
+        abort_unless($user->role === 'coordinator', 422, 'Yalnizca koordinator hesaplarina proje atanabilir.');
+
+        $validated = $request->validate([
+            'project_ids' => 'present|array',
+            'project_ids.*' => 'integer|exists:projects,id',
+        ]);
+
+        $user->coordinatedProjects()->sync($validated['project_ids']);
+
+        return response()->json([
+            'message' => 'Koordinator projeleri guncellendi.',
+            'coordinated_projects' => $user->coordinatedProjects()->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
+    /**
      * GET /admin/users/export
      * Kullanici listesini CSV olarak disa aktar.
      */
@@ -257,6 +278,7 @@ class UserController extends Controller
         $this->abortUnlessAllowed($request, 'users.export');
         $query = User::with('profile');
         $this->permissionResolver->applyUserScope($query, $request->user(), 'users.export');
+        $query->whereIn('role', ['student', 'alumni']);
 
         if ($request->filled('role')) {
             $query->where('role', $request->role);

@@ -14,6 +14,11 @@ use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Spatie\Permission\Models\Role;
 
 class StaffController extends Controller
 {
@@ -102,6 +107,142 @@ class StaffController extends Controller
 
             return $document;
         }, $documents);
+    }
+
+    private function applyEmployeeScope($query)
+    {
+        return $query->where(function ($builder) {
+            $builder
+                ->whereIn('role', ['coordinator', 'staff'])
+                ->orWhereHas('staffProfile')
+                ->orWhereHas('coordinatedProjects')
+                ->orWhereHas('assignedProjects')
+                ->orWhere(function ($customRoleQuery) {
+                    $customRoleQuery
+                        ->whereNotNull('role')
+                        ->whereNotIn('role', ['super_admin', 'student', 'alumni', 'visitor']);
+                });
+        });
+    }
+
+    private function projectSummary(User $user): array
+    {
+        $coordinated = $user->coordinatedProjects
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'assignment_type' => 'coordinator',
+            ]);
+
+        $assigned = $user->assignedProjects
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'assignment_type' => 'staff',
+            ]);
+
+        return $coordinated
+            ->merge($assigned)
+            ->unique(fn (array $project) => $project['assignment_type'] . ':' . $project['id'])
+            ->values()
+            ->all();
+    }
+
+    public function createOptions(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'staff.update');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'staff.update'),
+            403,
+            'Calisan olusturmak icin tum sistem kapsami gerekir.'
+        );
+
+        $roles = Role::query()
+            ->whereNotIn('name', ['super_admin', 'student', 'alumni', 'visitor'])
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role) => [
+                'name' => $role->name,
+                'label' => config('permission_catalog.role_labels.' . $role->name) ?? Str::headline($role->name),
+            ])
+            ->values();
+
+        return response()->json(['roles' => $roles]);
+    }
+
+    public function store(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'staff.update');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'staff.update'),
+            403,
+            'Calisan olusturmak icin tum sistem kapsami gerekir.'
+        );
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'surname' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'phone' => 'nullable|string|max:20',
+            'tc_no' => 'nullable|string|size:11',
+            'role' => 'required|string|exists:roles,name',
+            'unit' => 'nullable|string|max:255',
+            'title' => ['nullable', 'string', 'max:255', Rule::in(['researcher', 'specialist', 'coordinator', 'manager', 'other'])],
+            'contract_type' => 'nullable|string|max:100',
+            'project_ids' => 'sometimes|array',
+            'project_ids.*' => 'integer|exists:projects,id',
+        ]);
+
+        $roleName = $validated['role'];
+        abort_if(in_array($roleName, ['super_admin', 'student', 'alumni', 'visitor'], true), 422, 'Bu rol personel ekranindan olusturulamaz.');
+
+        $passwordPlain = Str::password(24);
+        $user = User::create([
+            'name' => trim($validated['name']),
+            'surname' => trim($validated['surname']),
+            'email' => Str::lower(trim($validated['email'])),
+            'phone' => isset($validated['phone']) ? trim((string) $validated['phone']) : null,
+            'tc_no' => $validated['tc_no'] ?? null,
+            'password' => Hash::make($passwordPlain),
+            'role' => $roleName,
+            'status' => 'active',
+            'email_verified_at' => now(),
+            'must_change_password' => true,
+        ]);
+
+        $user->syncRoles([$roleName]);
+        $user->staffProfile()->firstOrCreate(
+            ['user_id' => $user->id],
+            [
+                'title' => $validated['title'] ?? ($roleName === 'coordinator' ? 'coordinator' : 'specialist'),
+                'unit' => trim((string) ($validated['unit'] ?? 'Genel')) ?: 'Genel',
+                'contract_type' => $validated['contract_type'] ?? 'full_time',
+                'start_date' => now()->toDateString(),
+            ]
+        );
+
+        $projectIds = collect($validated['project_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+        if ($roleName === 'coordinator') {
+            $user->coordinatedProjects()->sync($projectIds);
+        } else {
+            $user->assignedProjects()->sync($projectIds);
+        }
+
+        $linkStatus = Password::sendResetLink(['email' => $user->email]);
+        $fresh = $user->fresh(['staffProfile', 'coordinatedProjects:id,name', 'assignedProjects:id,name', 'roles:id,name']);
+        $fresh->setAttribute('projects', $this->projectSummary($fresh));
+
+        return response()->json([
+            'message' => $linkStatus === Password::RESET_LINK_SENT
+                ? 'Calisan olusturuldu. Sifre belirleme baglantisi e-posta ile gonderildi.'
+                : 'Calisan olusturuldu. E-posta gonderilemedi; kullanici "Sifremi unuttum" ile baglanti talep edebilir.',
+            'staff' => $fresh,
+            'reset_email_status' => $linkStatus,
+        ], 201);
     }
 
     /**
@@ -313,11 +454,19 @@ class StaffController extends Controller
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
-        $query = User::with('staffProfile')
-            ->whereIn('role', ['coordinator', 'staff'])
+        $query = User::with(['staffProfile', 'coordinatedProjects:id,name', 'assignedProjects:id,name'])
             ->where('status', '!=', 'banned');
+        $this->applyEmployeeScope($query);
         $query = $this->applyCoordinatorUnitScope($request, $query);
 
+        if ($request->filled('project_id')) {
+            $projectId = (int) $request->input('project_id');
+            $query->where(function ($builder) use ($projectId) {
+                $builder
+                    ->whereHas('coordinatedProjects', fn ($projectQuery) => $projectQuery->where('projects.id', $projectId))
+                    ->orWhereHas('assignedProjects', fn ($projectQuery) => $projectQuery->where('projects.id', $projectId));
+            });
+        }
         if ($request->filled('unit')) {
             $query->whereHas('staffProfile', fn($q) => $q->where('unit', $request->unit));
         }
@@ -339,6 +488,12 @@ class StaffController extends Controller
 
         $staff = $query->paginate(20);
 
+        $staff->getCollection()->transform(function (User $user) {
+            $user->setAttribute('projects', $this->projectSummary($user));
+
+            return $user;
+        });
+
         return response()->json(['staff' => $staff]);
     }
 
@@ -351,7 +506,7 @@ class StaffController extends Controller
         $this->abortUnlessAllowed($request, 'staff.view');
         // Aktif personel: son 8 saat içinde token aktivitesi olanlar (yaklaşık)
         $activeStaff = User::with('staffProfile')
-            ->whereIn('role', ['coordinator', 'staff'])
+            ->tap(fn ($query) => $this->applyEmployeeScope($query))
             ->whereHas('tokens', fn($q) => $q->where('last_used_at', '>=', now()->subHours(8)))
             ->tap(fn ($query) => $this->applyCoordinatorUnitScope($request, $query))
             ->get(['id', 'name', 'surname', 'email', 'role', 'profile_photo_path']);
@@ -361,7 +516,7 @@ class StaffController extends Controller
             $q->where('status', 'approved')
               ->where('start_date', '<=', today())
               ->where('end_date', '>=', today())
-        ])->whereIn('role', ['coordinator', 'staff'])
+        ])->tap(fn ($query) => $this->applyEmployeeScope($query))
           ->tap(fn ($query) => $this->applyCoordinatorUnitScope($request, $query))
           ->whereHas('leaveRequests', fn($q) =>
               $q->where('status', 'approved')
@@ -382,9 +537,20 @@ class StaffController extends Controller
     public function show(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
-        $user = User::with(['staffProfile', 'leaveRequests' => fn($q) => $q->latest()->take(10)])
-            ->whereIn('role', ['coordinator', 'staff'])
-            ->findOrFail($id);
+        $user = User::with([
+            'staffProfile',
+            'coordinatedProjects:id,name',
+            'assignedProjects:id,name',
+            'leaveRequests' => fn($q) => $q->latest()->take(10),
+        ])->findOrFail($id);
+        abort_unless(
+            in_array($user->role, ['coordinator', 'staff'], true)
+                || $user->staffProfile
+                || $user->coordinatedProjects->isNotEmpty()
+                || $user->assignedProjects->isNotEmpty()
+                || ($user->role && ! in_array($user->role, ['super_admin', 'student', 'alumni', 'visitor'], true)),
+            404
+        );
 
         $this->abortUnlessUnitAllowed($request, 'staff.view', $user->staffProfile?->unit);
 
@@ -392,7 +558,58 @@ class StaffController extends Controller
             $user->staffProfile->personal_documents = $this->documentsWithUrls($user->staffProfile->personal_documents ?? []);
         }
 
+        $user->setAttribute('projects', $this->projectSummary($user));
+
         return response()->json(['staff' => $user]);
+    }
+
+    public function syncProjects(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'staff.update');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'staff.update'),
+            403,
+            'Proje atamasi icin tum sistem kapsami gerekir.'
+        );
+
+        $user = User::with(['staffProfile', 'coordinatedProjects:id,name', 'assignedProjects:id,name'])->findOrFail($id);
+        abort_if($user->role === 'super_admin', 422, 'Ust admin hesabi proje gorevlendirme listesinden yonetilemez.');
+        abort_if(in_array($user->role, ['student', 'alumni', 'visitor'], true), 422, 'Bu kullanici calisan rolu tasimiyor.');
+
+        $validated = $request->validate([
+            'coordinated_project_ids' => 'present|array',
+            'coordinated_project_ids.*' => 'integer|exists:projects,id',
+            'assigned_project_ids' => 'present|array',
+            'assigned_project_ids.*' => 'integer|exists:projects,id',
+        ]);
+
+        if ($user->role === 'coordinator') {
+            $user->coordinatedProjects()->sync($validated['coordinated_project_ids']);
+            $user->assignedProjects()->sync([]);
+        } else {
+            $user->coordinatedProjects()->sync([]);
+            $user->assignedProjects()->sync($validated['assigned_project_ids']);
+        }
+
+        if (! $user->staffProfile) {
+            $user->staffProfile()->firstOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'title' => $user->role === 'coordinator' ? 'coordinator' : 'specialist',
+                    'unit' => 'Genel',
+                    'contract_type' => 'full_time',
+                    'start_date' => now()->toDateString(),
+                ]
+            );
+        }
+
+        $fresh = $user->fresh(['staffProfile', 'coordinatedProjects:id,name', 'assignedProjects:id,name']);
+        $fresh->setAttribute('projects', $this->projectSummary($fresh));
+
+        return response()->json([
+            'message' => 'Calisan proje atamalari guncellendi.',
+            'staff' => $fresh,
+        ]);
     }
 
     /**
@@ -402,11 +619,12 @@ class StaffController extends Controller
     public function update(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.update');
-        $user = User::with('staffProfile')->whereIn('role', ['coordinator', 'staff'])->findOrFail($id);
+        $user = User::with('staffProfile')->findOrFail($id);
+        abort_if(in_array($user->role, ['super_admin', 'student', 'alumni', 'visitor'], true), 422, 'Bu kullanici calisan rolu tasimiyor.');
         $this->abortUnlessUnitAllowed($request, 'staff.update', $user->staffProfile?->unit);
 
         $validated = $request->validate([
-            'title'         => 'nullable|string|max:255',
+            'title'         => ['nullable', 'string', 'max:255', Rule::in(['researcher', 'specialist', 'coordinator', 'manager', 'other'])],
             'unit'          => 'nullable|string|max:255',
             'contract_type' => 'nullable|string|max:100',
             'start_date'    => 'nullable|date',
@@ -459,7 +677,8 @@ class StaffController extends Controller
             'label'    => 'nullable|string|max:100',
         ]);
 
-        $user = User::whereIn('role', ['coordinator', 'staff'])->findOrFail($id);
+        $user = User::findOrFail($id);
+        abort_if(in_array($user->role, ['super_admin', 'student', 'alumni', 'visitor'], true), 422, 'Bu kullanici calisan rolu tasimiyor.');
         $this->abortUnlessUnitAllowed($request, 'staff.documents.upload', $user->staffProfile?->unit);
         $profile = $user->staffProfile()->firstOrCreate(['user_id' => $user->id]);
 
@@ -485,10 +704,19 @@ class StaffController extends Controller
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.export');
-        $query = User::with('staffProfile')
-            ->whereIn('role', ['coordinator', 'staff'])
+        $query = User::with(['staffProfile', 'coordinatedProjects:id,name', 'assignedProjects:id,name'])
             ->where('status', '!=', 'banned');
+        $this->applyEmployeeScope($query);
         $query = $this->applyCoordinatorUnitScope($request, $query);
+
+        if ($request->filled('project_id')) {
+            $projectId = (int) $request->input('project_id');
+            $query->where(function ($builder) use ($projectId) {
+                $builder
+                    ->whereHas('coordinatedProjects', fn ($projectQuery) => $projectQuery->where('projects.id', $projectId))
+                    ->orWhereHas('assignedProjects', fn ($projectQuery) => $projectQuery->where('projects.id', $projectId));
+            });
+        }
 
         if ($request->filled('role')) {
             $query->where('role', $request->role);
@@ -506,7 +734,7 @@ class StaffController extends Controller
 
         $staff = $query->get();
 
-        $headings = ['ID', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Rol', 'Unvan', 'Birim', 'Sozlesme Turu', 'Baslangic Tarihi'];
+        $headings = ['ID', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Rol', 'Unvan', 'Birim', 'Projeler', 'Sozlesme Turu', 'Baslangic Tarihi'];
         $rows = $staff->map(fn (User $staffUser) => [
             $staffUser->id,
             $staffUser->name,
@@ -516,6 +744,7 @@ class StaffController extends Controller
             $staffUser->role,
             $staffUser->staffProfile->title ?? '-',
             $staffUser->staffProfile->unit ?? '-',
+            collect($this->projectSummary($staffUser))->map(fn (array $project) => $project['name'] . ' (' . $project['assignment_type'] . ')')->join(', ') ?: '-',
             $staffUser->staffProfile->contract_type ?? '-',
             $staffUser->staffProfile->start_date?->format('d.m.Y') ?? '-',
         ])->all();

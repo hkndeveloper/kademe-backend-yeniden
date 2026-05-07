@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -256,5 +257,86 @@ class PermissionResolverScopeTest extends TestCase
 
         $this->assertTrue($resolver->canAccessProject($coordinator, 'projects.view', $ownProject->id));
         $this->assertFalse($resolver->canAccessProject($coordinator, 'projects.view', $otherProject->id));
+    }
+
+    public function test_staff_assigned_projects_scope_uses_project_staff_assignments(): void
+    {
+        Permission::findOrCreate('projects.view', 'web');
+
+        $staff = User::factory()->create([
+            'name' => 'Assigned',
+            'surname' => 'Staff',
+            'email' => 'assigned-staff@test.local',
+            'role' => 'staff',
+        ]);
+        Role::findOrCreate('staff', 'web');
+        $staff->assignRole('staff');
+        $staff->givePermissionTo('projects.view');
+
+        $assignedProject = Project::query()->create([
+            'name' => 'Assigned Staff Project',
+            'slug' => 'assigned-staff-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $otherProject = Project::query()->create([
+            'name' => 'Unassigned Staff Project',
+            'slug' => 'unassigned-staff-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $staff->assignedProjects()->attach($assignedProject->id);
+
+        $staff->refresh();
+        $resolver = $this->resolver();
+
+        $this->assertTrue($resolver->canAccessProject($staff, 'projects.view', $assignedProject->id));
+        $this->assertFalse($resolver->canAccessProject($staff, 'projects.view', $otherProject->id));
+    }
+
+    public function test_custom_employee_role_can_use_assigned_projects_scope(): void
+    {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            $this->markTestSkipped('SQLite test schema keeps the legacy role check constraint; PostgreSQL migration relaxes it.');
+        }
+
+        Permission::findOrCreate('projects.view', 'web');
+
+        $role = Role::findOrCreate('field_specialist', 'web');
+        $role->givePermissionTo('projects.view');
+        RolePermissionScope::query()->create([
+            'role_name' => 'field_specialist',
+            'permission_name' => 'projects.view',
+            'scope_type' => 'assigned_projects',
+            'scope_payload' => [],
+        ]);
+
+        $user = User::factory()->create([
+            'name' => 'Field',
+            'surname' => 'Specialist',
+            'email' => 'field-specialist@test.local',
+            'role' => 'field_specialist',
+        ]);
+        $user->assignRole('field_specialist');
+
+        $assignedProject = Project::query()->create([
+            'name' => 'Custom Assigned Project',
+            'slug' => 'custom-assigned-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $otherProject = Project::query()->create([
+            'name' => 'Custom Other Project',
+            'slug' => 'custom-other-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $user->assignedProjects()->attach($assignedProject->id);
+
+        $user->refresh();
+        $resolver = $this->resolver();
+
+        $this->assertTrue($resolver->canAccessProject($user, 'projects.view', $assignedProject->id));
+        $this->assertFalse($resolver->canAccessProject($user, 'projects.view', $otherProject->id));
     }
 }

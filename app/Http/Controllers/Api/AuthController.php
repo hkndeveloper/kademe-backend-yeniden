@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -105,7 +106,8 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $email = Str::lower(trim($validated['email']));
+        $user = User::where('email', $email)->first();
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -175,7 +177,8 @@ class AuthController extends Controller
             'email' => 'required|email',
         ]);
 
-        Password::sendResetLink($request->only('email'));
+        $email = Str::lower(trim((string) $request->input('email')));
+        Password::sendResetLink(['email' => $email]);
 
         return response()->json([
             'message' => 'E-posta adresinize sifre belirleme baglantisi gonderdik. Gelmiyorsa spam klasorunu kontrol edin.',
@@ -193,8 +196,11 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
+        $payload = $request->only('email', 'password', 'password_confirmation', 'token');
+        $payload['email'] = Str::lower(trim((string) ($payload['email'] ?? '')));
+
         $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
+            $payload,
             function (User $user, string $password) {
                 $user->forceFill([
                     'password' => Hash::make($password),

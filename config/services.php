@@ -24,9 +24,13 @@ return [
         'from_name' => env('RESEND_FROM_NAME', env('MAIL_FROM_NAME')),
     ],
 
-    /** Next.js / portal URL (sifre sifirlama baglantilari icin) */
+    /*
+     | Kullaniciya giden e-postalardaki /auth/login ve /auth/reset-password linkleri BURADAN gelir.
+     | Uretimde mutlaka ayarlayin (ornek: https://hakankekec.me). Bos birakilirsa localhost kullanilir.
+     | Oncelik: FRONTEND_URL -> APP_FRONTEND_URL -> NEXT_PUBLIC_APP_URL -> localhost (sadece gelistirme)
+     */
     'frontend' => [
-        'url' => env('FRONTEND_URL', env('NEXT_PUBLIC_APP_URL', 'http://localhost:3000')),
+        'url' => env('FRONTEND_URL', env('APP_FRONTEND_URL', env('NEXT_PUBLIC_APP_URL', 'http://localhost:3000'))),
     ],
 
     'ses' => [

@@ -216,9 +216,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     // â”€â”€ PERSONEL YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Route::get('/staff/export', [\App\Http\Controllers\Api\StaffController::class, 'export']);
     Route::get('/staff/active', [\App\Http\Controllers\Api\StaffController::class, 'active']);
+    Route::get('/staff/create-options', [\App\Http\Controllers\Api\StaffController::class, 'createOptions']);
+    Route::post('/staff', [\App\Http\Controllers\Api\StaffController::class, 'store']);
     Route::get('/staff', [\App\Http\Controllers\Api\StaffController::class, 'index']);
     Route::get('/staff/{id}', [\App\Http\Controllers\Api\StaffController::class, 'show']);
     Route::put('/staff/{id}', [\App\Http\Controllers\Api\StaffController::class, 'update']);
+    Route::put('/staff/{id}/projects', [\App\Http\Controllers\Api\StaffController::class, 'syncProjects']);
     Route::post('/staff/{id}/documents', [\App\Http\Controllers\Api\StaffController::class, 'uploadDocument']);
 
     // â”€â”€ Ä°ZÄ°N TALEPLERÄ° (Admin gÃ¶rÃ¼nÃ¼mÃ¼) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -241,6 +244,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/users/create-options', [\App\Http\Controllers\Api\UserController::class, 'createOptions']);
     Route::post('/users', [\App\Http\Controllers\Api\UserController::class, 'storeUser']);
     Route::get('/users', [\App\Http\Controllers\Api\UserController::class, 'index']);
+    Route::put('/users/{id}/coordinated-projects', [\App\Http\Controllers\Api\UserController::class, 'syncCoordinatedProjects']);
     Route::get('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'showUser']);
     Route::put('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'updateUser']);
     Route::get('/permissions-matrix', [\App\Http\Controllers\Api\PermissionMatrixController::class, 'index']);
@@ -366,6 +370,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/users/create-options', [\App\Http\Controllers\Api\UserController::class, 'createOptions']);
     Route::post('/users', [\App\Http\Controllers\Api\UserController::class, 'storeUser']);
     Route::get('/users', [\App\Http\Controllers\Api\UserController::class, 'index']);
+    Route::put('/users/{id}/coordinated-projects', [\App\Http\Controllers\Api\UserController::class, 'syncCoordinatedProjects']);
     Route::get('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'showUser']);
     Route::put('/users/{id}', [\App\Http\Controllers\Api\UserController::class, 'updateUser']);
     Route::get('/permissions-matrix', [\App\Http\Controllers\Api\PermissionMatrixController::class, 'index']);
@@ -398,9 +403,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     // Staff management
     Route::get('/staff/export', [\App\Http\Controllers\Api\StaffController::class, 'export']);
     Route::get('/staff/active', [\App\Http\Controllers\Api\StaffController::class, 'active']);
+    Route::get('/staff/create-options', [\App\Http\Controllers\Api\StaffController::class, 'createOptions']);
+    Route::post('/staff', [\App\Http\Controllers\Api\StaffController::class, 'store']);
     Route::get('/staff', [\App\Http\Controllers\Api\StaffController::class, 'index']);
     Route::get('/staff/{id}', [\App\Http\Controllers\Api\StaffController::class, 'show']);
     Route::put('/staff/{id}', [\App\Http\Controllers\Api\StaffController::class, 'update']);
+    Route::put('/staff/{id}/projects', [\App\Http\Controllers\Api\StaffController::class, 'syncProjects']);
     Route::post('/staff/{id}/documents', [\App\Http\Controllers\Api\StaffController::class, 'uploadDocument']);
     Route::get('/leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'leaveRequests']);
     Route::get('/leave-requests/export', [\App\Http\Controllers\Api\StaffController::class, 'exportLeaveRequests']);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -90,6 +91,12 @@ class User extends Authenticatable implements CanResetPasswordContract
         return $this->belongsToMany(Project::class, 'project_coordinators');
     }
 
+    // Personel / ozel rol proje gorevlendirmeleri
+    public function assignedProjects()
+    {
+        return $this->belongsToMany(Project::class, 'project_staff_assignments');
+    }
+
     // Katılımcı olduğu projeler
     public function participations()
     {
@@ -151,7 +158,17 @@ class User extends Authenticatable implements CanResetPasswordContract
      */
     public function sendPasswordResetNotification($token): void
     {
-        $frontend = rtrim((string) config('services.frontend.url', config('app.url')), '/');
+        $frontend = rtrim((string) config('services.frontend.url'), '/');
+
+        if ($frontend === '' || preg_match('#localhost|127\.0\.0\.1#i', $frontend) === 1) {
+            if (app()->isProduction()) {
+                Log::error('mail.frontend_url_invalid', [
+                    'hint' => 'Railway backend Variables icine FRONTEND_URL=https://gercek-site-adresiniz ekleyin (Next degil, Laravel servisi).',
+                    'resolved' => $frontend,
+                ]);
+            }
+        }
+
         $resetUrl = $frontend . '/auth/reset-password?token=' . urlencode($token) . '&email=' . urlencode($this->email);
         $loginUrl = $frontend . '/auth/login';
 

@@ -83,7 +83,13 @@ class PermissionResolver
 
     public function resolve(User $user): array
     {
-        $user->loadMissing(['roles:id,name', 'staffProfile', 'coordinatedProjects:id', 'participations:id,user_id,project_id']);
+        $user->loadMissing([
+            'roles:id,name',
+            'staffProfile',
+            'coordinatedProjects:id',
+            'assignedProjects:id',
+            'participations:id,user_id,project_id',
+        ]);
 
         $basePermissions = $user->getAllPermissions()->pluck('name')->values()->all();
         $effectivePermissions = collect($basePermissions)
@@ -349,14 +355,14 @@ class PermissionResolver
                 }
             }
 
-            return $user->participations->pluck('project_id')->unique()->values()->all();
+            return $user->assignedProjects->pluck('id')->unique()->values()->all();
         }
 
         if (in_array($user->role, ['student', 'alumni'], true)) {
             return $user->participations->pluck('project_id')->unique()->values()->all();
         }
 
-        return [];
+        return $user->assignedProjects->pluck('id')->unique()->values()->all();
     }
 
     private function matchesAny(string $permissionName, array $prefixes): bool

@@ -47,6 +47,11 @@ class Project extends Model
         return $this->belongsToMany(User::class, 'project_coordinators');
     }
 
+    public function assignedStaff()
+    {
+        return $this->belongsToMany(User::class, 'project_staff_assignments');
+    }
+
     public function periods()
     {
         return $this->hasMany(Period::class);
