@@ -139,6 +139,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::post('/programs/{id}/generate-qr', [\App\Http\Controllers\Api\AdminProgramController::class, 'generateQr']);
     Route::post('/programs/{id}/complete', [\App\Http\Controllers\Api\AdminProgramController::class, 'complete']);
     Route::get('/programs/{id}/attendances', [\App\Http\Controllers\Api\AdminProgramController::class, 'attendanceDetails']);
+    Route::put('/programs/{id}/attendances/{participantId}', [\App\Http\Controllers\Api\AdminProgramController::class, 'markManualAttendance']);
     Route::get('/programs/{id}/attendances/export', [\App\Http\Controllers\Api\AdminProgramController::class, 'exportAttendanceDetails']);
 
     // Kredi (Puan) ve Rozet YÃ¶netimi
@@ -278,6 +279,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/programs/{id}/complete', [\App\Http\Controllers\Api\AdminProgramController::class, 'complete']);
     Route::post('/programs/{id}/generate-qr', [\App\Http\Controllers\Api\AdminProgramController::class, 'generateQr']);
     Route::get('/programs/{id}/attendances', [\App\Http\Controllers\Api\AdminProgramController::class, 'attendanceDetails']);
+    Route::put('/programs/{id}/attendances/{participantId}', [\App\Http\Controllers\Api\AdminProgramController::class, 'markManualAttendance']);
     Route::get('/programs/{id}/attendances/export', [\App\Http\Controllers\Api\AdminProgramController::class, 'exportAttendanceDetails']);
 
     Route::get('/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'index']);

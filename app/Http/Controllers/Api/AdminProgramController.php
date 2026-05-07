@@ -392,6 +392,49 @@ class AdminProgramController extends Controller
         ]);
     }
 
+    public function markManualAttendance(Request $request, int $id, int $participantId): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'programs.attendance.manage');
+        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
+        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.attendance.manage');
+
+        $validated = $request->validate([
+            'is_valid' => 'required|boolean',
+            'manual_note' => 'nullable|string|max:1000',
+        ]);
+
+        $participant = Participant::query()
+            ->where('id', $participantId)
+            ->where('project_id', $program->project_id)
+            ->when(
+                $program->period_id,
+                fn ($query) => $query->where('period_id', $program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
+            ->where('status', 'active')
+            ->firstOrFail();
+
+        $attendance = Attendance::query()->updateOrCreate(
+            [
+                'program_id' => $program->id,
+                'user_id' => $participant->user_id,
+            ],
+            [
+                'method' => 'manual',
+                'is_valid' => (bool) $validated['is_valid'],
+                'manual_note' => $validated['manual_note'] ?? null,
+                'recorded_by' => $request->user()->id,
+                'latitude' => null,
+                'longitude' => null,
+            ]
+        );
+
+        return response()->json([
+            'message' => $attendance->is_valid ? 'Yoklama katildi olarak isaretlendi.' : 'Yoklama gelmedi olarak isaretlendi.',
+            'attendance' => $attendance,
+        ]);
+    }
+
     public function exportAttendanceDetails(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'programs.attendance.export');

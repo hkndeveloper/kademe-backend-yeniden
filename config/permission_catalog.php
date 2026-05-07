@@ -143,6 +143,7 @@ return [
         'Programs' => [
             'programs.view',
             'programs.attendance.view',
+            'programs.attendance.manage',
             'programs.attendance.export',
             'programs.create',
             'programs.update',
@@ -309,6 +310,7 @@ return [
         'manage programs' => [
             'programs.view',
             'programs.attendance.view',
+            'programs.attendance.manage',
             'programs.attendance.export',
             'programs.create',
             'programs.update',
