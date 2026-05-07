@@ -7,6 +7,10 @@ use App\Models\Participant;
 use App\Models\CreditLog;
 use App\Models\Badge;
 use App\Models\Certificate;
+use App\Models\EurodeskProject;
+use App\Models\Internship;
+use App\Models\Mentor;
+use App\Models\RewardTier;
 use Illuminate\Http\Request;
 
 class StudentDashboardController extends Controller
@@ -220,5 +224,163 @@ class StudentDashboardController extends Controller
                 'created_at' => optional($log->created_at)?->toIso8601String(),
             ])->values(),
         ]);
+    }
+
+    public function projectSpecials(Request $request)
+    {
+        $user = $request->user();
+
+        $participations = $this->participationQueryFor($user)
+            ->with(['project:id,name,slug,type', 'period:id,name'])
+            ->get()
+            ->filter(fn (Participant $participation) => $participation->project !== null)
+            ->values();
+
+        $projectIds = $participations->pluck('project_id')->unique()->values();
+        $participantIds = $participations->pluck('id')->unique()->values();
+
+        $internshipsByParticipant = Internship::query()
+            ->whereIn('participant_id', $participantIds)
+            ->orderByDesc('start_date')
+            ->get()
+            ->groupBy('participant_id');
+
+        $mentorsByProject = Mentor::query()
+            ->whereIn('project_id', $projectIds)
+            ->orderBy('name')
+            ->get()
+            ->groupBy('project_id');
+
+        $eurodeskByProject = EurodeskProject::query()
+            ->whereIn('project_id', $projectIds)
+            ->orderByDesc('created_at')
+            ->get()
+            ->groupBy('project_id');
+
+        $rewardTiersByProject = RewardTier::query()
+            ->where(function ($query) use ($projectIds) {
+                $query->whereIn('project_id', $projectIds)->orWhereNull('project_id');
+            })
+            ->orderBy('min_badges')
+            ->orderBy('min_credits')
+            ->get()
+            ->groupBy(fn (RewardTier $tier) => $tier->project_id ?: 0);
+
+        $badgeCountsByProject = $user->badges()
+            ->get()
+            ->groupBy(fn (Badge $badge) => $badge->pivot?->project_id ?: $badge->project_id ?: 0)
+            ->map(fn ($badges) => $badges->count());
+
+        return response()->json([
+            'projects' => $participations->map(function (Participant $participation) use (
+                $internshipsByParticipant,
+                $mentorsByProject,
+                $eurodeskByProject,
+                $rewardTiersByProject,
+                $badgeCountsByProject
+            ) {
+                $project = $participation->project;
+                $moduleKeys = $this->projectModuleKeys($project?->type, $project?->name, $project?->slug);
+                $projectRewardTiers = ($rewardTiersByProject->get($project->id) ?? collect())
+                    ->concat($rewardTiersByProject->get(0) ?? collect())
+                    ->values();
+                $badgeCount = (int) (($badgeCountsByProject->get($project->id) ?? 0) + ($badgeCountsByProject->get(0) ?? 0));
+
+                return [
+                    'project' => [
+                        'id' => $project->id,
+                        'name' => $project->name,
+                        'slug' => $project->slug,
+                        'type' => $project->type,
+                    ],
+                    'period' => $participation->period?->only(['id', 'name']),
+                    'participation' => [
+                        'id' => $participation->id,
+                        'status' => $participation->status,
+                        'graduation_status' => $participation->graduation_status,
+                        'credit' => (int) $participation->credit,
+                    ],
+                    'modules' => $moduleKeys,
+                    'internships' => in_array('internships', $moduleKeys, true)
+                        ? ($internshipsByParticipant->get($participation->id) ?? collect())->map(fn (Internship $internship) => [
+                            'id' => $internship->id,
+                            'company_name' => $internship->company_name,
+                            'position' => $internship->position,
+                            'start_date' => optional($internship->start_date)?->toDateString(),
+                            'end_date' => optional($internship->end_date)?->toDateString(),
+                            'description' => $internship->description,
+                            'has_document' => ! empty($internship->document_path),
+                        ])->values()
+                        : [],
+                    'mentors' => in_array('mentors', $moduleKeys, true)
+                        ? ($mentorsByProject->get($project->id) ?? collect())->map(fn (Mentor $mentor) => [
+                            'id' => $mentor->id,
+                            'name' => $mentor->name,
+                            'expertise' => $mentor->expertise,
+                            'bio' => $mentor->bio,
+                            'photo_path' => $mentor->photo_path,
+                        ])->values()
+                        : [],
+                    'eurodesk_projects' => in_array('eurodesk_projects', $moduleKeys, true)
+                        ? ($eurodeskByProject->get($project->id) ?? collect())->map(fn (EurodeskProject $eurodeskProject) => [
+                            'id' => $eurodeskProject->id,
+                            'title' => $eurodeskProject->title,
+                            'partner_organizations' => $eurodeskProject->partner_organizations ?? [],
+                            'grant_amount' => $eurodeskProject->grant_amount,
+                            'grant_status' => $eurodeskProject->grant_status,
+                            'start_date' => optional($eurodeskProject->start_date)?->toDateString(),
+                            'end_date' => optional($eurodeskProject->end_date)?->toDateString(),
+                        ])->values()
+                        : [],
+                    'reward_tiers' => in_array('reward_tiers', $moduleKeys, true)
+                        ? $projectRewardTiers->map(fn (RewardTier $tier) => [
+                            'id' => $tier->id,
+                            'name' => $tier->name,
+                            'description' => $tier->description,
+                            'min_badges' => (int) $tier->min_badges,
+                            'min_credits' => (int) $tier->min_credits,
+                            'reward_description' => $tier->reward_description,
+                            'eligible' => $badgeCount >= (int) $tier->min_badges && (int) $participation->credit >= (int) $tier->min_credits,
+                        ])->values()
+                        : [],
+                    'reward_progress' => in_array('reward_tiers', $moduleKeys, true)
+                        ? [
+                            'badge_count' => $badgeCount,
+                            'credit' => (int) $participation->credit,
+                            'eligible_count' => $projectRewardTiers->filter(
+                                fn (RewardTier $tier) => $badgeCount >= (int) $tier->min_badges && (int) $participation->credit >= (int) $tier->min_credits
+                            )->count(),
+                        ]
+                        : null,
+                ];
+            })->values(),
+        ]);
+    }
+
+    private function projectModuleKeys(?string $type, ?string $name, ?string $slug): array
+    {
+        $text = mb_strtolower(trim(implode(' ', array_filter([$type, $name, $slug]))));
+
+        if (str_contains($text, 'diplomasi')) {
+            return ['digital_bohca', 'internships', 'uploaded_files'];
+        }
+
+        if (str_contains($text, 'pergel')) {
+            return ['digital_bohca', 'mentors', 'assignments'];
+        }
+
+        if (str_contains($text, 'kpd') || str_contains($text, 'psikolojik')) {
+            return ['digital_bohca', 'kpd_appointments', 'kpd_reports'];
+        }
+
+        if (str_contains($text, 'kademe_plus') || str_contains($text, 'kademe plus') || str_contains($text, 'kademe+')) {
+            return ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'];
+        }
+
+        if (str_contains($text, 'eurodesk')) {
+            return ['digital_bohca', 'eurodesk_projects'];
+        }
+
+        return ['digital_bohca'];
     }
 }

@@ -419,11 +419,18 @@ class PanelRegressionFixTest extends TestCase
             'grant_status' => 'approved',
         ])->assertCreated();
 
-        $this->postJson("/api/panel/projects/{$project->id}/special-modules/reward-tiers", [
+        $rewardTierId = $this->postJson("/api/panel/projects/{$project->id}/special-modules/reward-tiers", [
             'name' => 'Kademe Plus 1',
             'min_badges' => 2,
             'min_credits' => 50,
             'reward_description' => 'Hediye Seti',
+        ])->assertCreated()->json('reward_tier.id');
+
+        $this->postJson("/api/panel/projects/{$project->id}/special-modules/reward-awards", [
+            'participant_id' => $participant->id,
+            'reward_tier_id' => $rewardTierId,
+            'reward_name' => 'Hediye Seti',
+            'status' => 'given',
         ])->assertCreated();
 
         $this->getJson("/api/panel/projects/{$project->id}/special-modules")
@@ -431,7 +438,8 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonCount(1, 'internships')
             ->assertJsonCount(1, 'mentors')
             ->assertJsonCount(1, 'eurodesk_projects')
-            ->assertJsonCount(1, 'reward_tiers');
+            ->assertJsonCount(1, 'reward_tiers')
+            ->assertJsonCount(1, 'reward_awards');
     }
 
     public function test_panel_project_special_modules_accept_manage_scope_without_view_scope(): void
@@ -670,5 +678,132 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonPath('user.profile.linkedin_url', 'linkedin.com/in/kademe')
             ->assertJsonPath('user.profile.github_url', 'kademe-user');
+    }
+
+    public function test_student_project_specials_returns_project_specific_modules(): void
+    {
+        $diplomasi = Project::query()->create([
+            'name' => 'Diplomasi360',
+            'slug' => 'diplomasi360',
+            'type' => 'diplomasi360',
+            'status' => 'active',
+        ]);
+        $kademePlus = Project::query()->create([
+            'name' => 'Kademe Plus',
+            'slug' => 'kademe-plus-specials',
+            'type' => 'kademe_plus',
+            'status' => 'active',
+        ]);
+        $periodOne = Period::query()->create([
+            'project_id' => $diplomasi->id,
+            'name' => '2026 Diplomasi',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $periodTwo = Period::query()->create([
+            'project_id' => $kademePlus->id,
+            'name' => '2026 Plus',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $student = User::factory()->create([
+            'name' => 'Special',
+            'surname' => 'Student',
+            'role' => 'student',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $diplomasiParticipant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $diplomasi->id,
+            'period_id' => $periodOne->id,
+            'status' => 'active',
+            'credit' => 80,
+        ]);
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $kademePlus->id,
+            'period_id' => $periodTwo->id,
+            'status' => 'active',
+            'credit' => 120,
+        ]);
+
+        \App\Models\Internship::query()->create([
+            'participant_id' => $diplomasiParticipant->id,
+            'company_name' => 'KADEME',
+            'position' => 'Stajyer',
+            'start_date' => now()->toDateString(),
+        ]);
+
+        $badge = Badge::query()->create([
+            'name' => 'Plus Rozeti',
+            'project_id' => $kademePlus->id,
+            'tier' => 'gold',
+        ]);
+        $student->badges()->attach($badge->id, ['project_id' => $kademePlus->id, 'awarded_at' => now()]);
+
+        \App\Models\RewardTier::query()->create([
+            'project_id' => $kademePlus->id,
+            'name' => 'Plus Hediye',
+            'min_badges' => 1,
+            'min_credits' => 100,
+            'reward_description' => 'Hediye Seti',
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $response = $this->getJson('/api/dashboard/project-specials')
+            ->assertOk()
+            ->json();
+
+        $projects = collect($response['projects'] ?? []);
+        $diplomasiPayload = $projects->firstWhere('project.id', $diplomasi->id);
+        $plusPayload = $projects->firstWhere('project.id', $kademePlus->id);
+
+        $this->assertContains('internships', $diplomasiPayload['modules'] ?? []);
+        $this->assertSame('KADEME', $diplomasiPayload['internships'][0]['company_name'] ?? null);
+        $this->assertContains('reward_tiers', $plusPayload['modules'] ?? []);
+        $this->assertTrue($plusPayload['reward_tiers'][0]['eligible'] ?? false);
+    }
+
+    public function test_student_can_apply_to_volunteer_opportunity_without_notification_failure_causing_500(): void
+    {
+        $project = $this->project();
+        $student = User::factory()->create([
+            'name' => 'Volunteer',
+            'surname' => 'Student',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $opportunity = \App\Models\VolunteerOpportunity::query()->create([
+            'project_id' => $project->id,
+            'title' => 'Gonullu Etkinlik',
+            'description' => 'Gonullu destek gerektiren buyuk etkinlik.',
+            'status' => 'open',
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->postJson("/api/volunteer/opportunities/{$opportunity->id}/apply", [
+            'motivation_text' => 'Bu etkinlikte gonullu olarak aktif sorumluluk almak istiyorum.',
+            'notes' => null,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'pending');
+
+        $this->assertDatabaseHas('volunteer_applications', [
+            'volunteer_opportunity_id' => $opportunity->id,
+            'user_id' => $student->id,
+            'status' => 'pending',
+        ]);
     }
 }

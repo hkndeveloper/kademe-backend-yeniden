@@ -12,6 +12,7 @@ use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class VolunteerController extends Controller
 {
@@ -121,14 +122,22 @@ class VolunteerController extends Controller
             'status' => 'pending',
         ]);
 
-        $request->user()->loadMissing('email');
-        $this->notificationService->sendEmail(
-            array_filter([$request->user()->email]),
-            'Gonullu basvurunuz alindi',
-            "Ilan: {$opportunity->title}\nBasvurunuz alinmistir. Degerlendirme sonrasi bilgilendirileceksiniz.",
-            $opportunity->project_id,
-            $request->user()->id
-        );
+        try {
+            $this->notificationService->sendEmail(
+                array_filter([$request->user()->email]),
+                'Gonullu basvurunuz alindi',
+                "Ilan: {$opportunity->title}\nBasvurunuz alinmistir. Degerlendirme sonrasi bilgilendirileceksiniz.",
+                $opportunity->project_id,
+                $request->user()->id
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('volunteer.application_notification_failed', [
+                'application_id' => $application->id,
+                'opportunity_id' => $opportunity->id,
+                'user_id' => $request->user()->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Gonullu basvurun alindi.',
@@ -290,13 +299,21 @@ class VolunteerController extends Controller
         $application->update($validated);
 
         $application->loadMissing(['user:id,email,name', 'opportunity:id,title,project_id']);
-        $this->notificationService->sendEmail(
-            array_filter([$application->user?->email]),
-            'Gonullu basvuru durumunuz guncellendi',
-            "Ilan: {$application->opportunity?->title}\nYeni durum: {$application->status}",
-            $application->opportunity?->project_id,
-            $request->user()->id
-        );
+        try {
+            $this->notificationService->sendEmail(
+                array_filter([$application->user?->email]),
+                'Gonullu basvuru durumunuz guncellendi',
+                "Ilan: {$application->opportunity?->title}\nYeni durum: {$application->status}",
+                $application->opportunity?->project_id,
+                $request->user()->id
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('volunteer.application_status_notification_failed', [
+                'application_id' => $application->id,
+                'user_id' => $application->user_id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Gonullu basvurusu guncellendi.',

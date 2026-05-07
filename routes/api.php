@@ -84,6 +84,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
     Route::get('/dashboard/summary', [\App\Http\Controllers\Api\StudentDashboardController::class, 'summary']);
     Route::get('/dashboard/projects', [\App\Http\Controllers\Api\StudentDashboardController::class, 'projects']);
     Route::get('/dashboard/digital-cv', [\App\Http\Controllers\Api\StudentDashboardController::class, 'digitalCv']);
+    Route::get('/dashboard/project-specials', [\App\Http\Controllers\Api\StudentDashboardController::class, 'projectSpecials']);
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'recipientAnnouncements']);
     
     Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'index']);
@@ -167,6 +168,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::post('/projects/{id}/special-modules/reward-tiers', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeRewardTier']);
     Route::put('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateRewardTier']);
     Route::delete('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyRewardTier']);
+    Route::post('/projects/{id}/special-modules/reward-awards', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeRewardAward']);
+    Route::delete('/projects/{id}/special-modules/reward-awards/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyRewardAward']);
     Route::get('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'update']);
     Route::get('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'applicationForm']);
@@ -317,6 +320,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/projects/{id}/special-modules/reward-tiers', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeRewardTier']);
     Route::put('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'updateRewardTier']);
     Route::delete('/projects/{id}/special-modules/reward-tiers/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyRewardTier']);
+    Route::post('/projects/{id}/special-modules/reward-awards', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'storeRewardAward']);
+    Route::delete('/projects/{id}/special-modules/reward-awards/{item}', [\App\Http\Controllers\Api\ProjectSpecialModuleController::class, 'destroyRewardAward']);
     Route::get('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [\App\Http\Controllers\Api\ProjectContentController::class, 'update']);
     Route::get('/projects/{id}/application-form', [\App\Http\Controllers\Api\ProjectContentController::class, 'applicationForm']);
