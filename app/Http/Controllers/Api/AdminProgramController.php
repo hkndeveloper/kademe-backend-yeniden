@@ -174,6 +174,11 @@ class AdminProgramController extends Controller
             'status' => 'required|in:scheduled,active,completed,cancelled',
         ]);
 
+        if (in_array($validated['status'], ['completed', 'cancelled'], true)) {
+            $validated['qr_token'] = null;
+            $validated['qr_expires_at'] = null;
+        }
+
         $program->update($validated);
 
         try {
@@ -199,6 +204,11 @@ class AdminProgramController extends Controller
         $this->abortUnlessAllowed($request, 'programs.qr.manage');
         $program = Program::with('project')->findOrFail($id);
         $this->abortIfUnauthorized($request->user(), $program->project, 'programs.qr.manage');
+        abort_if(
+            in_array($program->status, ['completed', 'cancelled'], true),
+            422,
+            'Tamamlanan veya iptal edilen program icin QR yoklama baslatilamaz.'
+        );
 
         $qrToken = 'prg_' . $program->id . '_' . Str::random(12);
         $rotationSeconds = 30;
