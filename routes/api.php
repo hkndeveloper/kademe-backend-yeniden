@@ -30,7 +30,7 @@ Route::prefix('auth')->group(function () {
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
-    Route::middleware(['auth:sanctum', 'blacklist'])->group(function () {
+    Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::middleware('password.not_pending_setup')->group(function () {
             Route::get('/me', [AuthController::class, 'me']);
@@ -40,7 +40,7 @@ Route::prefix('auth')->group(function () {
 
 // --- KULLANICI & PROFÄ°L --- //
 // KVKK onay endpointi haricindekilere 'kvkk' kÄ±sÄ±tlamasÄ± getiriyoruz
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->prefix('user')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('user')->group(function () {
     Route::post('/consent-kvkk', [\App\Http\Controllers\Api\UserController::class, 'consentKvkk']);
     
     Route::middleware('kvkk')->group(function () {
@@ -60,7 +60,7 @@ Route::prefix('projects')->group(function () {
 });
 
 // BaÅŸvuru iÅŸlemleri (Oturum gerektirir)
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk'])->prefix('applications')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->prefix('applications')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\ApplicationController::class, 'myApplications']);
     Route::get('/{id}', [\App\Http\Controllers\Api\ApplicationController::class, 'show']);
     Route::post('/', [\App\Http\Controllers\Api\ApplicationController::class, 'store']);
@@ -71,7 +71,7 @@ Route::post('/applications/public', [\App\Http\Controllers\Api\ApplicationContro
     ->middleware('throttle:10,1');
 
 // --- PROGRAM (ETKÄ°NLÄ°K) & YOKLAMA --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'role:student|alumni'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'role:student|alumni', 'audit.action'])->group(function () {
     
     // Ã–ÄŸrencinin kendi programlarÄ±nÄ± listelemesi
     Route::get('/programs', [\App\Http\Controllers\Api\ProgramController::class, 'myPrograms']);
@@ -83,6 +83,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
     // --- Ã–ÄRENCÄ° PANELÄ° (KREDÄ°, BOHÃ‡A, Ã–DEV) --- //
     Route::get('/dashboard/summary', [\App\Http\Controllers\Api\StudentDashboardController::class, 'summary']);
     Route::get('/dashboard/projects', [\App\Http\Controllers\Api\StudentDashboardController::class, 'projects']);
+    Route::get('/dashboard/digital-cv', [\App\Http\Controllers\Api\StudentDashboardController::class, 'digitalCv']);
     Route::get('/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'recipientAnnouncements']);
     
     Route::get('/digital-bohca', [\App\Http\Controllers\Api\DigitalBohcaController::class, 'index']);
@@ -466,7 +467,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
 });
 
 // â”€â”€ KOORDÄ°NATÃ–R Ã–ZEL (sadece coordinator) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     // KoordinatÃ¶rÃ¼n mali iÅŸlemleri (kendi projesi)
     Route::get('/coordinator/financials', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'myFinancials']);
     Route::get('/coordinator/financials/export', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'exportMyFinancials']);
@@ -476,12 +477,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->
 });
 
 // â”€â”€ PERSONEL / KOORDÄ°NATÃ–R (Ä°zin Talepleri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     Route::post('/leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'storeLeaveRequest']);
     Route::get('/my-leave-requests', [\App\Http\Controllers\Api\StaffController::class, 'myLeaveRequests']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     Route::get('/staff/announcements', [\App\Http\Controllers\Api\AnnouncementController::class, 'myAnnouncements']);
     Route::get('/staff/announcements/export', [\App\Http\Controllers\Api\AnnouncementController::class, 'exportMyAnnouncements']);
     Route::get('/staff/applications', [\App\Http\Controllers\Api\AdminApplicationController::class, 'staffIndex']);
@@ -493,7 +494,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->
     Route::get('/staff/projects/export', [\App\Http\Controllers\Api\StaffController::class, 'exportMyProjects']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->prefix('calendar')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('calendar')->group(function () {
     Route::get('/overview', [\App\Http\Controllers\Api\CalendarController::class, 'overview']);
     Route::get('/assignees', [\App\Http\Controllers\Api\CalendarController::class, 'assignees']);
     Route::get('/google/status', [\App\Http\Controllers\Api\CalendarController::class, 'googleStatus']);
@@ -501,6 +502,6 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->
     Route::post('/google/sync', [\App\Http\Controllers\Api\CalendarController::class, 'googleSync']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup'])->prefix('calendar')->group(function () {
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('calendar')->group(function () {
     Route::put('/programs/{id}/assignments', [\App\Http\Controllers\Api\CalendarController::class, 'updateAssignments']);
 });

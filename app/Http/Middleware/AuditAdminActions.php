@@ -99,7 +99,7 @@ class AuditAdminActions
         $routeUri = $request->route()?->uri() ?? $request->path();
 
         return sprintf(
-            'admin_action.%s.%s (%d)',
+            'api_action.%s.%s (%d)',
             strtolower($request->method()),
             str_replace('/', '.', $routeUri),
             $statusCode

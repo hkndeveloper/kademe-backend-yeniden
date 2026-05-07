@@ -53,6 +53,31 @@ class AuthController extends Controller
             $user->syncRoles([(string) $user->role]);
         }
     }
+
+    private function logAuthActivity(Request $request, string $event, string $description, ?User $user = null, array $properties = []): void
+    {
+        try {
+            $logger = activity()
+                ->useLog('auth')
+                ->event($event)
+                ->withProperties(array_merge([
+                    'http_method' => $request->method(),
+                    'path' => $request->path(),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => (string) $request->userAgent(),
+                    'email' => $request->filled('email') ? Str::lower(trim((string) $request->input('email'))) : null,
+                ], $properties));
+
+            if ($user !== null) {
+                $logger->causedBy($user)->performedOn($user);
+            }
+
+            $logger->log($description);
+        } catch (\Throwable) {
+            // Auth log hatasi ana akisi kesmemeli.
+        }
+    }
+
     /**
      * Kullanıcı Kayıt (Register)
      */
@@ -88,6 +113,11 @@ class AuthController extends Controller
         // Token oluştur
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        $this->logAuthActivity($request, 'registered', 'auth.register.success', $user, [
+            'status_code' => 201,
+            'role' => $user->role,
+        ]);
+
         return response()->json([
             'message' => 'Kayıt başarılı.',
             'access_token' => $token,
@@ -110,16 +140,32 @@ class AuthController extends Controller
         $user = User::where('email', $email)->first();
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
+            $this->logAuthActivity($request, 'login_failed', 'auth.login.failed', $user, [
+                'status_code' => 422,
+                'reason' => 'invalid_credentials',
+            ]);
+
             throw ValidationException::withMessages([
                 'email' => ['E-posta adresi veya şifre hatalı.'],
             ]);
         }
 
         if ($user->status !== 'active') {
+            $this->logAuthActivity($request, 'login_blocked', 'auth.login.blocked', $user, [
+                'status_code' => 403,
+                'reason' => 'inactive_user',
+                'status' => $user->status,
+            ]);
+
             return response()->json(['message' => 'Hesabınız aktif değil veya pasif duruma alınmış.'], 403);
         }
 
         if ($user->must_change_password) {
+            $this->logAuthActivity($request, 'login_blocked', 'auth.login.blocked', $user, [
+                'status_code' => 403,
+                'reason' => 'password_setup_required',
+            ]);
+
             return response()->json([
                 'message' => 'Sifrenizi henuz belirlemediniz. E-postaniza gonderilen baglanti ile sifre olusturun; gelmediyse "Sifremi unuttum" ile yeni baglanti isteyin.',
                 'must_change_password' => true,
@@ -132,6 +178,11 @@ class AuthController extends Controller
         // Token oluştur (Tüm eski tokenleri silebiliriz veya çoklu cihaza izin verebiliriz)
         // $user->tokens()->delete(); // İsteğe bağlı: Tek cihazdan giriş için
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        $this->logAuthActivity($request, 'login', 'auth.login.success', $user, [
+            'status_code' => 200,
+            'role' => $user->role,
+        ]);
 
         return response()->json([
             'message' => 'Giriş başarılı.',
@@ -180,6 +231,10 @@ class AuthController extends Controller
         $email = Str::lower(trim((string) $request->input('email')));
         Password::sendResetLink(['email' => $email]);
 
+        $this->logAuthActivity($request, 'password_reset_requested', 'auth.password_reset.requested', null, [
+            'status_code' => 200,
+        ]);
+
         return response()->json([
             'message' => 'E-posta adresinize sifre belirleme baglantisi gonderdik. Gelmiyorsa spam klasorunu kontrol edin.',
         ]);
@@ -211,6 +266,11 @@ class AuthController extends Controller
         );
 
         if ($status === Password::PASSWORD_RESET) {
+            $user = User::where('email', $payload['email'])->first();
+            $this->logAuthActivity($request, 'password_reset', 'auth.password_reset.success', $user, [
+                'status_code' => 200,
+            ]);
+
             return response()->json([
                 'message' => 'Sifreniz guncellendi. Giris yapabilirsiniz.',
             ]);
@@ -221,6 +281,11 @@ class AuthController extends Controller
             Password::INVALID_USER => 'Bu e-posta ile kayit bulunamadi.',
             Password::RESET_THROTTLED => 'Cok fazla deneme. Lutfen bir sure sonra tekrar deneyin.',
         ];
+
+        $this->logAuthActivity($request, 'password_reset_failed', 'auth.password_reset.failed', null, [
+            'status_code' => 422,
+            'reason' => $status,
+        ]);
 
         return response()->json([
             'message' => $messages[$status] ?? 'Sifre guncellenemedi.',

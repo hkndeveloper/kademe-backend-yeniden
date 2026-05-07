@@ -541,4 +541,79 @@ class PanelRegressionFixTest extends TestCase
         $this->assertNotContains('Diger Rozet', $badgeNames);
         $this->assertContains('Ayin Pergellisi', $response['monthly_titles'] ?? []);
     }
+
+    public function test_student_digital_cv_returns_approved_projects_badges_certificates_and_credits(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Diplomasi360',
+            'slug' => 'diplomasi-360-cv',
+            'type' => 'diplomasi360',
+            'short_description' => 'Diplomasi ve liderlik programi.',
+            'status' => 'active',
+        ]);
+
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Bahar',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->toDateString(),
+            'status' => 'completed',
+        ]);
+
+        $student = User::factory()->create([
+            'name' => 'Digital',
+            'surname' => 'Cv',
+            'role' => 'student',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'graduated',
+            'graduation_status' => 'completed',
+            'credit' => 95,
+            'graduated_at' => now(),
+        ]);
+
+        $badge = Badge::query()->create([
+            'name' => 'Liderlik Rozeti',
+            'project_id' => $project->id,
+            'tier' => 'gold',
+        ]);
+        $student->badges()->attach($badge->id, ['project_id' => $project->id, 'awarded_at' => now()]);
+
+        Certificate::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'type' => 'participation',
+            'verification_code' => 'CV-VERIFY-1',
+            'issued_at' => now(),
+        ]);
+
+        CreditLog::query()->create([
+            'participant_id' => $participant->id,
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'amount' => -5,
+            'type' => 'deduction',
+            'reason' => 'Yoklama puan kesintisi',
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/dashboard/digital-cv')
+            ->assertOk()
+            ->assertJsonPath('approved.total_credit', 95)
+            ->assertJsonPath('approved.completed_project_count', 1)
+            ->assertJsonPath('projects.0.name', 'Diplomasi360')
+            ->assertJsonPath('badges.0.name', 'Liderlik Rozeti')
+            ->assertJsonPath('certificates.0.verification_code', 'CV-VERIFY-1')
+            ->assertJsonPath('credit_history.0.reason', 'Yoklama puan kesintisi');
+    }
 }
