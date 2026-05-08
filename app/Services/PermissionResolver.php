@@ -85,6 +85,7 @@ class PermissionResolver
     {
         $user->loadMissing([
             'roles:id,name',
+            'roles.permissions:id,name',
             'staffProfile',
             'coordinatedProjects:id',
             'assignedProjects:id',
@@ -165,6 +166,18 @@ class PermissionResolver
             ->values();
     }
 
+    private function roleGrantsPermission($role, string $permissionName): bool
+    {
+        $permissionNames = $role->permissions
+            ->pluck('name')
+            ->filter()
+            ->values()
+            ->all();
+
+        return in_array($permissionName, $permissionNames, true)
+            || $this->expandLegacyPermissions($permissionNames)->contains($permissionName);
+    }
+
     private function resolveScopes(User $user, Collection $effectivePermissions, Collection $overrides): array
     {
         $scopes = [];
@@ -180,7 +193,16 @@ class PermissionResolver
 
         foreach ($effectivePermissions as $permissionName) {
             $scope = $this->defaultScopeFor($user, $permissionName, $manageableProjectIds, $manageableUnit);
-            $roleScope = $this->mergedRoleScope($roleScopeRows->get($permissionName, collect()));
+            $grantingRoleNames = $user->roles
+                ->filter(fn ($role) => $this->roleGrantsPermission($role, $permissionName))
+                ->pluck('name')
+                ->values()
+                ->all();
+            $roleScope = $this->mergedRoleScope(
+                $roleScopeRows
+                    ->get($permissionName, collect())
+                    ->filter(fn ($row) => in_array($row->role_name, $grantingRoleNames, true))
+            );
             if ($roleScope !== null) {
                 $scope = $roleScope;
             }

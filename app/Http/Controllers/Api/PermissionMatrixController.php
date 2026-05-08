@@ -747,6 +747,18 @@ class PermissionMatrixController extends Controller
         }
 
         $known = collect($rows)->pluck('role')->unique()->values()->all();
+        $roleGrantedPermissions = Role::query()
+            ->with('permissions:id,name')
+            ->whereIn('name', $known)
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [
+                $role->name => collect($this->granularEffectiveForRole($role))
+                    ->filter(fn (string $name) => in_array($name, $granularCatalog, true))
+                    ->values()
+                    ->all(),
+            ])
+            ->all();
+
         if (! empty($known)) {
             RolePermissionScope::query()->whereIn('role_name', $known)->delete();
         }
@@ -761,6 +773,9 @@ class PermissionMatrixController extends Controller
                 $permissionName = $scopeRow['permission_name'] ?? null;
                 $scopeType = $scopeRow['scope_type'] ?? null;
                 if (! is_string($permissionName) || ! in_array($permissionName, $granularCatalog, true)) {
+                    continue;
+                }
+                if (! in_array($permissionName, $roleGrantedPermissions[$roleName] ?? [], true)) {
                     continue;
                 }
                 if (! is_string($scopeType)) {

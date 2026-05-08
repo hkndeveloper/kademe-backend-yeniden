@@ -294,6 +294,50 @@ class PermissionResolverScopeTest extends TestCase
         $this->assertFalse($resolver->canAccessProject($staff, 'projects.view', $otherProject->id));
     }
 
+    public function test_role_scope_from_role_without_permission_does_not_override_granting_role_scope(): void
+    {
+        Permission::findOrCreate('projects.view', 'web');
+
+        $staffRole = Role::findOrCreate('staff', 'web');
+        $staffRole->givePermissionTo('projects.view');
+        $staleScopeRole = Role::findOrCreate('stale_scope_role', 'web');
+
+        RolePermissionScope::query()->create([
+            'role_name' => $staleScopeRole->name,
+            'permission_name' => 'projects.view',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ]);
+
+        $staff = User::factory()->create([
+            'name' => 'Multi',
+            'surname' => 'Role',
+            'email' => 'multi-role-scope@test.local',
+            'role' => 'staff',
+        ]);
+        $staff->syncRoles([$staffRole->name, $staleScopeRole->name]);
+
+        $assignedProject = Project::query()->create([
+            'name' => 'Assigned Multi Role Project',
+            'slug' => 'assigned-multi-role-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $otherProject = Project::query()->create([
+            'name' => 'Other Multi Role Project',
+            'slug' => 'other-multi-role-project-'.uniqid(),
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $staff->assignedProjects()->attach($assignedProject->id);
+
+        $staff->refresh();
+        $resolver = $this->resolver();
+
+        $this->assertTrue($resolver->canAccessProject($staff, 'projects.view', $assignedProject->id));
+        $this->assertFalse($resolver->canAccessProject($staff, 'projects.view', $otherProject->id));
+    }
+
     public function test_custom_employee_role_can_use_assigned_projects_scope(): void
     {
         if (DB::connection()->getDriverName() === 'sqlite') {
