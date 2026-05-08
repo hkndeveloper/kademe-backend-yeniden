@@ -312,7 +312,7 @@ class ProjectContentController extends Controller
             $payload['summary']['applications'] = [
                 'total' => Application::where('project_id', $project->id)->count(),
                 'pending' => Application::where('project_id', $project->id)->where('status', 'pending')->count(),
-                'approved' => Application::where('project_id', $project->id)->where('status', 'approved')->count(),
+                'approved' => Application::where('project_id', $project->id)->where('status', 'accepted')->count(),
                 'rejected' => Application::where('project_id', $project->id)->where('status', 'rejected')->count(),
                 'waitlisted' => Application::where('project_id', $project->id)->where('status', 'waitlisted')->count(),
             ];
@@ -441,8 +441,22 @@ class ProjectContentController extends Controller
         $project = Project::with('periods')->findOrFail($id);
         $this->abortUnlessAllowedForProject($request, 'projects.view', $project);
 
-        $applicationForm = ApplicationForm::where('project_id', $project->id)
-            ->where('is_active', true)
+        $validated = $request->validate([
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+
+        if (! empty($validated['period_id']) && ! $project->periods->contains('id', $validated['period_id'])) {
+            abort(422, 'Secilen donem bu projeye ait degil.');
+        }
+
+        $applicationFormQuery = ApplicationForm::where('project_id', $project->id)
+            ->where('is_active', true);
+
+        if ($request->has('period_id')) {
+            $applicationFormQuery->where('period_id', $validated['period_id'] ?? null);
+        }
+
+        $applicationForm = $applicationFormQuery
             ->latest()
             ->first();
 

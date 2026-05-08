@@ -310,6 +310,7 @@ class PermissionResolver
                 'certificates.',
                 'digital_bohca.',
                 'assignments.',
+                'kpd.',
             ])) {
                 return [
                     'scope_type' => 'own_projects',
@@ -326,7 +327,7 @@ class PermissionResolver
         }
 
         if ($user->role === 'staff') {
-            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'content.', 'certificates.', 'digital_bohca.', 'assignments.'])) {
+            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'content.', 'certificates.', 'digital_bohca.', 'assignments.', 'kpd.'])) {
                 return [
                     'scope_type' => 'assigned_projects',
                     'scope_payload' => ['project_ids' => $manageableProjectIds],
@@ -384,7 +385,12 @@ class PermissionResolver
             return $user->participations->pluck('project_id')->unique()->values()->all();
         }
 
-        return $user->assignedProjects->pluck('id')->unique()->values()->all();
+        return $user->assignedProjects
+            ->pluck('id')
+            ->merge($user->coordinatedProjects->pluck('id'))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function matchesAny(string $permissionName, array $prefixes): bool

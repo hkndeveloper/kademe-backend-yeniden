@@ -30,7 +30,7 @@ class ProgramController extends Controller
     public function myPrograms(Request $request)
     {
         $user = $request->user();
-        abort_unless($user->role === 'student', 403, 'Program takvimi yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Program takvimi yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $participations = $this->participationScope(Participant::where('user_id', $user->id), $user)
             ->with(['project:id,name,slug,type', 'period:id,name'])
@@ -80,7 +80,9 @@ class ProgramController extends Controller
                 $attendance = $attendances->get($program->id);
                 $logs = $creditLogs->get($program->id, collect());
                 $deduction = $logs->firstWhere('type', 'deduction');
-                $restore = $logs->firstWhere('type', 'restore');
+                $restoreAmount = (int) $logs->where('amount', '>', 0)->sum('amount');
+                $netAmount = (int) $logs->sum('amount');
+                $creditRestored = (bool) $deduction && $netAmount >= 0;
                 $participant = $participations
                     ->where('project_id', $program->project_id)
                     ->where('period_id', $program->period_id)
@@ -123,10 +125,10 @@ class ProgramController extends Controller
                         'deducted' => (bool) $deduction,
                         'deduction_amount' => $deduction ? abs((int) $deduction->amount) : 0,
                         'deducted_at' => optional($deduction?->created_at)?->toIso8601String(),
-                        'restored' => (bool) $restore,
-                        'restore_amount' => $restore ? (int) $restore->amount : 0,
-                        'restored_at' => optional($restore?->created_at)?->toIso8601String(),
-                        'net_amount' => (int) $logs->sum('amount'),
+                        'restored' => $creditRestored,
+                        'restore_amount' => $creditRestored ? $restoreAmount : 0,
+                        'restored_at' => optional($logs->where('amount', '>', 0)->last()?->created_at)?->toIso8601String(),
+                        'net_amount' => $netAmount,
                     ],
                     'feedback_submitted' => $feedbackSubmitted,
                 ];
@@ -138,7 +140,7 @@ class ProgramController extends Controller
     {
         $program = Program::with(['project'])->findOrFail($id);
         $user = $request->user();
-        abort_unless($user->role === 'student', 403, 'Program takvimi yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Program takvimi yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $canView = $this->participationScope(
             Participant::query()

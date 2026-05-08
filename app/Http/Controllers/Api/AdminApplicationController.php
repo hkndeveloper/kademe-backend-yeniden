@@ -125,7 +125,26 @@ class AdminApplicationController extends Controller
             'evaluation_note' => $application->evaluation_note,
             'rejection_reason' => $application->rejection_reason,
             'form_entries' => $this->formEntries($application),
+            'available_statuses' => $this->allowedStatusesFor($application),
+            'workflow' => [
+                'has_interview' => (bool) $application->project?->has_interview,
+                'next_step' => $this->nextWorkflowStep($application),
+            ],
         ];
+    }
+
+    private function nextWorkflowStep(Application $application): ?string
+    {
+        if (! $application->project?->has_interview) {
+            return $application->status === 'pending' ? 'final_decision' : null;
+        }
+
+        return match ($application->status) {
+            'pending', 'waitlisted' => 'plan_interview',
+            'interview_planned' => 'record_interview_result',
+            'interview_passed' => 'final_decision',
+            default => null,
+        };
     }
 
     public function export(Request $request)
@@ -402,6 +421,8 @@ class AdminApplicationController extends Controller
             ]);
 
             if ($validated['status'] === 'accepted') {
+                $application->loadMissing('user');
+
                 $hasAnotherActiveProject = Participant::query()
                     ->where('user_id', $application->user_id)
                     ->where('status', 'active')
@@ -423,6 +444,18 @@ class AdminApplicationController extends Controller
                     'credit' => $application->period->credit_start_amount ?? 100,
                     'enrolled_at' => now(),
                 ]);
+
+                if ($application->user) {
+                    if (! in_array($application->user->role, ['student', 'alumni'], true)) {
+                        $application->user->update([
+                            'role' => 'student',
+                            'status' => 'active',
+                        ]);
+                        $application->user->syncRoles(['student']);
+                    } elseif ($application->user->status !== 'active' && $application->user->role === 'student') {
+                        $application->user->update(['status' => 'active']);
+                    }
+                }
             }
 
             DB::commit();

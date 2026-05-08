@@ -101,10 +101,7 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $form = ApplicationForm::where('project_id', $project->id)
-            ->where('is_active', true)
-            ->latest()
-            ->first();
+        $form = $this->activeFormForPeriod($project, $currentPeriod);
 
         $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
 
@@ -145,15 +142,83 @@ class ApplicationController extends Controller
         return $application;
     }
 
+    private function activeFormForPeriod(Project $project, ?Period $period): ?ApplicationForm
+    {
+        if ($period) {
+            $periodForm = ApplicationForm::where('project_id', $project->id)
+                ->where('period_id', $period->id)
+                ->where('is_active', true)
+                ->latest()
+                ->first();
+
+            if ($periodForm) {
+                return $periodForm;
+            }
+        }
+
+        return ApplicationForm::where('project_id', $project->id)
+            ->whereNull('period_id')
+            ->where('is_active', true)
+            ->latest()
+            ->first();
+    }
+
+    private function formEntriesForStudent(Application $application): array
+    {
+        $fields = collect($application->form?->fields ?? [])
+            ->mapWithKeys(function (array $field) {
+                $id = $field['id'] ?? $field['key'] ?? null;
+
+                return $id ? [$id => $field] : [];
+            });
+
+        return collect($application->form_data ?? [])
+            ->map(function (mixed $value, string $key) use ($fields) {
+                $field = $fields->get($key, []);
+                $isFile = is_array($value) && isset($value['path']);
+
+                return [
+                    'id' => $key,
+                    'label' => $field['label'] ?? $key,
+                    'type' => $field['type'] ?? ($isFile ? 'file' : 'text'),
+                    'value' => $isFile ? null : $value,
+                    'file' => $isFile ? [
+                        'original_name' => $value['original_name'] ?? basename((string) $value['path']),
+                        'mime_type' => $value['mime_type'] ?? null,
+                        'size' => $value['size'] ?? null,
+                    ] : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function formatStudentApplication(Application $application): array
+    {
+        return [
+            'id' => $application->id,
+            'project' => $application->project,
+            'period' => $application->period,
+            'status' => $application->status,
+            'created_at' => optional($application->created_at)?->toISOString(),
+            'interview_at' => optional($application->interview_at)?->toISOString(),
+            'rejection_reason' => $application->rejection_reason,
+            'auto_rejected' => (bool) $application->auto_rejected,
+            'auto_rejection_reason' => $application->auto_rejection_reason,
+            'form_entries' => $this->formEntriesForStudent($application),
+        ];
+    }
+
     /**
      * Kullanicinin kendi basvurularini listelemesi
      */
     public function myApplications(Request $request)
     {
         $applications = Application::where('user_id', $request->user()->id)
-            ->with(['project', 'period'])
+            ->with(['project', 'period', 'form:id,fields'])
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(fn (Application $application) => $this->formatStudentApplication($application));
 
         return response()->json([
             'applications' => $applications,
@@ -310,11 +375,11 @@ class ApplicationController extends Controller
     {
         $application = Application::where('id', $id)
             ->where('user_id', $request->user()->id)
-            ->with(['project', 'period'])
+            ->with(['project', 'period', 'form:id,fields'])
             ->firstOrFail();
 
         return response()->json([
-            'application' => $application,
+            'application' => $this->formatStudentApplication($application),
         ]);
     }
 }

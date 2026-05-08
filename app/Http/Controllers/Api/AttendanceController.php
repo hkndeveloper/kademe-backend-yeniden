@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
 use Illuminate\Http\Request;
@@ -47,6 +48,17 @@ class AttendanceController extends Controller
 
         if (! $participant) {
             return response()->json(['message' => 'Bu programa katilma yetkiniz bulunmuyor.'], 403);
+        }
+
+        $pendingFeedbackProgram = $this->pendingFeedbackBeforeProgram($user->id, $program);
+        if ($pendingFeedbackProgram) {
+            return response()->json([
+                'message' => 'Onceki oturumun degerlendirmesini tamamlamadan yeni QR yoklama veremezsin.',
+                'requires_feedback' => true,
+                'program_id' => $pendingFeedbackProgram->id,
+                'program_title' => $pendingFeedbackProgram->title,
+                'redirect_to' => '/student/feedback',
+            ], 423);
         }
 
         $existing = Attendance::where('program_id', $program->id)
@@ -141,5 +153,42 @@ class AttendanceController extends Controller
         $token = isset($query['token']) ? trim((string) $query['token']) : '';
 
         return $token !== '' ? $token : $raw;
+    }
+
+    private function pendingFeedbackBeforeProgram(int $userId, Program $currentProgram): ?Program
+    {
+        if (! $currentProgram->start_at) {
+            return null;
+        }
+
+        $attendedCompletedPrograms = Program::query()
+            ->where('project_id', $currentProgram->project_id)
+            ->when(
+                $currentProgram->period_id,
+                fn ($query) => $query->where('period_id', $currentProgram->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
+            ->where('id', '!=', $currentProgram->id)
+            ->where('status', 'completed')
+            ->where('start_at', '<', $currentProgram->start_at)
+            ->whereHas('attendances', function ($query) use ($userId) {
+                $query->where('user_id', $userId)->where('is_valid', true);
+            })
+            ->orderByDesc('start_at')
+            ->get();
+
+        foreach ($attendedCompletedPrograms as $program) {
+            $anonymousToken = hash('sha256', sprintf('%s:%s:%s', $userId, $program->id, config('app.key')));
+            $hasFeedback = Feedback::query()
+                ->where('program_id', $program->id)
+                ->where('anonymous_token', $anonymousToken)
+                ->exists();
+
+            if (! $hasFeedback) {
+                return $program;
+            }
+        }
+
+        return null;
     }
 }

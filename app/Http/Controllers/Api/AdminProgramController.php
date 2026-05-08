@@ -328,25 +328,22 @@ class AdminProgramController extends Controller
             ->get();
         $attendanceByUserId = $attendances->keyBy('user_id');
 
-        $restoredUserIds = CreditLog::query()
+        $creditLogsByUserId = CreditLog::query()
             ->where('program_id', $program->id)
-            ->where('type', 'restore')
-            ->pluck('user_id')
-            ->filter()
+            ->get()
+            ->groupBy('user_id');
+        $deductedUserIds = $creditLogsByUserId
+            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null)
+            ->keys()
             ->map(fn ($id) => (int) $id)
-            ->unique()
             ->values()
             ->all();
-        $deductedUserIds = CreditLog::query()
-            ->where('program_id', $program->id)
-            ->where('type', 'deduction')
-            ->pluck('user_id')
-            ->filter()
+        $restoredUserIds = $creditLogsByUserId
+            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null && (int) $logs->sum('amount') >= 0)
+            ->keys()
             ->map(fn ($id) => (int) $id)
-            ->unique()
             ->values()
             ->all();
-
         $feedbackCount = Feedback::query()->where('program_id', $program->id)->count();
 
         return response()->json([
@@ -414,25 +411,79 @@ class AdminProgramController extends Controller
             ->where('status', 'active')
             ->firstOrFail();
 
-        $attendance = Attendance::query()->updateOrCreate(
-            [
-                'program_id' => $program->id,
-                'user_id' => $participant->user_id,
-            ],
-            [
-                'method' => 'manual',
-                'is_valid' => (bool) $validated['is_valid'],
-                'manual_note' => $validated['manual_note'] ?? null,
-                'recorded_by' => $request->user()->id,
-                'latitude' => null,
-                'longitude' => null,
-            ]
-        );
+        $attendance = DB::transaction(function () use ($program, $participant, $validated, $request) {
+            $attendance = Attendance::query()->updateOrCreate(
+                [
+                    'program_id' => $program->id,
+                    'user_id' => $participant->user_id,
+                ],
+                [
+                    'method' => 'manual',
+                    'is_valid' => (bool) $validated['is_valid'],
+                    'manual_note' => $validated['manual_note'] ?? null,
+                    'recorded_by' => $request->user()->id,
+                    'latitude' => null,
+                    'longitude' => null,
+                ]
+            );
+
+            $this->syncManualAttendanceCredit(
+                $program,
+                $participant,
+                (bool) $validated['is_valid'],
+                $request->user()->id
+            );
+
+            return $attendance;
+        });
 
         return response()->json([
             'message' => $attendance->is_valid ? 'Yoklama katildi olarak isaretlendi.' : 'Yoklama gelmedi olarak isaretlendi.',
             'attendance' => $attendance,
         ]);
+    }
+
+    private function syncManualAttendanceCredit(Program $program, Participant $participant, bool $isValid, int $adminId): void
+    {
+        if ($program->status !== 'completed') {
+            return;
+        }
+
+        $creditDeduction = max((int) ($program->credit_deduction ?? 0), 0);
+        if ($creditDeduction === 0) {
+            return;
+        }
+
+        $currentNet = (int) CreditLog::query()
+            ->where('participant_id', $participant->id)
+            ->where('program_id', $program->id)
+            ->sum('amount');
+        $targetNet = $isValid ? 0 : -$creditDeduction;
+        $delta = $targetNet - $currentNet;
+
+        if ($delta === 0) {
+            return;
+        }
+
+        CreditLog::query()->create([
+            'participant_id' => $participant->id,
+            'user_id' => $participant->user_id,
+            'project_id' => $program->project_id,
+            'period_id' => $program->period_id,
+            'program_id' => $program->id,
+            'amount' => $delta,
+            'type' => $delta > 0 ? 'restore' : 'manual_adjust',
+            'reason' => $isValid
+                ? 'Manuel yoklama katildi olarak duzeltildi'
+                : 'Manuel yoklama gelmedi olarak duzeltildi',
+            'created_by' => $adminId,
+        ]);
+
+        if ($delta > 0) {
+            $participant->increment('credit', $delta);
+        } else {
+            $participant->decrement('credit', abs($delta));
+        }
     }
 
     public function exportAttendanceDetails(Request $request, int $id)
@@ -459,21 +510,20 @@ class AdminProgramController extends Controller
             ->get();
         $attendanceByUserId = $attendances->keyBy('user_id');
 
-        $restoredUserIds = CreditLog::query()
+        $creditLogsByUserId = CreditLog::query()
             ->where('program_id', $program->id)
-            ->where('type', 'restore')
-            ->pluck('user_id')
-            ->filter()
-            ->unique()
+            ->get()
+            ->groupBy('user_id');
+        $deductedUserIds = $creditLogsByUserId
+            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null)
+            ->keys()
+            ->map(fn ($id) => (int) $id)
             ->values()
             ->all();
-        $deductedUserIds = CreditLog::query()
-            ->where('program_id', $program->id)
-            ->where('type', 'deduction')
-            ->pluck('user_id')
-            ->filter()
+        $restoredUserIds = $creditLogsByUserId
+            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null && (int) $logs->sum('amount') >= 0)
+            ->keys()
             ->map(fn ($id) => (int) $id)
-            ->unique()
             ->values()
             ->all();
 

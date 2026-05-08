@@ -128,7 +128,7 @@ class FeedbackController extends Controller
         $deadline = $this->feedbackDeadline($program);
         if ($deadline !== null && now()->greaterThanOrEqualTo($deadline)) {
             return response()->json([
-                'message' => 'Bu oturum icin degerlendirme suresi doldu. Degerlendirme bir sonraki etkinlik baslamadan once gonderilmelidir.',
+                'message' => 'Bu oturum icin degerlendirme suresi doldu. Degerlendirme bir sonraki etkinlik bitmeden once gonderilmelidir.',
             ], 422);
         }
 
@@ -236,8 +236,8 @@ class FeedbackController extends Controller
             ->where('id', '!=', $program->id)
             ->where('start_at', '>', $program->start_at)
             ->orderBy('start_at')
-            ->first(['start_at']);
+            ->first(['start_at', 'end_at']);
 
-        return $nextProgram?->start_at;
+        return $nextProgram?->end_at ?? $nextProgram?->start_at;
     }
 }

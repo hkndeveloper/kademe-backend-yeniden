@@ -5,7 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectResource;
 use App\Models\ApplicationForm;
+use App\Models\EurodeskProject;
+use App\Models\Internship;
+use App\Models\KpdRoom;
+use App\Models\Mentor;
+use App\Models\Program;
 use App\Models\Project;
+use App\Models\RewardTier;
+use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 
 class ProjectController extends Controller
@@ -56,20 +63,199 @@ class ProjectController extends Controller
             ])
             ->firstOrFail();
 
-        $applicationForm = null;
-        if ($project->application_open) {
-            $applicationForm = ApplicationForm::where('project_id', $project->id)
-                ->where('is_active', true)
-                ->latest()
-                ->first();
-        }
-
         $currentPeriod = $project->periods->where('status', 'active')->first();
+        $applicationForm = $project->application_open
+            ? $this->activeApplicationForm($project, $currentPeriod)
+            : null;
 
         return response()->json([
             'project' => new ProjectResource($project),
             'current_period' => $currentPeriod,
             'application_form' => $applicationForm,
+            'programs' => $this->publicProgramPayload($project),
+            'project_specials' => $this->publicSpecialModules($project),
         ]);
+    }
+
+    private function publicProgramPayload(Project $project): array
+    {
+        $programs = Program::query()
+            ->where('project_id', $project->id)
+            ->with('period:id,name')
+            ->whereIn('status', ['scheduled', 'active', 'completed'])
+            ->orderBy('start_at')
+            ->get();
+
+        $now = now();
+
+        $upcoming = $programs
+            ->filter(fn (Program $program) => $program->start_at && $program->start_at->gte($now) && in_array($program->status, ['scheduled', 'active'], true))
+            ->take(8)
+            ->map(fn (Program $program) => $this->formatPublicProgram($program))
+            ->values();
+
+        $recentCompleted = $programs
+            ->filter(fn (Program $program) => $program->status === 'completed' || ($program->end_at && $program->end_at->lt($now)))
+            ->sortByDesc('start_at')
+            ->take(8)
+            ->map(fn (Program $program) => $this->formatPublicProgram($program))
+            ->values();
+
+        return [
+            'summary' => [
+                'total' => $programs->count(),
+                'upcoming' => $programs->filter(fn (Program $program) => $program->start_at && $program->start_at->gte($now))->count(),
+                'completed' => $programs->filter(fn (Program $program) => $program->status === 'completed' || ($program->end_at && $program->end_at->lt($now)))->count(),
+            ],
+            'upcoming' => $upcoming,
+            'recent_completed' => $recentCompleted,
+        ];
+    }
+
+    private function activeApplicationForm(Project $project, mixed $currentPeriod): ?ApplicationForm
+    {
+        if ($currentPeriod) {
+            $periodForm = ApplicationForm::where('project_id', $project->id)
+                ->where('period_id', $currentPeriod->id)
+                ->where('is_active', true)
+                ->latest()
+                ->first();
+
+            if ($periodForm) {
+                return $periodForm;
+            }
+        }
+
+        return ApplicationForm::where('project_id', $project->id)
+            ->whereNull('period_id')
+            ->where('is_active', true)
+            ->latest()
+            ->first();
+    }
+
+    private function formatPublicProgram(Program $program): array
+    {
+        return [
+            'id' => $program->id,
+            'title' => $program->title,
+            'description' => $program->description,
+            'location' => $program->location,
+            'guest_info' => $program->guest_info,
+            'status' => $program->status,
+            'start_at' => optional($program->start_at)->toIso8601String(),
+            'end_at' => optional($program->end_at)->toIso8601String(),
+            'period' => $program->period ? [
+                'id' => $program->period->id,
+                'name' => $program->period->name,
+            ] : null,
+        ];
+    }
+
+    private function publicSpecialModules(Project $project): array
+    {
+        $keys = $this->projectModuleKeys($project);
+        $payload = [
+            'module_keys' => $keys,
+        ];
+
+        if (in_array('internships', $keys, true)) {
+            $internships = Internship::query()
+                ->whereHas('participant', fn ($query) => $query->where('project_id', $project->id))
+                ->get(['company_name', 'position', 'start_date', 'end_date']);
+
+            $payload['internships'] = [
+                'total' => $internships->count(),
+                'active' => $internships->filter(fn (Internship $internship) => ! $internship->end_date || $internship->end_date->isFuture())->count(),
+                'companies' => $internships->pluck('company_name')->filter()->unique()->take(8)->values(),
+                'positions' => $internships->pluck('position')->filter()->unique()->take(8)->values(),
+            ];
+        }
+
+        if (in_array('mentors', $keys, true)) {
+            $payload['mentors'] = Mentor::query()
+                ->where('project_id', $project->id)
+                ->latest()
+                ->take(12)
+                ->get()
+                ->map(fn (Mentor $mentor) => [
+                    'id' => $mentor->id,
+                    'name' => $mentor->name,
+                    'bio' => $mentor->bio,
+                    'expertise' => $mentor->expertise,
+                    'photo' => MediaStorage::url($mentor->photo_path),
+                ])
+                ->values();
+        }
+
+        if (in_array('reward_tiers', $keys, true)) {
+            $payload['reward_tiers'] = RewardTier::query()
+                ->where(function ($query) use ($project) {
+                    $query->where('project_id', $project->id)->orWhereNull('project_id');
+                })
+                ->orderBy('min_badges')
+                ->orderBy('min_credits')
+                ->get(['id', 'name', 'description', 'min_badges', 'min_credits', 'reward_description'])
+                ->values();
+        }
+
+        if (in_array('eurodesk_projects', $keys, true)) {
+            $payload['eurodesk_projects'] = EurodeskProject::query()
+                ->where('project_id', $project->id)
+                ->latest('start_date')
+                ->take(10)
+                ->get()
+                ->map(fn (EurodeskProject $eurodeskProject) => [
+                    'id' => $eurodeskProject->id,
+                    'title' => $eurodeskProject->title,
+                    'partner_organizations' => $eurodeskProject->partner_organizations ?? [],
+                    'grant_amount' => $eurodeskProject->grant_amount,
+                    'grant_status' => $eurodeskProject->grant_status,
+                    'start_date' => optional($eurodeskProject->start_date)->toDateString(),
+                    'end_date' => optional($eurodeskProject->end_date)->toDateString(),
+                ])
+                ->values();
+        }
+
+        if (in_array('kpd_appointments', $keys, true)) {
+            $payload['kpd'] = [
+                'rooms' => KpdRoom::query()
+                    ->get(['id', 'name', 'description'])
+                    ->map(fn (KpdRoom $room) => [
+                        'id' => $room->id,
+                        'name' => $room->name,
+                        'description' => $room->description,
+                    ])
+                    ->values(),
+            ];
+        }
+
+        return $payload;
+    }
+
+    private function projectModuleKeys(Project $project): array
+    {
+        $haystack = mb_strtolower(($project->slug ?? '') . ' ' . ($project->name ?? '') . ' ' . ($project->type ?? ''));
+
+        if (str_contains($haystack, 'diplomasi')) {
+            return ['digital_bohca', 'internships', 'uploaded_files'];
+        }
+
+        if (str_contains($haystack, 'pergel')) {
+            return ['digital_bohca', 'mentors', 'assignments'];
+        }
+
+        if (str_contains($haystack, 'kpd') || str_contains($haystack, 'psikolojik')) {
+            return ['digital_bohca', 'kpd_appointments', 'kpd_reports'];
+        }
+
+        if (str_contains($haystack, 'kademe-plus') || str_contains($haystack, 'kademe plus') || str_contains($haystack, 'kademe+')) {
+            return ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'];
+        }
+
+        if (str_contains($haystack, 'eurodesk')) {
+            return ['digital_bohca', 'eurodesk_projects'];
+        }
+
+        return ['digital_bohca'];
     }
 }

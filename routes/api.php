@@ -182,6 +182,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     // KPD YÃ¶netimi
     Route::get('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'index']);
     Route::post('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'store']);
+    Route::put('/kpd/appointments/{id}/status', [\App\Http\Controllers\Api\AdminKpdController::class, 'updateStatus']);
+    Route::get('/kpd/options', [\App\Http\Controllers\Api\AdminKpdController::class, 'options']);
     Route::get('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'reports']);
     Route::post('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'storeReport']);
     Route::get('/kpd/reports/{id}/download', [\App\Http\Controllers\Api\AdminKpdController::class, 'downloadReport']);
@@ -342,6 +344,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
 
     Route::get('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'index']);
     Route::post('/kpd/appointments', [\App\Http\Controllers\Api\AdminKpdController::class, 'store']);
+    Route::put('/kpd/appointments/{id}/status', [\App\Http\Controllers\Api\AdminKpdController::class, 'updateStatus']);
+    Route::get('/kpd/options', [\App\Http\Controllers\Api\AdminKpdController::class, 'options']);
     Route::get('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'reports']);
     Route::post('/kpd/reports', [\App\Http\Controllers\Api\AdminKpdController::class, 'storeReport']);
     Route::get('/kpd/reports/{id}/download', [\App\Http\Controllers\Api\AdminKpdController::class, 'downloadReport']);
