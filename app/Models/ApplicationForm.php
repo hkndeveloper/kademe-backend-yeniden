@@ -13,11 +13,14 @@ class ApplicationForm extends Model
         'project_id',
         'period_id',
         'fields',
+        'require_consent',
+        'consent_text',
         'is_active',
     ];
 
     protected $casts = [
         'fields' => 'array',
+        'require_consent' => 'boolean',
         'is_active' => 'boolean',
     ];
 

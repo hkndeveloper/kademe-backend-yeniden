@@ -67,6 +67,21 @@ class MediaStorage
         }
     }
 
+    public static function mimeType(?string $path): ?string
+    {
+        if (! $path || self::isUrl($path)) {
+            return null;
+        }
+
+        try {
+            $mimeType = self::disk()->mimeType($path);
+
+            return is_string($mimeType) && $mimeType !== '' ? $mimeType : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public static function url(?string $path): ?string
     {
         if (! $path) {
@@ -113,7 +128,7 @@ class MediaStorage
         ], 503));
     }
 
-    private static function isUrl(string $path): bool
+    public static function isUrl(string $path): bool
     {
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }

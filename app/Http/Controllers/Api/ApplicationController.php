@@ -37,7 +37,7 @@ class ApplicationController extends Controller
             'name' => trim($applicant['name']),
             'surname' => trim($applicant['surname']),
             'email' => $email,
-            'phone' => $applicant['phone'] ? trim((string) $applicant['phone']) : null,
+            'phone' => ! empty($applicant['phone']) ? trim((string) $applicant['phone']) : null,
             'password' => Hash::make(Str::random(32)),
             'role' => 'student',
             'status' => 'active',
@@ -76,7 +76,7 @@ class ApplicationController extends Controller
         ];
     }
 
-    private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = []): Application
+    private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false): Application
     {
         $this->ensureSingleProjectRule($user, $project);
 
@@ -102,6 +102,12 @@ class ApplicationController extends Controller
         }
 
         $form = $this->activeFormForPeriod($project, $currentPeriod);
+
+        if ($form?->require_consent && ! $consentAccepted) {
+            throw ValidationException::withMessages([
+                'consent_accepted' => ['Basvuru kosullarini kabul etmeniz gerekiyor.'],
+            ]);
+        }
 
         $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
 
@@ -321,6 +327,7 @@ class ApplicationController extends Controller
             'form_data' => 'nullable|array',
             'form_files' => 'nullable|array',
             'form_files.*' => 'file|max:20480',
+            'consent_accepted' => 'nullable|boolean',
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
@@ -331,7 +338,13 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $application = $this->createApplicationForUser($request->user(), $project, $validated['form_data'] ?? [], $request->file('form_files', []));
+        $application = $this->createApplicationForUser(
+            $request->user(),
+            $project,
+            $validated['form_data'] ?? [],
+            $request->file('form_files', []),
+            (bool) ($validated['consent_accepted'] ?? false)
+        );
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',
@@ -346,6 +359,7 @@ class ApplicationController extends Controller
             'form_data' => 'nullable|array',
             'form_files' => 'nullable|array',
             'form_files.*' => 'file|max:20480',
+            'consent_accepted' => 'nullable|boolean',
             'applicant.name' => 'required|string|max:255',
             'applicant.surname' => 'required|string|max:255',
             'applicant.email' => 'required|email|max:255',
@@ -360,7 +374,13 @@ class ApplicationController extends Controller
         }
 
         $user = $this->resolveApplicantUser($validated['applicant']);
-        $application = $this->createApplicationForUser($user, $project, $validated['form_data'] ?? [], $request->file('form_files', []));
+        $application = $this->createApplicationForUser(
+            $user,
+            $project,
+            $validated['form_data'] ?? [],
+            $request->file('form_files', []),
+            (bool) ($validated['consent_accepted'] ?? false)
+        );
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',

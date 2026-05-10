@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Models\Certificate;
 use App\Models\Participant;
 use App\Models\Project;
 use App\Services\PermissionResolver;
@@ -11,6 +12,9 @@ use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 
 class CoordinatorParticipantController extends Controller
 {
@@ -52,6 +56,15 @@ class CoordinatorParticipantController extends Controller
         }
 
         return false;
+    }
+
+    private function uniqueCertificateCode(): string
+    {
+        do {
+            $code = strtoupper(Str::random(10));
+        } while (Certificate::query()->where('verification_code', $code)->exists());
+
+        return $code;
     }
 
     public function index(Request $request): JsonResponse
@@ -268,5 +281,81 @@ class CoordinatorParticipantController extends Controller
             $headings,
             $rows,
         );
+    }
+
+    public function updateGraduationStatus(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'projects.participants.manage');
+        $participant = Participant::with(['user', 'project:id,name', 'period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+
+        $validated = $request->validate([
+            'graduation_status' => 'required|in:completed,graduated,not_completed',
+            'graduation_note' => 'nullable|string|max:2000',
+        ]);
+
+        if ($validated['graduation_status'] === 'not_completed' && trim((string) ($validated['graduation_note'] ?? '')) === '') {
+            return response()->json([
+                'message' => 'Tamamlayamadi durumunda gerekce zorunludur.',
+            ], 422);
+        }
+
+        $certificate = null;
+        $participant = DB::transaction(function () use ($participant, $validated, $request, &$certificate) {
+            $status = $validated['graduation_status'];
+            $participantStatus = match ($status) {
+                'graduated' => 'graduated',
+                'not_completed' => 'failed',
+                default => 'passive',
+            };
+
+            $participant->update([
+                'status' => $participantStatus,
+                'graduation_status' => $status,
+                'graduation_note' => $validated['graduation_note'] ?? null,
+                'graduated_at' => in_array($status, ['completed', 'graduated'], true) ? now() : null,
+            ]);
+
+            if ($status === 'graduated' && $participant->user) {
+                Role::findOrCreate('alumni', 'web');
+                $participant->user->update([
+                    'role' => 'alumni',
+                    'status' => 'alumni',
+                ]);
+                if ($participant->user->hasRole('student')) {
+                    $participant->user->removeRole('student');
+                }
+                $participant->user->assignRole('alumni');
+            }
+
+            if (in_array($status, ['completed', 'graduated'], true)) {
+                $certificateType = $status === 'graduated' ? 'graduation' : 'participation';
+                $certificate = Certificate::query()->firstOrCreate(
+                    [
+                        'user_id' => $participant->user_id,
+                        'project_id' => $participant->project_id,
+                        'type' => $certificateType,
+                    ],
+                    [
+                        'period_id' => $participant->period_id,
+                        'verification_code' => $this->uniqueCertificateCode(),
+                        'issued_at' => now(),
+                        'created_by' => $request->user()->id,
+                    ]
+                );
+            }
+
+            return $participant->fresh(['user', 'project:id,name', 'period:id,name']);
+        });
+
+        return response()->json([
+            'message' => match ($validated['graduation_status']) {
+                'graduated' => 'Katilimci mezun olarak isaretlendi.',
+                'completed' => 'Katilimci tamamladi olarak isaretlendi.',
+                default => 'Katilimci tamamlayamadi olarak isaretlendi.',
+            },
+            'participant' => $participant,
+            'certificate' => $certificate,
+        ]);
     }
 }

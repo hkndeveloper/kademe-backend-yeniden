@@ -60,23 +60,8 @@ class FinancialTransactionController extends Controller
         return $this->permissionResolver->canAccessProject($user, $permissionName, $projectId);
     }
 
-    /**
-     * GET /admin/financials
-     * Tüm finansal işlemleri listele (filtrelenebilir).
-     */
-    public function index(Request $request)
+    private function applyFinancialFilters($query, Request $request): void
     {
-        $this->abortUnlessAllowed($request, 'financial.view');
-        $user = $request->user();
-        $query = FinancialTransaction::with([
-            'project:id,name',
-            'period:id,name',
-            'submitter:id,name,surname',
-            'approver:id,name,surname',
-        ]);
-        $this->scopeFinancialTransactionsForUser($query, $user, 'financial.view');
-
-        // Filtreler
         if ($request->filled('project_id')) {
             $query->where('project_id', $request->project_id);
         }
@@ -98,31 +83,39 @@ class FinancialTransactionController extends Controller
         if ($request->filled('date_to')) {
             $query->where('submitted_at', '<=', $request->date_to . ' 23:59:59');
         }
+    }
+
+    /**
+     * GET /admin/financials
+     * Tüm finansal işlemleri listele (filtrelenebilir).
+     */
+    public function index(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'financial.view');
+        $user = $request->user();
+        $query = FinancialTransaction::with([
+            'project:id,name',
+            'period:id,name',
+            'submitter:id,name,surname',
+            'approver:id,name,surname',
+        ]);
+        $this->scopeFinancialTransactionsForUser($query, $user, 'financial.view');
+
+        $this->applyFinancialFilters($query, $request);
 
         $transactions = $query->latest('submitted_at')->paginate(20);
 
         // Toplam tutar hesaplama
         $totalQuery = FinancialTransaction::query();
         $this->scopeFinancialTransactionsForUser($totalQuery, $user, 'financial.view');
-        if ($request->filled('project_id')) $totalQuery->where('project_id', $request->project_id);
-        if ($request->filled('status')) $totalQuery->where('status', $request->status);
-        if ($request->filled('category')) $totalQuery->where('category', $request->category);
-        if ($request->filled('type')) $totalQuery->where('type', $request->type);
-        if ($request->filled('payee')) $totalQuery->where('payee_name', 'like', '%' . $request->payee . '%');
-        if ($request->filled('date_from')) $totalQuery->where('submitted_at', '>=', $request->date_from);
-        if ($request->filled('date_to')) $totalQuery->where('submitted_at', '<=', $request->date_to . ' 23:59:59');
+        $this->applyFinancialFilters($totalQuery, $request);
         $totalAmount = $totalQuery->sum('amount');
 
         // Kategori bazlı infografik
         $categoryStats = FinancialTransaction::query()
             ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $user, 'financial.view'))
             ->selectRaw('category, SUM(amount) as total, COUNT(*) as count')
-            ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->project_id))
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
-            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
-            ->when($request->filled('payee'), fn ($q) => $q->where('payee_name', 'like', '%' . $request->payee . '%'))
-            ->when($request->filled('date_from'), fn ($q) => $q->where('submitted_at', '>=', $request->date_from))
-            ->when($request->filled('date_to'), fn ($q) => $q->where('submitted_at', '<=', $request->date_to . ' 23:59:59'))
+            ->tap(fn ($q) => $this->applyFinancialFilters($q, $request))
             ->groupBy('category')
             ->get();
 
@@ -131,13 +124,15 @@ class FinancialTransactionController extends Controller
             ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $user, 'financial.view'))
             ->with('project:id,name')
             ->selectRaw('project_id, SUM(amount) as total')
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
-            ->when($request->filled('category'), fn ($q) => $q->where('category', $request->category))
-            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
-            ->when($request->filled('payee'), fn ($q) => $q->where('payee_name', 'like', '%' . $request->payee . '%'))
-            ->when($request->filled('date_from'), fn ($q) => $q->where('submitted_at', '>=', $request->date_from))
-            ->when($request->filled('date_to'), fn ($q) => $q->where('submitted_at', '<=', $request->date_to . ' 23:59:59'))
+            ->tap(fn ($q) => $this->applyFinancialFilters($q, $request))
             ->groupBy('project_id')
+            ->get();
+
+        $statusStats = FinancialTransaction::query()
+            ->tap(fn ($q) => $this->scopeFinancialTransactionsForUser($q, $user, 'financial.view'))
+            ->selectRaw('status, SUM(amount) as total, COUNT(*) as count')
+            ->tap(fn ($q) => $this->applyFinancialFilters($q, $request))
+            ->groupBy('status')
             ->get();
 
         return response()->json([
@@ -145,6 +140,7 @@ class FinancialTransactionController extends Controller
             'total_amount' => $totalAmount,
             'category_stats' => $categoryStats,
             'project_stats' => $projectStats,
+            'status_stats' => $statusStats,
         ]);
     }
 
@@ -337,9 +333,19 @@ class FinancialTransactionController extends Controller
             return response()->json(['message' => 'Fatura bulunamadı.'], 404);
         }
 
-        if (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured()) {
+        if (
+            $request->boolean('direct')
+            && MediaStorage::directDownloadsEnabled()
+            && (MediaStorage::publicUrlConfigured() || MediaStorage::isUrl($transaction->invoice_path))
+        ) {
             return response()->json([
                 'download_url' => MediaStorage::url($transaction->invoice_path),
+            ]);
+        }
+
+        if (MediaStorage::isUrl($transaction->invoice_path)) {
+            return response()->json([
+                'download_url' => $transaction->invoice_path,
             ]);
         }
 
@@ -347,7 +353,12 @@ class FinancialTransactionController extends Controller
             return response()->json(['message' => 'Fatura bulunamadı.'], 404);
         }
 
-        return MediaStorage::disk()->download($transaction->invoice_path);
+        $fileName = 'fatura_' . $transaction->id . '_' . basename($transaction->invoice_path);
+        $headers = [
+            'Content-Type' => MediaStorage::mimeType($transaction->invoice_path) ?? 'application/octet-stream',
+        ];
+
+        return MediaStorage::disk()->download($transaction->invoice_path, $fileName, $headers);
     }
 
     /**
@@ -364,10 +375,7 @@ class FinancialTransactionController extends Controller
         ]);
         $this->scopeFinancialTransactionsForUser($query, $request->user(), 'financial.export');
 
-        if ($request->filled('project_id')) $query->where('project_id', $request->project_id);
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('date_from')) $query->where('submitted_at', '>=', $request->date_from);
-        if ($request->filled('date_to')) $query->where('submitted_at', '<=', $request->date_to . ' 23:59:59');
+        $this->applyFinancialFilters($query, $request);
 
         $transactions = $query->latest('submitted_at')->get();
 
@@ -443,10 +451,7 @@ class FinancialTransactionController extends Controller
             'approver:id,name,surname',
         ])->whereIn('project_id', $projectIds)->where('submitted_by', $user->id);
 
-        if ($request->filled('project_id')) $query->where('project_id', $request->project_id);
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('date_from')) $query->where('submitted_at', '>=', $request->date_from);
-        if ($request->filled('date_to')) $query->where('submitted_at', '<=', $request->date_to . ' 23:59:59');
+        $this->applyFinancialFilters($query, $request);
 
         $transactions = $query->latest('submitted_at')->get();
         $headings = ['ID', 'Proje', 'Donem', 'Kategori', 'Alici', 'Tutar', 'Durum', 'Onaylayan', 'Gonderim Tarihi'];

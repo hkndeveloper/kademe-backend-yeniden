@@ -485,6 +485,8 @@ class ProjectContentController extends Controller
             'fields.*.required' => 'required|boolean',
             'fields.*.options' => 'nullable|array',
             'fields.*.options.*' => 'nullable|string|max:255',
+            'require_consent' => 'sometimes|boolean',
+            'consent_text' => 'nullable|string|max:5000',
             'is_active' => 'sometimes|boolean',
         ]);
 
@@ -521,6 +523,8 @@ class ProjectContentController extends Controller
 
                     return $payload;
                 }, $validated['fields']),
+                'require_consent' => (bool) ($validated['require_consent'] ?? false),
+                'consent_text' => $validated['consent_text'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
             ]
         );

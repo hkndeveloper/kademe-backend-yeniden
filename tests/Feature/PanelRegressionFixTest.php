@@ -9,6 +9,7 @@ use App\Models\Badge;
 use App\Models\Certificate;
 use App\Models\CreditLog;
 use App\Models\Feedback;
+use App\Models\FinancialTransaction;
 use App\Models\Participant;
 use App\Models\KpdReport;
 use App\Models\KpdRoom;
@@ -182,6 +183,196 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('projects.0.id', $project->id);
 
         $this->assertNotSame($otherProject->id, $project->id);
+    }
+
+    public function test_financial_invoice_download_streams_file_by_default_and_supports_explicit_direct_url(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        Storage::fake(config('filesystems.media_disk', 'public'));
+        config([
+            'filesystems.direct_media_downloads' => true,
+            'filesystems.disks.' . config('filesystems.media_disk', 'public') . '.url' => 'https://cdn.example.test/media',
+        ]);
+
+        $project = $this->project();
+        Storage::disk(config('filesystems.media_disk', 'public'))->put('invoices/test-invoice.pdf', '%PDF-1.4 test');
+        $transaction = FinancialTransaction::query()->create([
+            'project_id' => $project->id,
+            'type' => 'expense',
+            'category' => 'food',
+            'payee_name' => 'Test Firma',
+            'amount' => 1250,
+            'status' => 'pending',
+            'invoice_path' => 'invoices/test-invoice.pdf',
+            'submitted_by' => $admin->id,
+            'submitted_at' => now(),
+        ]);
+
+        $this->get("/api/panel/financials/{$transaction->id}/invoice")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->getJson("/api/panel/financials/{$transaction->id}/invoice?direct=1")
+            ->assertOk()
+            ->assertJsonPath('download_url', 'https://cdn.example.test/media/invoices/test-invoice.pdf');
+    }
+
+    public function test_financial_index_and_export_apply_full_filter_set_with_status_stats(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $otherProject = Project::query()->create([
+            'name' => 'Filtered Other Project',
+            'slug' => 'filtered-other-project',
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+
+        FinancialTransaction::query()->create([
+            'project_id' => $project->id,
+            'type' => 'expense',
+            'category' => 'food',
+            'payee_name' => 'Catering Firma',
+            'amount' => 1000,
+            'status' => 'approved',
+            'submitted_by' => $admin->id,
+            'submitted_at' => now(),
+        ]);
+        FinancialTransaction::query()->create([
+            'project_id' => $project->id,
+            'type' => 'payment',
+            'category' => 'food',
+            'payee_name' => 'Catering Firma',
+            'amount' => 300,
+            'status' => 'pending',
+            'submitted_by' => $admin->id,
+            'submitted_at' => now(),
+        ]);
+        FinancialTransaction::query()->create([
+            'project_id' => $otherProject->id,
+            'type' => 'expense',
+            'category' => 'transport',
+            'payee_name' => 'Ulasim Firma',
+            'amount' => 700,
+            'status' => 'approved',
+            'submitted_by' => $admin->id,
+            'submitted_at' => now(),
+        ]);
+
+        $query = http_build_query([
+            'project_id' => $project->id,
+            'status' => 'approved',
+            'category' => 'food',
+            'type' => 'expense',
+            'payee' => 'Catering',
+        ]);
+
+        $this->getJson('/api/panel/financials?' . $query)
+            ->assertOk()
+            ->assertJsonCount(1, 'transactions.data')
+            ->assertJsonPath('total_amount', 1000)
+            ->assertJsonPath('category_stats.0.category', 'food')
+            ->assertJsonPath('status_stats.0.status', 'approved')
+            ->assertJsonPath('status_stats.0.count', 1);
+
+        $this->get('/api/panel/financials/export?' . $query)
+            ->assertOk()
+            ->assertHeader('content-disposition');
+    }
+
+    public function test_participant_graduation_status_updates_user_and_creates_certificate(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Mezuniyet',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->toDateString(),
+            'status' => 'completed',
+        ]);
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'surname' => 'GraduateFlow',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 92,
+        ]);
+
+        $this->patchJson("/api/panel/participants/{$participant->id}/graduation", [
+            'graduation_status' => 'graduated',
+            'graduation_note' => 'Donemi basariyla tamamladi.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('participant.graduation_status', 'graduated')
+            ->assertJsonPath('certificate.type', 'graduation');
+
+        $this->assertDatabaseHas('participants', [
+            'id' => $participant->id,
+            'status' => 'graduated',
+            'graduation_status' => 'graduated',
+            'graduation_note' => 'Donemi basariyla tamamladi.',
+        ]);
+        $this->assertDatabaseHas('certificates', [
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'type' => 'graduation',
+        ]);
+        $this->assertSame('alumni', $student->fresh()->role);
+        $this->assertSame('alumni', $student->fresh()->status);
+        $this->assertTrue($student->fresh()->hasRole('alumni'));
+    }
+
+    public function test_participant_not_completed_requires_reason_and_does_not_create_certificate(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Tamamlayamadi',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->toDateString(),
+            'status' => 'completed',
+        ]);
+        $student = User::factory()->create(['role' => 'student', 'surname' => 'FailedFlow']);
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 60,
+        ]);
+
+        $this->patchJson("/api/panel/participants/{$participant->id}/graduation", [
+            'graduation_status' => 'not_completed',
+        ])->assertStatus(422);
+
+        $this->patchJson("/api/panel/participants/{$participant->id}/graduation", [
+            'graduation_status' => 'not_completed',
+            'graduation_note' => 'Devamsizlik sinirini asti.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('participant.status', 'failed');
+
+        $this->assertDatabaseHas('participants', [
+            'id' => $participant->id,
+            'status' => 'failed',
+            'graduation_status' => 'not_completed',
+            'graduation_note' => 'Devamsizlik sinirini asti.',
+        ]);
+        $this->assertDatabaseMissing('certificates', [
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+        ]);
     }
 
     public function test_completing_program_deducts_credit_from_all_active_project_participants_once(): void
@@ -679,6 +870,58 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonPath('application_form.period_id', $activePeriod->id)
             ->assertJsonPath('application_form.fields.0.id', 'active_question');
+    }
+
+    public function test_public_application_requires_configured_consent_before_submission(): void
+    {
+        $project = $this->project();
+        $project->update(['application_open' => true]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Basvuru',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'fields' => [
+                ['id' => 'motivation', 'type' => 'text', 'label' => 'Motivasyon', 'required' => false],
+            ],
+            'require_consent' => true,
+            'consent_text' => 'Basvuru kosullarini okudum ve kabul ediyorum.',
+            'is_active' => true,
+        ]);
+
+        $payload = [
+            'project_id' => $project->id,
+            'form_data' => [
+                'motivation' => 'Katılmak istiyorum.',
+            ],
+            'applicant' => [
+                'name' => 'Public',
+                'surname' => 'Applicant',
+                'email' => 'public-consent@test.local',
+                'phone' => '05550000000',
+            ],
+        ];
+
+        $this->postJson('/api/applications/public', $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('consent_accepted');
+
+        $this->assertDatabaseCount('applications', 0);
+
+        $this->postJson('/api/applications/public', $payload + ['consent_accepted' => true])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'pending');
+
+        $this->assertDatabaseHas('applications', [
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'pending',
+        ]);
     }
 
     public function test_student_applications_include_interview_reason_and_submitted_answers(): void

@@ -469,6 +469,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     // Unified aliases for role-specific pages under /panel/*
     Route::get('/participants', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'index']);
     Route::get('/participants/export', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'export']);
+    Route::patch('/participants/{id}/graduation', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'updateGraduationStatus']);
     Route::get('/members', [\App\Http\Controllers\Api\StaffController::class, 'unitMembers']);
     Route::get('/members/export', [\App\Http\Controllers\Api\StaffController::class, 'exportUnitMembers']);
     Route::get('/my-projects', [\App\Http\Controllers\Api\StaffController::class, 'myProjects']);
@@ -483,6 +484,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/coordinator/financials', [\App\Http\Controllers\Api\FinancialTransactionController::class, 'store']);
     Route::get('/coordinator/participants', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'index']);
     Route::get('/coordinator/participants/export', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'export']);
+    Route::patch('/coordinator/participants/{id}/graduation', [\App\Http\Controllers\Api\CoordinatorParticipantController::class, 'updateGraduationStatus']);
 });
 
 // â”€â”€ PERSONEL / KOORDÄ°NATÃ–R (Ä°zin Talepleri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
