@@ -85,6 +85,28 @@ class FinancialTransactionController extends Controller
         }
     }
 
+    private function attachFinancialAudit(Request $request, FinancialTransaction $transaction, string $operation, ?string $statusBefore = null): void
+    {
+        $request->attributes->set('audit.subject', $transaction);
+        $request->attributes->set('audit.event', 'financial.' . $operation);
+        $request->attributes->set('audit.description', 'financial.' . $operation);
+        $request->attributes->set('audit.properties', [
+            'operation' => 'financial_' . $operation,
+            'financial_transaction_id' => $transaction->id,
+            'project_id' => $transaction->project_id,
+            'period_id' => $transaction->period_id,
+            'type' => $transaction->type,
+            'category' => $transaction->category,
+            'payee_name' => $transaction->payee_name,
+            'amount' => (float) $transaction->amount,
+            'status_before' => $statusBefore,
+            'status_after' => $transaction->status,
+            'submitted_by' => $transaction->submitted_by,
+            'approved_by' => $transaction->approved_by,
+            'invoice_present' => ! empty($transaction->invoice_path),
+        ]);
+    }
+
     /**
      * GET /admin/financials
      * Tüm finansal işlemleri listele (filtrelenebilir).
@@ -185,6 +207,8 @@ class FinancialTransactionController extends Controller
             'submitted_at' => now(),
         ]);
 
+        $this->attachFinancialAudit($request, $transaction, 'created');
+
         return response()->json([
             'message'     => 'İşlem başarıyla kaydedildi.',
             'transaction' => $transaction->load(['project:id,name', 'submitter:id,name,surname']),
@@ -229,15 +253,18 @@ class FinancialTransactionController extends Controller
             return response()->json(['message' => 'Bu işlem zaten işlenmiş.'], 422);
         }
 
+        $statusBefore = $transaction->status;
         $transaction->update([
             'status'      => 'approved',
             'approved_by' => Auth::id(),
             'approved_at' => now(),
         ]);
+        $transaction = $transaction->fresh();
+        $this->attachFinancialAudit($request, $transaction, 'approved', $statusBefore);
 
         return response()->json([
             'message'     => 'İşlem onaylandı.',
-            'transaction' => $transaction->fresh(['approver:id,name,surname']),
+            'transaction' => $transaction->load(['approver:id,name,surname']),
         ]);
     }
 
@@ -258,11 +285,14 @@ class FinancialTransactionController extends Controller
             return response()->json(['message' => 'Bu işlem zaten işlenmiş.'], 422);
         }
 
+        $statusBefore = $transaction->status;
         $transaction->update([
             'status'      => 'rejected',
             'approved_by' => Auth::id(),
             'approved_at' => now(),
         ]);
+        $transaction = $transaction->fresh();
+        $this->attachFinancialAudit($request, $transaction, 'rejected', $statusBefore);
 
         return response()->json(['message' => 'İşlem reddedildi.', 'transaction' => $transaction]);
     }
@@ -284,7 +314,10 @@ class FinancialTransactionController extends Controller
             return response()->json(['message' => 'Sadece onaylanan işlemler ödenmiş olarak işaretlenebilir.'], 422);
         }
 
+        $statusBefore = $transaction->status;
         $transaction->update(['status' => 'paid']);
+        $transaction = $transaction->fresh();
+        $this->attachFinancialAudit($request, $transaction, 'paid', $statusBefore);
 
         return response()->json(['message' => 'Ödeme tamamlandı.', 'transaction' => $transaction]);
     }
@@ -311,6 +344,7 @@ class FinancialTransactionController extends Controller
             MediaStorage::delete($transaction->invoice_path);
         }
 
+        $this->attachFinancialAudit($request, $transaction, 'deleted', $transaction->status);
         $transaction->delete();
 
         return response()->json(['message' => 'İşlem silindi.']);

@@ -16,9 +16,11 @@ use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class AdminProgramController extends Controller
 {
@@ -37,6 +39,42 @@ class AdminProgramController extends Controller
     private function abortIfUnauthorized(User $user, Project $project, string $permission): void
     {
         abort_unless($this->canManageProject($user, $project, $permission), 403, 'Bu projeyi yonetme yetkiniz yok.');
+    }
+
+    private function assertPeriodBelongsToProject(Project $project, int $periodId): void
+    {
+        if (! $project->periods()->whereKey($periodId)->exists()) {
+            throw ValidationException::withMessages([
+                'period_id' => ['Secilen donem bu projeye ait degil.'],
+            ]);
+        }
+    }
+
+    private function assertNoProgramTimeConflict(string $startAt, string $endAt, ?int $ignoreProgramId = null): void
+    {
+        $start = Carbon::parse($startAt);
+        $end = Carbon::parse($endAt);
+
+        $conflictingProgram = Program::query()
+            ->with('project:id,name')
+            ->where('status', '!=', 'cancelled')
+            ->when($ignoreProgramId, fn ($query) => $query->whereKeyNot($ignoreProgramId))
+            ->where('start_at', '<', $end)
+            ->where('end_at', '>', $start)
+            ->orderBy('start_at')
+            ->first();
+
+        if (! $conflictingProgram) {
+            return;
+        }
+
+        $projectName = $conflictingProgram->project?->name ?? 'Baska proje';
+        $start = optional($conflictingProgram->start_at)?->format('d.m.Y H:i');
+        $end = optional($conflictingProgram->end_at)?->format('d.m.Y H:i');
+
+        throw ValidationException::withMessages([
+            'start_at' => ["Secilen saat araligi {$projectName} / {$conflictingProgram->title} programiyla cakisiyor ({$start} - {$end})."],
+        ]);
     }
 
     /**
@@ -130,6 +168,8 @@ class AdminProgramController extends Controller
 
         $project = Project::findOrFail($validated['project_id']);
         $this->abortIfUnauthorized($request->user(), $project, 'programs.create');
+        $this->assertPeriodBelongsToProject($project, (int) $validated['period_id']);
+        $this->assertNoProgramTimeConflict($validated['start_at'], $validated['end_at']);
 
         $program = Program::create(array_merge($validated, [
             'created_by' => $request->user()->id,
@@ -177,6 +217,10 @@ class AdminProgramController extends Controller
         if (in_array($validated['status'], ['completed', 'cancelled'], true)) {
             $validated['qr_token'] = null;
             $validated['qr_expires_at'] = null;
+        }
+
+        if ($validated['status'] !== 'cancelled') {
+            $this->assertNoProgramTimeConflict($validated['start_at'], $validated['end_at'], $program->id);
         }
 
         $program->update($validated);
@@ -297,6 +341,20 @@ class AdminProgramController extends Controller
                 'message' => $throwable->getMessage(),
             ]);
         }
+
+        $request->attributes->set('audit.subject', $program);
+        $request->attributes->set('audit.event', 'program.completed');
+        $request->attributes->set('audit.description', 'program.completed');
+        $request->attributes->set('audit.properties', [
+            'operation' => 'program_complete',
+            'project_id' => $program->project_id,
+            'period_id' => $program->period_id,
+            'program_id' => $program->id,
+            'program_title' => $program->title,
+            'credit_deduction' => $creditDeduction,
+            'deducted_participant_count' => $deductedCount,
+            'status_after' => 'completed',
+        ]);
 
         return response()->json([
             'message' => 'Etkinlik ve yoklama alimi basariyla sonlandirildi.',
@@ -436,6 +494,23 @@ class AdminProgramController extends Controller
 
             return $attendance;
         });
+
+        $request->attributes->set('audit.subject', $program);
+        $request->attributes->set('audit.event', 'attendance.manual_updated');
+        $request->attributes->set('audit.description', 'attendance.manual_updated');
+        $request->attributes->set('audit.properties', [
+            'operation' => 'manual_attendance_update',
+            'project_id' => $program->project_id,
+            'period_id' => $program->period_id,
+            'program_id' => $program->id,
+            'program_title' => $program->title,
+            'participant_id' => $participant->id,
+            'student_user_id' => $participant->user_id,
+            'attendance_id' => $attendance->id,
+            'is_valid' => (bool) $validated['is_valid'],
+            'manual_note_present' => ! empty($validated['manual_note']),
+            'program_status' => $program->status,
+        ]);
 
         return response()->json([
             'message' => $attendance->is_valid ? 'Yoklama katildi olarak isaretlendi.' : 'Yoklama gelmedi olarak isaretlendi.',

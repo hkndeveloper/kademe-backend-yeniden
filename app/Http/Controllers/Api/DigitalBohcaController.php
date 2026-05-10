@@ -22,6 +22,24 @@ class DigitalBohcaController extends Controller
     ) {
     }
 
+    private function attachBohcaAudit(Request $request, DigitalBohca $material, string $operation): void
+    {
+        $request->attributes->set('audit.subject', $material);
+        $request->attributes->set('audit.event', 'digital_bohca.' . $operation);
+        $request->attributes->set('audit.description', 'digital_bohca.' . $operation);
+        $request->attributes->set('audit.properties', [
+            'operation' => 'digital_bohca_' . $operation,
+            'material_id' => $material->id,
+            'project_id' => $material->project_id,
+            'target_user_id' => $material->user_id,
+            'title' => $material->title,
+            'file_path' => $material->file_path,
+            'file_type' => $material->file_type,
+            'visible_to_student' => (bool) $material->visible_to_student,
+            'uploaded_by' => $material->uploaded_by,
+        ]);
+    }
+
     /**
      * Öğrencinin katıldığı projelere ait Dijital Bohça materyallerini listeler
      */
@@ -123,6 +141,7 @@ class DigitalBohcaController extends Controller
             'visible_to_student' => $validated['visible_to_student'] ?? true,
             'uploaded_by' => $request->user()->id,
         ]);
+        $this->attachBohcaAudit($request, $material, 'created');
 
         return response()->json([
             'message' => 'Dijital bohca materyali yuklendi.',
@@ -235,6 +254,7 @@ class DigitalBohcaController extends Controller
         }
 
         MediaStorage::delete($material->file_path);
+        $this->attachBohcaAudit($request, $material, 'deleted');
         $material->delete();
 
         return response()->json(['message' => 'Dijital bohca materyali silindi.']);

@@ -75,6 +75,27 @@ class AdminApplicationController extends Controller
         }
     }
 
+    private function assertProjectHasSeatFor(Application $application): void
+    {
+        $quota = $application->project?->quota;
+        if ($quota === null || (int) $quota <= 0) {
+            return;
+        }
+
+        $activeParticipantCount = Participant::query()
+            ->where('project_id', $application->project_id)
+            ->where('period_id', $application->period_id)
+            ->where('status', 'active')
+            ->where('user_id', '!=', $application->user_id)
+            ->count();
+
+        if ($activeParticipantCount >= (int) $quota) {
+            throw ValidationException::withMessages([
+                'status' => ['Proje kontenjani dolu. Basvuruyu kabul etmeden once kontenjan acin veya yedek listede birakin.'],
+            ]);
+        }
+    }
+
     private function isUrl(string $path): bool
     {
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
@@ -397,7 +418,7 @@ class AdminApplicationController extends Controller
             'evaluation_note' => 'nullable|string',
         ]);
 
-        $application = Application::with(['period', 'project:id,name,has_interview'])->findOrFail($id);
+        $application = Application::with(['period', 'project:id,name,has_interview,quota'])->findOrFail($id);
 
         $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
@@ -422,6 +443,7 @@ class AdminApplicationController extends Controller
 
             if ($validated['status'] === 'accepted') {
                 $application->loadMissing('user');
+                $this->assertProjectHasSeatFor($application);
 
                 $hasAnotherActiveProject = Participant::query()
                     ->where('user_id', $application->user_id)

@@ -8,6 +8,7 @@ use App\Models\ApplicationForm;
 use App\Models\Badge;
 use App\Models\Certificate;
 use App\Models\CreditLog;
+use App\Models\DigitalBohca;
 use App\Models\Feedback;
 use App\Models\FinancialTransaction;
 use App\Models\Participant;
@@ -102,7 +103,7 @@ class PanelRegressionFixTest extends TestCase
 
     public function test_panel_certificate_create_accepts_canonical_type_and_persists_certificate_path(): void
     {
-        $this->actingSuperAdmin();
+        $admin = $this->actingSuperAdmin();
         $student = User::factory()->create([
             'name' => 'Cert',
             'surname' => 'Owner',
@@ -118,12 +119,40 @@ class PanelRegressionFixTest extends TestCase
             'certificate_path' => 'certificates/sample.pdf',
         ])->assertCreated();
 
-        $this->assertDatabaseHas('certificates', [
+        $certificate = Certificate::query()->where([
             'user_id' => $student->id,
             'project_id' => $project->id,
             'type' => 'participation',
             'certificate_path' => 'certificates/sample.pdf',
-        ]);
+        ])->firstOrFail();
+
+        $createLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'certificate.created')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($createLog);
+        $this->assertSame('certificate.created', $createLog->event);
+        $this->assertSame(Certificate::class, $createLog->subject_type);
+        $this->assertSame($certificate->id, (int) $createLog->subject_id);
+        $this->assertSame($admin->id, (int) $createLog->causer_id);
+        $this->assertSame('certificate_created', data_get($createLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame('participation', data_get($createLog->properties->toArray(), 'domain.type'));
+        $this->assertSame('certificates/sample.pdf', data_get($createLog->properties->toArray(), 'domain.certificate_path'));
+
+        $this->deleteJson('/api/panel/certificates/' . $certificate->id)->assertOk();
+
+        $deleteLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'certificate.deleted')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($deleteLog);
+        $this->assertSame('certificate.deleted', $deleteLog->event);
+        $this->assertSame(Certificate::class, $deleteLog->subject_type);
+        $this->assertSame($certificate->id, (int) $deleteLog->subject_id);
+        $this->assertSame('certificate_deleted', data_get($deleteLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame($certificate->verification_code, data_get($deleteLog->properties->toArray(), 'domain.verification_code'));
     }
 
     public function test_custom_role_creation_normalizes_turkish_display_name_and_can_be_assigned_as_primary_role(): void
@@ -278,6 +307,108 @@ class PanelRegressionFixTest extends TestCase
         $this->get('/api/panel/financials/export?' . $query)
             ->assertOk()
             ->assertHeader('content-disposition');
+    }
+
+    public function test_financial_approval_and_payment_write_domain_audit_properties(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $transaction = FinancialTransaction::query()->create([
+            'project_id' => $project->id,
+            'type' => 'expense',
+            'category' => 'food',
+            'payee_name' => 'Audit Firma',
+            'amount' => 450,
+            'status' => 'pending',
+            'invoice_path' => 'invoices/audit.pdf',
+            'submitted_by' => $admin->id,
+            'submitted_at' => now(),
+        ]);
+
+        $this->putJson("/api/panel/financials/{$transaction->id}/approve")
+            ->assertOk()
+            ->assertJsonPath('transaction.status', 'approved');
+
+        $approvalLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'financial.approved')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($approvalLog);
+        $this->assertSame('financial.approved', $approvalLog->event);
+        $this->assertSame(FinancialTransaction::class, $approvalLog->subject_type);
+        $this->assertSame($transaction->id, (int) $approvalLog->subject_id);
+        $this->assertSame($admin->id, (int) $approvalLog->causer_id);
+        $this->assertSame('financial_approved', data_get($approvalLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame('pending', data_get($approvalLog->properties->toArray(), 'domain.status_before'));
+        $this->assertSame('approved', data_get($approvalLog->properties->toArray(), 'domain.status_after'));
+        $this->assertTrue(data_get($approvalLog->properties->toArray(), 'domain.invoice_present'));
+
+        $this->putJson("/api/panel/financials/{$transaction->id}/pay")
+            ->assertOk()
+            ->assertJsonPath('transaction.status', 'paid');
+
+        $paymentLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'financial.paid')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($paymentLog);
+        $this->assertSame('financial.paid', $paymentLog->event);
+        $this->assertSame(FinancialTransaction::class, $paymentLog->subject_type);
+        $this->assertSame($transaction->id, (int) $paymentLog->subject_id);
+        $this->assertSame('financial_paid', data_get($paymentLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame('approved', data_get($paymentLog->properties->toArray(), 'domain.status_before'));
+        $this->assertSame('paid', data_get($paymentLog->properties->toArray(), 'domain.status_after'));
+    }
+
+    public function test_digital_bohca_create_and_delete_write_domain_audit_properties(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        Storage::fake(config('filesystems.media_disk', 'public'));
+        $project = $this->project();
+        $file = UploadedFile::fake()->create('bohca.pdf', 12, 'application/pdf');
+
+        $this->post('/api/panel/digital-bohca', [
+            'project_id' => $project->id,
+            'title' => 'Audit Bohca',
+            'description' => 'Audit test',
+            'visible_to_student' => true,
+            'file' => $file,
+        ])->assertCreated();
+
+        $material = DigitalBohca::query()
+            ->where('project_id', $project->id)
+            ->where('title', 'Audit Bohca')
+            ->firstOrFail();
+
+        $createLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'digital_bohca.created')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($createLog);
+        $this->assertSame('digital_bohca.created', $createLog->event);
+        $this->assertSame(DigitalBohca::class, $createLog->subject_type);
+        $this->assertSame($material->id, (int) $createLog->subject_id);
+        $this->assertSame($admin->id, (int) $createLog->causer_id);
+        $this->assertSame('digital_bohca_created', data_get($createLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame('Audit Bohca', data_get($createLog->properties->toArray(), 'domain.title'));
+        $this->assertTrue(data_get($createLog->properties->toArray(), 'domain.visible_to_student'));
+
+        $this->deleteJson('/api/panel/digital-bohca/' . $material->id)->assertOk();
+
+        $deleteLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'digital_bohca.deleted')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($deleteLog);
+        $this->assertSame('digital_bohca.deleted', $deleteLog->event);
+        $this->assertSame(DigitalBohca::class, $deleteLog->subject_type);
+        $this->assertSame($material->id, (int) $deleteLog->subject_id);
+        $this->assertSame('digital_bohca_deleted', data_get($deleteLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame($material->file_path, data_get($deleteLog->properties->toArray(), 'domain.file_path'));
     }
 
     public function test_participant_graduation_status_updates_user_and_creates_certificate(): void
@@ -435,6 +566,132 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame(2, CreditLog::query()->where('program_id', $program->id)->where('type', 'deduction')->count());
     }
 
+    public function test_program_creation_rejects_overlapping_time_across_projects(): void
+    {
+        $this->actingSuperAdmin();
+        $firstProject = $this->project();
+        $secondProject = Project::query()->create([
+            'name' => 'Other Regression Project',
+            'slug' => 'other-regression-project',
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $firstPeriod = Period::query()->create([
+            'project_id' => $firstProject->id,
+            'name' => '2026 Guz',
+            'start_date' => '2026-09-01',
+            'end_date' => '2026-12-31',
+            'status' => 'active',
+        ]);
+        $secondPeriod = Period::query()->create([
+            'project_id' => $secondProject->id,
+            'name' => '2026 Guz',
+            'start_date' => '2026-09-01',
+            'end_date' => '2026-12-31',
+            'status' => 'active',
+        ]);
+
+        Program::query()->create([
+            'project_id' => $firstProject->id,
+            'period_id' => $firstPeriod->id,
+            'title' => 'Mevcut Program',
+            'location' => 'Salon A',
+            'radius_meters' => 100,
+            'start_at' => '2026-10-10 10:00:00',
+            'end_at' => '2026-10-10 12:00:00',
+            'credit_deduction' => 10,
+            'status' => 'scheduled',
+        ]);
+
+        $this->postJson('/api/panel/programs', [
+            'project_id' => $secondProject->id,
+            'period_id' => $secondPeriod->id,
+            'title' => 'Cakisan Program',
+            'location' => 'Salon B',
+            'radius_meters' => 100,
+            'start_at' => '2026-10-10 11:00:00',
+            'end_at' => '2026-10-10 13:00:00',
+            'credit_deduction' => 10,
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('start_at');
+
+        $this->assertDatabaseMissing('programs', [
+            'project_id' => $secondProject->id,
+            'title' => 'Cakisan Program',
+        ]);
+    }
+
+    public function test_program_update_rejects_overlapping_time_and_allows_cancelled_conflicts(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Guz',
+            'start_date' => '2026-09-01',
+            'end_date' => '2026-12-31',
+            'status' => 'active',
+        ]);
+        Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Sabit Program',
+            'location' => 'Salon A',
+            'radius_meters' => 100,
+            'start_at' => '2026-10-10 10:00:00',
+            'end_at' => '2026-10-10 12:00:00',
+            'credit_deduction' => 10,
+            'status' => 'scheduled',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Guncellenecek Program',
+            'location' => 'Salon B',
+            'radius_meters' => 100,
+            'start_at' => '2026-10-10 14:00:00',
+            'end_at' => '2026-10-10 15:00:00',
+            'credit_deduction' => 10,
+            'status' => 'scheduled',
+        ]);
+
+        $this->putJson('/api/panel/programs/' . $program->id, [
+            'title' => 'Guncellenecek Program',
+            'description' => null,
+            'location' => 'Salon B',
+            'latitude' => null,
+            'longitude' => null,
+            'radius_meters' => 100,
+            'guest_info' => null,
+            'start_at' => '2026-10-10 11:00:00',
+            'end_at' => '2026-10-10 13:00:00',
+            'credit_deduction' => 10,
+            'status' => 'scheduled',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('start_at');
+
+        $this->putJson('/api/panel/programs/' . $program->id, [
+            'title' => 'Guncellenecek Program',
+            'description' => null,
+            'location' => 'Salon B',
+            'latitude' => null,
+            'longitude' => null,
+            'radius_meters' => 100,
+            'guest_info' => null,
+            'start_at' => '2026-10-10 11:00:00',
+            'end_at' => '2026-10-10 13:00:00',
+            'credit_deduction' => 10,
+            'status' => 'cancelled',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('programs', [
+            'id' => $program->id,
+            'status' => 'cancelled',
+        ]);
+    }
+
     public function test_manual_attendance_reconciles_completed_program_credit_without_duplicates(): void
     {
         $admin = $this->actingSuperAdmin();
@@ -523,6 +780,75 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('programs.0.attendance_status', 'invalid')
             ->assertJsonPath('programs.0.credit.restored', false)
             ->assertJsonPath('programs.0.credit.net_amount', -10);
+    }
+
+    public function test_program_complete_and_manual_attendance_write_domain_audit_properties(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Audit',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Audit Program',
+            'start_at' => now()->subHours(2),
+            'end_at' => now()->subHour(),
+            'status' => 'active',
+            'credit_deduction' => 10,
+        ]);
+        $student = User::factory()->create([
+            'surname' => 'Audit',
+            'role' => 'student',
+            'kvkk_consent_at' => now(),
+        ]);
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+
+        $this->postJson("/api/panel/programs/{$program->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('deducted_participant_count', 1);
+
+        $completeLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'program.completed')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($completeLog);
+        $this->assertSame('program.completed', $completeLog->event);
+        $this->assertSame(Program::class, $completeLog->subject_type);
+        $this->assertSame($program->id, (int) $completeLog->subject_id);
+        $this->assertSame($admin->id, (int) $completeLog->causer_id);
+        $this->assertSame('program_complete', data_get($completeLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame(1, data_get($completeLog->properties->toArray(), 'domain.deducted_participant_count'));
+
+        $this->putJson("/api/panel/programs/{$program->id}/attendances/{$participant->id}", [
+            'is_valid' => true,
+            'manual_note' => 'Audit duzeltmesi',
+        ])->assertOk();
+
+        $manualLog = \Spatie\Activitylog\Models\Activity::query()
+            ->where('description', 'attendance.manual_updated')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($manualLog);
+        $this->assertSame('attendance.manual_updated', $manualLog->event);
+        $this->assertSame(Program::class, $manualLog->subject_type);
+        $this->assertSame($program->id, (int) $manualLog->subject_id);
+        $this->assertSame('manual_attendance_update', data_get($manualLog->properties->toArray(), 'domain.operation'));
+        $this->assertSame($participant->id, data_get($manualLog->properties->toArray(), 'domain.participant_id'));
+        $this->assertTrue(data_get($manualLog->properties->toArray(), 'domain.is_valid'));
     }
 
     public function test_feedback_restores_only_attending_students_before_next_program(): void
@@ -921,6 +1247,139 @@ class PanelRegressionFixTest extends TestCase
             'project_id' => $project->id,
             'period_id' => $period->id,
             'status' => 'pending',
+        ]);
+    }
+
+    public function test_blacklisted_user_cannot_submit_public_application(): void
+    {
+        $project = $this->project();
+        $project->update(['application_open' => true]);
+        Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Basvuru',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        User::factory()->create([
+            'name' => 'Blocked',
+            'surname' => 'Applicant',
+            'email' => 'blocked-applicant@test.local',
+            'role' => 'student',
+            'status' => 'blacklisted',
+            'blacklisted_until' => now()->addMonth(),
+        ]);
+
+        $this->postJson('/api/applications/public', [
+            'project_id' => $project->id,
+            'form_data' => [],
+            'applicant' => [
+                'name' => 'Blocked',
+                'surname' => 'Applicant',
+                'email' => 'blocked-applicant@test.local',
+                'phone' => '05550000001',
+            ],
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('user');
+
+        $this->assertDatabaseCount('applications', 0);
+    }
+
+    public function test_public_application_is_waitlisted_when_project_period_quota_is_full(): void
+    {
+        $project = $this->project();
+        $project->update([
+            'application_open' => true,
+            'quota' => 1,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Basvuru',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $acceptedUser = User::factory()->create([
+            'surname' => 'Accepted',
+            'role' => 'student',
+        ]);
+        Participant::query()->create([
+            'user_id' => $acceptedUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+
+        $this->postJson('/api/applications/public', [
+            'project_id' => $project->id,
+            'form_data' => [],
+            'applicant' => [
+                'name' => 'Wait',
+                'surname' => 'Listed',
+                'email' => 'waitlisted-applicant@test.local',
+                'phone' => '05550000002',
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'waitlisted');
+
+        $this->assertDatabaseHas('applications', [
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+        ]);
+    }
+
+    public function test_accepting_application_is_blocked_when_project_period_quota_is_full(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $project->update([
+            'quota' => 1,
+            'has_interview' => false,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Basvuru',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $acceptedUser = User::factory()->create([
+            'surname' => 'Accepted',
+            'role' => 'student',
+        ]);
+        $applicant = User::factory()->create([
+            'surname' => 'Applicant',
+            'role' => 'student',
+        ]);
+        Participant::query()->create([
+            'user_id' => $acceptedUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+        $application = Application::query()->create([
+            'user_id' => $applicant->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'pending',
+        ]);
+
+        $this->putJson('/api/panel/applications/' . $application->id . '/status', [
+            'status' => 'accepted',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status');
+
+        $this->assertDatabaseMissing('participants', [
+            'user_id' => $applicant->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
         ]);
     }
 

@@ -53,6 +53,25 @@ class AdminCertificateController extends Controller
         };
     }
 
+    private function attachCertificateAudit(Request $request, Certificate $certificate, string $operation): void
+    {
+        $request->attributes->set('audit.subject', $certificate);
+        $request->attributes->set('audit.event', 'certificate.' . $operation);
+        $request->attributes->set('audit.description', 'certificate.' . $operation);
+        $request->attributes->set('audit.properties', [
+            'operation' => 'certificate_' . $operation,
+            'certificate_id' => $certificate->id,
+            'project_id' => $certificate->project_id,
+            'period_id' => $certificate->period_id,
+            'student_user_id' => $certificate->user_id,
+            'type' => $certificate->type,
+            'verification_code' => $certificate->verification_code,
+            'certificate_path' => $certificate->certificate_path,
+            'file_present' => ! empty($certificate->certificate_path),
+            'issued_at' => optional($certificate->issued_at)?->toIso8601String(),
+        ]);
+    }
+
     /**
      * Tüm sertifikaları listele. (Admin paneli için)
      */
@@ -200,6 +219,7 @@ class AdminCertificateController extends Controller
             'certificate_path' => $certificatePath,
             'created_by' => $request->user()->id,
         ]);
+        $this->attachCertificateAudit($request, $certificate, 'created');
 
         $certificate->loadMissing(['user:id,email,name,surname', 'project:id,name']);
         $email = $certificate->user?->email;
@@ -235,6 +255,7 @@ class AdminCertificateController extends Controller
         );
 
         MediaStorage::delete($certificate->certificate_path);
+        $this->attachCertificateAudit($request, $certificate, 'deleted');
         $certificate->delete();
 
         return response()->json(['message' => 'Sertifika başarıyla iptal edildi/silindi.']);

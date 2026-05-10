@@ -65,6 +65,30 @@ class ApplicationController extends Controller
         }
     }
 
+    private function ensureUserCanApply(User $user): void
+    {
+        if ($user->status === 'blacklisted' && (! $user->blacklisted_until || now()->isBefore($user->blacklisted_until))) {
+            throw ValidationException::withMessages([
+                'user' => ['Kara listede oldugunuz icin su anda basvuru yapamazsiniz.'],
+            ]);
+        }
+    }
+
+    private function projectPeriodHasAvailableSeat(Project $project, Period $period): bool
+    {
+        if ($project->quota === null || (int) $project->quota <= 0) {
+            return true;
+        }
+
+        $activeParticipantCount = Participant::query()
+            ->where('project_id', $project->id)
+            ->where('period_id', $period->id)
+            ->where('status', 'active')
+            ->count();
+
+        return $activeParticipantCount < (int) $project->quota;
+    }
+
     private function fileMetadata(string $path, \Illuminate\Http\UploadedFile $file): array
     {
         return [
@@ -79,6 +103,7 @@ class ApplicationController extends Controller
     private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false): Application
     {
         $this->ensureSingleProjectRule($user, $project);
+        $this->ensureUserCanApply($user);
 
         $currentPeriod = Period::where('project_id', $project->id)
             ->where('status', 'active')
@@ -110,6 +135,7 @@ class ApplicationController extends Controller
         }
 
         $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
+        $initialStatus = $this->projectPeriodHasAvailableSeat($project, $currentPeriod) ? 'pending' : 'waitlisted';
 
         $application = Application::create([
             'user_id' => $user->id,
@@ -117,13 +143,13 @@ class ApplicationController extends Controller
             'period_id' => $currentPeriod->id,
             'application_form_id' => $form?->id,
             'form_data' => $normalizedFormData,
-            'status' => 'pending',
+            'status' => $initialStatus,
         ]);
 
         $this->notificationService->sendEmail(
             array_filter([$user->email]),
             'Basvurunuz alindi',
-            "Proje: {$project->name}\nBasvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz.",
+            "Proje: {$project->name}\nBasvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz." . ($initialStatus === 'waitlisted' ? "\nKontenjan dolu oldugu icin basvurunuz yedek listeye alindi." : ''),
             $project->id,
             $user->id
         );

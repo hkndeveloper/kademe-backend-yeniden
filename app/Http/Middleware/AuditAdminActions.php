@@ -29,7 +29,7 @@ class AuditAdminActions
 
         try {
             $statusCode = $response->getStatusCode();
-            $event = $this->resolveEvent($request->method(), $statusCode);
+            $event = $request->attributes->get('audit.event') ?: $this->resolveEvent($request->method(), $statusCode);
             $subject = $this->resolveSubjectModel($request);
 
             $properties = [
@@ -48,6 +48,13 @@ class AuditAdminActions
                 'query' => $request->query(),
             ];
 
+            $domainProperties = $request->attributes->get('audit.properties');
+            if (is_array($domainProperties)) {
+                $properties = array_merge($properties, [
+                    'domain' => $domainProperties,
+                ]);
+            }
+
             // Ham body yerine yalnizca alan adlarini loglayarak hassas veri riskini azalt.
             if (in_array($request->method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
                 $properties['payload_keys'] = array_values(array_keys($request->except([
@@ -59,7 +66,7 @@ class AuditAdminActions
             }
 
             $logger = activity()
-                ->useLog('admin_actions')
+                ->useLog($request->attributes->get('audit.log_name', 'admin_actions'))
                 ->causedBy($user)
                 ->event($event)
                 ->withProperties($properties);
@@ -68,7 +75,7 @@ class AuditAdminActions
                 $logger->performedOn($subject);
             }
 
-            $logger->log($this->buildDescription($request, $statusCode));
+            $logger->log($request->attributes->get('audit.description') ?: $this->buildDescription($request, $statusCode));
         } catch (\Throwable) {
             // Audit log hatasi ana is akisini kesmemeli.
         }
@@ -108,6 +115,11 @@ class AuditAdminActions
 
     private function resolveSubjectModel(Request $request): ?Model
     {
+        $attributeSubject = $request->attributes->get('audit.subject');
+        if ($attributeSubject instanceof Model) {
+            return $attributeSubject;
+        }
+
         foreach ($request->route()?->parameters() ?? [] as $value) {
             if ($value instanceof Model) {
                 return $value;
