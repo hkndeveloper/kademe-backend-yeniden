@@ -71,4 +71,9 @@ class Project extends Model
     {
         return $this->hasMany(Program::class);
     }
+
+    public function kademeModules()
+    {
+        return $this->hasMany(ProjectModule::class)->orderBy('sort_order');
+    }
 }

@@ -55,6 +55,11 @@ class AuditAdminActions
                 ]);
             }
 
+            $attributeChanges = $request->attributes->get('audit.attribute_changes');
+            if (is_array($attributeChanges) && $attributeChanges !== []) {
+                $properties['attribute_changes'] = $attributeChanges;
+            }
+
             // Ham body yerine yalnizca alan adlarini loglayarak hassas veri riskini azalt.
             if (in_array($request->method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
                 $properties['payload_keys'] = array_values(array_keys($request->except([
@@ -143,6 +148,7 @@ class AuditAdminActions
                     'model' => class_basename($value),
                     'id' => $value->getKey(),
                 ];
+
                 continue;
             }
 

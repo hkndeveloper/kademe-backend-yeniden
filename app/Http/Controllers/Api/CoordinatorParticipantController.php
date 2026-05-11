@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Certificate;
 use App\Models\Participant;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
@@ -22,8 +23,7 @@ class CoordinatorParticipantController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function mediaUrl(?string $path): ?string
     {
@@ -150,8 +150,7 @@ class CoordinatorParticipantController extends Controller
             'summary' => [
                 'total' => $participants->count(),
                 'active' => $participants->where('status', 'active')->count(),
-                'graduates' => $participants->filter(fn ($participant) =>
-                    ! is_null($participant->graduated_at) || $participant->graduation_status === 'graduated'
+                'graduates' => $participants->filter(fn ($participant) => ! is_null($participant->graduated_at) || $participant->graduation_status === 'graduated'
                 )->count(),
                 'average_credit' => $participants->count() > 0
                     ? round($participants->avg('credit') ?? 0, 1)
@@ -276,11 +275,90 @@ class CoordinatorParticipantController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'katilimcilar_' . now()->format('Ymd_His'),
+            'katilimcilar_'.now()->format('Ymd_His'),
             'Katilimcilar',
             $headings,
             $rows,
         );
+    }
+
+    /**
+     * @return array{participant: Participant, certificate: Certificate|null}
+     */
+    private function applyGraduationTransition(
+        Participant $participant,
+        string $graduationStatus,
+        ?string $graduationNote,
+        User $actor
+    ): array {
+        $status = $graduationStatus;
+        $participantStatus = match ($status) {
+            'graduated' => 'graduated',
+            'not_completed' => 'failed',
+            default => 'passive',
+        };
+
+        $participant->update([
+            'status' => $participantStatus,
+            'graduation_status' => $status,
+            'graduation_note' => $graduationNote,
+            'graduated_at' => in_array($status, ['completed', 'graduated'], true) ? now() : null,
+        ]);
+
+        if ($status === 'graduated' && $participant->user) {
+            Role::findOrCreate('alumni', 'web');
+            $participant->user->update([
+                'role' => 'alumni',
+                'status' => 'alumni',
+            ]);
+            if ($participant->user->hasRole('student')) {
+                $participant->user->removeRole('student');
+            }
+            $participant->user->assignRole('alumni');
+        }
+
+        $certificate = null;
+        if (in_array($status, ['completed', 'graduated'], true)) {
+            $certificateType = $status === 'graduated' ? 'graduation' : 'participation';
+            $certificate = Certificate::query()->firstOrCreate(
+                [
+                    'user_id' => $participant->user_id,
+                    'project_id' => $participant->project_id,
+                    'type' => $certificateType,
+                ],
+                [
+                    'period_id' => $participant->period_id,
+                    'verification_code' => $this->uniqueCertificateCode(),
+                    'issued_at' => now(),
+                    'created_by' => $actor->id,
+                ]
+            );
+            $certificate = $this->ensureCertificateComplete($certificate, $actor);
+        }
+
+        return [
+            'participant' => $participant->fresh(['user', 'project:id,name', 'period:id,name']),
+            'certificate' => $certificate,
+        ];
+    }
+
+    private function ensureCertificateComplete(Certificate $certificate, User $actor): Certificate
+    {
+        $updates = [];
+        if ($certificate->verification_code === null || $certificate->verification_code === '') {
+            $updates['verification_code'] = $this->uniqueCertificateCode();
+        }
+        if ($certificate->issued_at === null) {
+            $updates['issued_at'] = now();
+        }
+        if ($certificate->created_by === null) {
+            $updates['created_by'] = $actor->id;
+        }
+        if ($updates !== []) {
+            $certificate->update($updates);
+        }
+
+        return $certificate->fresh();
     }
 
     public function updateGraduationStatus(Request $request, int $id): JsonResponse
@@ -288,6 +366,12 @@ class CoordinatorParticipantController extends Controller
         $this->abortUnlessAllowed($request, 'projects.participants.manage');
         $participant = Participant::with(['user', 'project:id,name', 'period:id,name'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+        $before = [
+            'status' => $participant->status,
+            'graduation_status' => $participant->graduation_status,
+            'graduation_note' => $participant->graduation_note,
+            'graduated_at' => optional($participant->graduated_at)?->toIso8601String(),
+        ];
 
         $validated = $request->validate([
             'graduation_status' => 'required|in:completed,graduated,not_completed',
@@ -300,53 +384,26 @@ class CoordinatorParticipantController extends Controller
             ], 422);
         }
 
-        $certificate = null;
-        $participant = DB::transaction(function () use ($participant, $validated, $request, &$certificate) {
-            $status = $validated['graduation_status'];
-            $participantStatus = match ($status) {
-                'graduated' => 'graduated',
-                'not_completed' => 'failed',
-                default => 'passive',
-            };
-
-            $participant->update([
-                'status' => $participantStatus,
-                'graduation_status' => $status,
-                'graduation_note' => $validated['graduation_note'] ?? null,
-                'graduated_at' => in_array($status, ['completed', 'graduated'], true) ? now() : null,
-            ]);
-
-            if ($status === 'graduated' && $participant->user) {
-                Role::findOrCreate('alumni', 'web');
-                $participant->user->update([
-                    'role' => 'alumni',
-                    'status' => 'alumni',
-                ]);
-                if ($participant->user->hasRole('student')) {
-                    $participant->user->removeRole('student');
-                }
-                $participant->user->assignRole('alumni');
-            }
-
-            if (in_array($status, ['completed', 'graduated'], true)) {
-                $certificateType = $status === 'graduated' ? 'graduation' : 'participation';
-                $certificate = Certificate::query()->firstOrCreate(
-                    [
-                        'user_id' => $participant->user_id,
-                        'project_id' => $participant->project_id,
-                        'type' => $certificateType,
-                    ],
-                    [
-                        'period_id' => $participant->period_id,
-                        'verification_code' => $this->uniqueCertificateCode(),
-                        'issued_at' => now(),
-                        'created_by' => $request->user()->id,
-                    ]
-                );
-            }
-
-            return $participant->fresh(['user', 'project:id,name', 'period:id,name']);
+        $result = DB::transaction(function () use ($participant, $validated, $request) {
+            return $this->applyGraduationTransition(
+                $participant,
+                $validated['graduation_status'],
+                $validated['graduation_note'] ?? null,
+                $request->user(),
+            );
         });
+        $request->attributes->set('audit.subject', $result['participant']);
+        $request->attributes->set('audit.event', 'participants.graduation.updated');
+        $request->attributes->set('audit.description', 'participants.graduation.updated');
+        $request->attributes->set('audit.attribute_changes', [
+            'before' => $before,
+            'after' => [
+                'status' => $result['participant']->status,
+                'graduation_status' => $result['participant']->graduation_status,
+                'graduation_note' => $result['participant']->graduation_note,
+                'graduated_at' => optional($result['participant']->graduated_at)?->toIso8601String(),
+            ],
+        ]);
 
         return response()->json([
             'message' => match ($validated['graduation_status']) {
@@ -354,8 +411,97 @@ class CoordinatorParticipantController extends Controller
                 'completed' => 'Katilimci tamamladi olarak isaretlendi.',
                 default => 'Katilimci tamamlayamadi olarak isaretlendi.',
             },
-            'participant' => $participant,
-            'certificate' => $certificate,
+            'participant' => $result['participant'],
+            'certificate' => $result['certificate'],
+        ]);
+    }
+
+    public function bulkUpdateGraduationStatus(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'projects.participants.manage');
+        $validated = $request->validate([
+            'participant_ids' => 'required|array|min:1|max:200',
+            'participant_ids.*' => 'integer|exists:participants,id',
+            'graduation_status' => 'required|in:completed,graduated,not_completed',
+            'graduation_note' => 'nullable|string|max:2000',
+        ]);
+
+        if ($validated['graduation_status'] === 'not_completed' && trim((string) ($validated['graduation_note'] ?? '')) === '') {
+            return response()->json([
+                'message' => 'Tamamlayamadi durumunda gerekce zorunludur.',
+            ], 422);
+        }
+
+        $ids = collect($validated['participant_ids'])->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $participants = Participant::with(['user', 'project:id,name', 'period:id,name'])
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        if (count($participants) !== count($ids)) {
+            return response()->json(['message' => 'Bazi katilimci kayitlari bulunamadi.'], 422);
+        }
+
+        foreach ($participants as $participant) {
+            $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+        }
+
+        $actor = $request->user();
+        $results = [];
+        $changeSnapshots = [];
+
+        foreach ($ids as $participantId) {
+            $participant = $participants->get($participantId);
+            try {
+                $payload = DB::transaction(function () use ($participant, $validated, $actor) {
+                    return $this->applyGraduationTransition(
+                        $participant,
+                        $validated['graduation_status'],
+                        $validated['graduation_note'] ?? null,
+                        $actor,
+                    );
+                });
+                $results[] = [
+                    'participant_id' => $participantId,
+                    'ok' => true,
+                    'participant' => $payload['participant'],
+                    'certificate' => $payload['certificate'],
+                ];
+                $changeSnapshots[] = [
+                    'participant_id' => $participantId,
+                    'after' => [
+                        'status' => $payload['participant']->status,
+                        'graduation_status' => $payload['participant']->graduation_status,
+                        'graduation_note' => $payload['participant']->graduation_note,
+                        'graduated_at' => optional($payload['participant']->graduated_at)?->toIso8601String(),
+                    ],
+                ];
+            } catch (\Throwable) {
+                $results[] = [
+                    'participant_id' => $participantId,
+                    'ok' => false,
+                    'error' => 'Islem tamamlanamadi.',
+                ];
+            }
+        }
+
+        $okCount = collect($results)->where('ok', true)->count();
+        $request->attributes->set('audit.event', 'participants.graduation.bulk_updated');
+        $request->attributes->set('audit.description', 'participants.graduation.bulk_updated');
+        $request->attributes->set('audit.attribute_changes', [
+            'requested_participant_ids' => $ids,
+            'graduation_status' => $validated['graduation_status'],
+            'graduation_note' => $validated['graduation_note'] ?? null,
+            'successful_count' => $okCount,
+            'failed_count' => count($results) - $okCount,
+            'successful_changes' => $changeSnapshots,
+        ]);
+
+        return response()->json([
+            'message' => $okCount === count($results)
+                ? 'Tum katilimcilar guncellendi.'
+                : 'Bazi katilimcilar guncellenemedi.',
+            'results' => $results,
         ]);
     }
 }

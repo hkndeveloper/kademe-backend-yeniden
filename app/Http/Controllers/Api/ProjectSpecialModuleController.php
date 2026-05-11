@@ -9,10 +9,13 @@ use App\Models\Internship;
 use App\Models\Mentor;
 use App\Models\Participant;
 use App\Models\Project;
+use App\Models\ProjectModule;
+use App\Models\ProjectModuleEnrollment;
 use App\Models\RewardAward;
 use App\Models\RewardTier;
 use App\Models\User;
 use App\Services\PermissionResolver;
+use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -23,8 +26,7 @@ class ProjectSpecialModuleController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function project(Request $request, int $projectId, string $permission): Project
     {
@@ -70,10 +72,10 @@ class ProjectSpecialModuleController extends Controller
         return response()->json([
             'project' => $project->only(['id', 'name', 'slug', 'type']),
             'access' => $access,
-            'applicable_modules' => $this->projectModuleKeys($project),
+            'applicable_modules' => ProjectSpecialModuleCatalog::forProject($project),
             'participants' => $participants->map(fn (Participant $participant) => [
                 'id' => $participant->id,
-                'name' => trim(($participant->user?->name ?? '') . ' ' . ($participant->user?->surname ?? '')),
+                'name' => trim(($participant->user?->name ?? '').' '.($participant->user?->surname ?? '')),
                 'email' => $participant->user?->email,
                 'status' => $participant->status,
                 'graduation_status' => $participant->graduation_status,
@@ -106,17 +108,183 @@ class ProjectSpecialModuleController extends Controller
                     ->map(fn (RewardAward $award) => [
                         'id' => $award->id,
                         'participant_id' => $award->participant_id,
-                        'name' => trim(($award->participant?->user?->name ?? '') . ' ' . ($award->participant?->user?->surname ?? '')),
+                        'name' => trim(($award->participant?->user?->name ?? '').' '.($award->participant?->user?->surname ?? '')),
                         'email' => $award->participant?->user?->email,
                         'reward_name' => $award->reward_name,
                         'status' => $award->status,
                         'awarded_at' => optional($award->awarded_at)?->toIso8601String(),
                         'note' => $award->note,
                         'tier' => $award->tier?->only(['id', 'name', 'reward_description']),
-                        'awarder' => $award->awarder ? trim($award->awarder->name . ' ' . $award->awarder->surname) : null,
+                        'awarder' => $award->awarder ? trim($award->awarder->name.' '.$award->awarder->surname) : null,
                     ])
                     ->values()
                 : [],
+            'kademe_modules' => $this->kademeModulesPayload($project, $access),
+        ]);
+    }
+
+    /**
+     * @param  array<string, bool>  $access
+     */
+    private function kademeModulesPayload(Project $project, array $access): array
+    {
+        if (! ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project)) {
+            return [];
+        }
+
+        if (! ($access['projects.rewards.view'] ?? false) && ! ($access['projects.rewards.manage'] ?? false)) {
+            return [];
+        }
+
+        $query = ProjectModule::query()->where('project_id', $project->id)->orderBy('sort_order');
+
+        if ($access['projects.rewards.manage'] ?? false) {
+            return $query
+                ->with(['enrollments.user:id,name,surname,email'])
+                ->get()
+                ->map(fn (ProjectModule $module) => $this->serializeKademeModuleForPanel($module, true))
+                ->values()
+                ->all();
+        }
+
+        return $query
+            ->withCount('enrollments')
+            ->get()
+            ->map(fn (ProjectModule $module) => $this->serializeKademeModuleForPanel($module, false))
+            ->values()
+            ->all();
+    }
+
+    private function serializeKademeModuleForPanel(ProjectModule $module, bool $includeEnrollments): array
+    {
+        $base = [
+            'id' => $module->id,
+            'title' => $module->title,
+            'description' => $module->description,
+            'sort_order' => (int) $module->sort_order,
+            'is_active' => (bool) $module->is_active,
+            'application_open' => (bool) $module->application_open,
+            'requires_consent' => (bool) $module->requires_consent,
+            'consent_checkbox_label' => $module->consent_checkbox_label,
+            'warning_text' => $module->warning_text,
+            'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
+            'outcomes' => $module->outcomes ?? [],
+            'instructors' => $module->instructors ?? [],
+            'faq_items' => $module->faq_items ?? [],
+        ];
+
+        if ($includeEnrollments) {
+            $base['enrollments'] = $module->enrollments->map(fn (ProjectModuleEnrollment $row) => [
+                'id' => $row->id,
+                'user_id' => $row->user_id,
+                'participant_id' => $row->participant_id,
+                'status' => $row->status,
+                'consented_at' => optional($row->consented_at)?->toIso8601String(),
+                'reviewed_at' => optional($row->reviewed_at)?->toIso8601String(),
+                'note' => $row->note,
+                'user' => $row->user ? [
+                    'name' => trim(($row->user->name ?? '').' '.($row->user->surname ?? '')),
+                    'email' => $row->user->email,
+                ] : null,
+            ])->values()->all();
+        } else {
+            $base['enrollments_count'] = (int) ($module->enrollments_count ?? $module->enrollments()->count());
+        }
+
+        return $base;
+    }
+
+    public function storeKademeModule(Request $request, int $projectId): JsonResponse
+    {
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
+
+        $validated = $this->validatedKademeModule($request, true);
+
+        $module = ProjectModule::query()->create(array_merge([
+            'sort_order' => 0,
+            'is_active' => true,
+            'application_open' => true,
+            'requires_consent' => true,
+            'requires_coordinator_approval' => false,
+        ], $validated, ['project_id' => $projectId]));
+
+        return response()->json([
+            'message' => 'KADEME+ modulu kaydedildi.',
+            'kademe_module' => $this->serializeKademeModuleForPanel($module->fresh(), true),
+        ], 201);
+    }
+
+    public function updateKademeModule(Request $request, int $projectId, int $id): JsonResponse
+    {
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
+        $module = ProjectModule::query()->where('project_id', $projectId)->findOrFail($id);
+        $module->update($this->validatedKademeModule($request, false));
+
+        return response()->json([
+            'message' => 'KADEME+ modulu guncellendi.',
+            'kademe_module' => $this->serializeKademeModuleForPanel($module->fresh(['enrollments.user:id,name,surname,email']), true),
+        ]);
+    }
+
+    public function destroyKademeModule(Request $request, int $projectId, int $id): JsonResponse
+    {
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
+        ProjectModule::query()->where('project_id', $projectId)->findOrFail($id)->delete();
+
+        return response()->json(['message' => 'KADEME+ modulu silindi.']);
+    }
+
+    public function updateKademeModuleEnrollment(Request $request, int $projectId, int $enrollmentId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.rewards.manage');
+        $enrollment = ProjectModuleEnrollment::query()
+            ->whereHas('module', fn ($q) => $q->where('project_id', $projectId))
+            ->findOrFail($enrollmentId);
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
+            'note' => 'nullable|string|max:2000',
+        ]);
+
+        $enrollment->update([
+            'status' => $validated['status'],
+            'note' => $validated['note'] ?? $enrollment->note,
+            'reviewed_at' => now(),
+            'reviewed_by' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Modul kaydi guncellendi.',
+            'enrollment' => $enrollment->fresh(['user:id,name,surname,email']),
+        ]);
+    }
+
+    private function validatedKademeModule(Request $request, bool $creating): array
+    {
+        $titleRule = $creating ? 'required' : 'sometimes|required';
+
+        return $request->validate([
+            'title' => $titleRule.'|string|max:255',
+            'description' => 'nullable|string|max:20000',
+            'sort_order' => 'nullable|integer|min:0',
+            'is_active' => 'sometimes|boolean',
+            'application_open' => 'sometimes|boolean',
+            'requires_consent' => 'sometimes|boolean',
+            'consent_checkbox_label' => 'nullable|string|max:2000',
+            'warning_text' => 'nullable|string|max:20000',
+            'requires_coordinator_approval' => 'sometimes|boolean',
+            'outcomes' => 'nullable|array',
+            'outcomes.*' => 'string|max:1000',
+            'instructors' => 'nullable|array',
+            'instructors.*.name' => 'required_with:instructors|string|max:255',
+            'instructors.*.bio' => 'nullable|string|max:5000',
+            'instructors.*.photo_path' => 'nullable|string|max:2048',
+            'faq_items' => 'nullable|array',
+            'faq_items.*.question' => 'required_with:faq_items|string|max:500',
+            'faq_items.*.answer' => 'required_with:faq_items|string|max:5000',
         ]);
     }
 
@@ -354,33 +522,6 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Hediye kaydi silindi.']);
     }
 
-    private function projectModuleKeys(Project $project): array
-    {
-        $text = mb_strtolower(trim(implode(' ', array_filter([$project->type, $project->name, $project->slug]))));
-
-        if (str_contains($text, 'diplomasi')) {
-            return ['digital_bohca', 'internships', 'uploaded_files'];
-        }
-
-        if (str_contains($text, 'pergel')) {
-            return ['digital_bohca', 'mentors', 'assignments'];
-        }
-
-        if (str_contains($text, 'kpd') || str_contains($text, 'psikolojik')) {
-            return ['digital_bohca', 'kpd_appointments', 'kpd_reports'];
-        }
-
-        if (str_contains($text, 'kademe_plus') || str_contains($text, 'kademe plus') || str_contains($text, 'kademe+')) {
-            return ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'];
-        }
-
-        if (str_contains($text, 'eurodesk')) {
-            return ['digital_bohca', 'eurodesk_projects'];
-        }
-
-        return ['digital_bohca'];
-    }
-
     private function rewardEligibleParticipants(Project $project, $participants, $rewardTiers): array
     {
         if ($rewardTiers->isEmpty()) {
@@ -413,7 +554,7 @@ class ProjectSpecialModuleController extends Controller
                 return [
                     'participant_id' => $participant->id,
                     'user_id' => $participant->user_id,
-                    'name' => trim(($participant->user?->name ?? '') . ' ' . ($participant->user?->surname ?? '')),
+                    'name' => trim(($participant->user?->name ?? '').' '.($participant->user?->surname ?? '')),
                     'email' => $participant->user?->email,
                     'badge_count' => $badgeCount,
                     'credit' => $credit,

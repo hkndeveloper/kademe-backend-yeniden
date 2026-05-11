@@ -13,6 +13,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\RewardTier;
 use App\Support\MediaStorage;
+use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\Request;
 
 class ProjectController extends Controller
@@ -35,10 +36,10 @@ class ProjectController extends Controller
                 $search = $validated['search'];
                 $query->where(function ($builder) use ($search) {
                     $builder
-                        ->where('name', 'like', '%' . $search . '%')
-                        ->orWhere('type', 'like', '%' . $search . '%')
-                        ->orWhere('short_description', 'like', '%' . $search . '%')
-                        ->orWhere('description', 'like', '%' . $search . '%');
+                        ->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('type', 'like', '%'.$search.'%')
+                        ->orWhere('short_description', 'like', '%'.$search.'%')
+                        ->orWhere('description', 'like', '%'.$search.'%');
                 });
             })
             ->when(! empty($validated['type']), fn ($query) => $query->where('type', $validated['type']))
@@ -234,28 +235,6 @@ class ProjectController extends Controller
 
     private function projectModuleKeys(Project $project): array
     {
-        $haystack = mb_strtolower(($project->slug ?? '') . ' ' . ($project->name ?? '') . ' ' . ($project->type ?? ''));
-
-        if (str_contains($haystack, 'diplomasi')) {
-            return ['digital_bohca', 'internships', 'uploaded_files'];
-        }
-
-        if (str_contains($haystack, 'pergel')) {
-            return ['digital_bohca', 'mentors', 'assignments'];
-        }
-
-        if (str_contains($haystack, 'kpd') || str_contains($haystack, 'psikolojik')) {
-            return ['digital_bohca', 'kpd_appointments', 'kpd_reports'];
-        }
-
-        if (str_contains($haystack, 'kademe-plus') || str_contains($haystack, 'kademe plus') || str_contains($haystack, 'kademe+')) {
-            return ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'];
-        }
-
-        if (str_contains($haystack, 'eurodesk')) {
-            return ['digital_bohca', 'eurodesk_projects'];
-        }
-
-        return ['digital_bohca'];
+        return ProjectSpecialModuleCatalog::forProject($project);
     }
 }

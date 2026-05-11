@@ -2,30 +2,36 @@
 
 namespace Tests\Feature;
 
-use App\Models\Attendance;
 use App\Models\Application;
 use App\Models\ApplicationForm;
+use App\Models\Attendance;
 use App\Models\Badge;
 use App\Models\Certificate;
 use App\Models\CreditLog;
 use App\Models\DigitalBohca;
 use App\Models\Feedback;
 use App\Models\FinancialTransaction;
-use App\Models\Participant;
+use App\Models\Internship;
+use App\Models\KpdAppointment;
 use App\Models\KpdReport;
 use App\Models\KpdRoom;
+use App\Models\KvkkForgetRequest;
+use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
+use App\Models\RewardTier;
 use App\Models\RolePermissionScope;
 use App\Models\User;
+use App\Models\VolunteerOpportunity;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
-use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class PanelRegressionFixTest extends TestCase
@@ -126,7 +132,7 @@ class PanelRegressionFixTest extends TestCase
             'certificate_path' => 'certificates/sample.pdf',
         ])->firstOrFail();
 
-        $createLog = \Spatie\Activitylog\Models\Activity::query()
+        $createLog = Activity::query()
             ->where('description', 'certificate.created')
             ->latest()
             ->first();
@@ -140,9 +146,9 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame('participation', data_get($createLog->properties->toArray(), 'domain.type'));
         $this->assertSame('certificates/sample.pdf', data_get($createLog->properties->toArray(), 'domain.certificate_path'));
 
-        $this->deleteJson('/api/panel/certificates/' . $certificate->id)->assertOk();
+        $this->deleteJson('/api/panel/certificates/'.$certificate->id)->assertOk();
 
-        $deleteLog = \Spatie\Activitylog\Models\Activity::query()
+        $deleteLog = Activity::query()
             ->where('description', 'certificate.deleted')
             ->latest()
             ->first();
@@ -220,7 +226,7 @@ class PanelRegressionFixTest extends TestCase
         Storage::fake(config('filesystems.media_disk', 'public'));
         config([
             'filesystems.direct_media_downloads' => true,
-            'filesystems.disks.' . config('filesystems.media_disk', 'public') . '.url' => 'https://cdn.example.test/media',
+            'filesystems.disks.'.config('filesystems.media_disk', 'public').'.url' => 'https://cdn.example.test/media',
         ]);
 
         $project = $this->project();
@@ -296,7 +302,7 @@ class PanelRegressionFixTest extends TestCase
             'payee' => 'Catering',
         ]);
 
-        $this->getJson('/api/panel/financials?' . $query)
+        $this->getJson('/api/panel/financials?'.$query)
             ->assertOk()
             ->assertJsonCount(1, 'transactions.data')
             ->assertJsonPath('total_amount', 1000)
@@ -304,7 +310,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('status_stats.0.status', 'approved')
             ->assertJsonPath('status_stats.0.count', 1);
 
-        $this->get('/api/panel/financials/export?' . $query)
+        $this->get('/api/panel/financials/export?'.$query)
             ->assertOk()
             ->assertHeader('content-disposition');
     }
@@ -329,7 +335,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonPath('transaction.status', 'approved');
 
-        $approvalLog = \Spatie\Activitylog\Models\Activity::query()
+        $approvalLog = Activity::query()
             ->where('description', 'financial.approved')
             ->latest()
             ->first();
@@ -348,7 +354,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonPath('transaction.status', 'paid');
 
-        $paymentLog = \Spatie\Activitylog\Models\Activity::query()
+        $paymentLog = Activity::query()
             ->where('description', 'financial.paid')
             ->latest()
             ->first();
@@ -382,7 +388,7 @@ class PanelRegressionFixTest extends TestCase
             ->where('title', 'Audit Bohca')
             ->firstOrFail();
 
-        $createLog = \Spatie\Activitylog\Models\Activity::query()
+        $createLog = Activity::query()
             ->where('description', 'digital_bohca.created')
             ->latest()
             ->first();
@@ -396,9 +402,9 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame('Audit Bohca', data_get($createLog->properties->toArray(), 'domain.title'));
         $this->assertTrue(data_get($createLog->properties->toArray(), 'domain.visible_to_student'));
 
-        $this->deleteJson('/api/panel/digital-bohca/' . $material->id)->assertOk();
+        $this->deleteJson('/api/panel/digital-bohca/'.$material->id)->assertOk();
 
-        $deleteLog = \Spatie\Activitylog\Models\Activity::query()
+        $deleteLog = Activity::query()
             ->where('description', 'digital_bohca.deleted')
             ->latest()
             ->first();
@@ -740,6 +746,146 @@ class PanelRegressionFixTest extends TestCase
         $this->assertNotNull(Application::query()->find($applicationId)?->waitlist_invited_at);
     }
 
+    public function test_waitlist_invited_student_can_accept_invitation(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = Project::query()->create([
+            'name' => 'Waitlist Accept Project',
+            'slug' => 'waitlist-accept-project',
+            'type' => 'other',
+            'status' => 'active',
+            'application_open' => true,
+            'quota' => 1,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+            'credit_start_amount' => 120,
+        ]);
+
+        $acceptedUser = User::factory()->create(['surname' => 'Accepted', 'role' => 'student', 'status' => 'active']);
+        Application::query()->create([
+            'user_id' => $acceptedUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'accepted',
+        ]);
+
+        $student = User::factory()->create([
+            'surname' => 'Accept',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $application = Application::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'waitlist_order' => 2,
+            'waitlist_invited_at' => now()->subHour(),
+            'waitlist_invitation_expires_at' => now()->addDay(),
+        ]);
+
+        Application::query()->where('user_id', $acceptedUser->id)->update(['status' => 'rejected']);
+
+        Sanctum::actingAs($student);
+        $this->postJson("/api/applications/{$application->id}/waitlist-response", [
+            'decision' => 'accept',
+        ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'accepted')
+            ->assertJsonPath('application.waitlist_invitation_active', false);
+
+        $this->assertDatabaseHas('participants', [
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 120,
+        ]);
+    }
+
+    public function test_waitlist_invitation_reject_and_expire_flow_is_enforced(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = Project::query()->create([
+            'name' => 'Waitlist Reject Project',
+            'slug' => 'waitlist-reject-project',
+            'type' => 'other',
+            'status' => 'active',
+            'application_open' => true,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $student = User::factory()->create([
+            'surname' => 'Reject',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $application = Application::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'waitlist_order' => 1,
+            'waitlist_invited_at' => now()->subHour(),
+            'waitlist_invitation_expires_at' => now()->addDay(),
+        ]);
+
+        Sanctum::actingAs($student);
+        $this->postJson("/api/applications/{$application->id}/waitlist-response", [
+            'decision' => 'reject',
+        ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'rejected');
+
+        $expiredCandidate = User::factory()->create([
+            'surname' => 'Expired',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        $expiredCandidate->assignRole('student');
+        $expiredApp = Application::query()->create([
+            'user_id' => $expiredCandidate->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'waitlist_order' => 2,
+            'waitlist_invited_at' => now()->subDays(2),
+            'waitlist_invitation_expires_at' => now()->subMinute(),
+        ]);
+
+        Sanctum::actingAs($admin);
+        $this->postJson("/api/panel/applications/{$expiredApp->id}/waitlist-refresh")
+            ->assertOk()
+            ->assertJsonPath('expired_count', 1);
+
+        $this->assertDatabaseHas('applications', [
+            'id' => $expiredApp->id,
+            'status' => 'waitlisted',
+            'waitlist_invited_at' => null,
+            'waitlist_invitation_expires_at' => null,
+        ]);
+    }
+
     public function test_program_creation_rejects_overlapping_time_across_projects(): void
     {
         $this->actingSuperAdmin();
@@ -824,7 +970,7 @@ class PanelRegressionFixTest extends TestCase
 
         $programId = $createResponse->json('program.id');
 
-        $this->putJson('/api/panel/programs/' . $programId, [
+        $this->putJson('/api/panel/programs/'.$programId, [
             'title' => 'Kontenjanli Program',
             'description' => null,
             'location' => 'Salon A',
@@ -881,7 +1027,7 @@ class PanelRegressionFixTest extends TestCase
             'status' => 'scheduled',
         ]);
 
-        $this->putJson('/api/panel/programs/' . $program->id, [
+        $this->putJson('/api/panel/programs/'.$program->id, [
             'title' => 'Guncellenecek Program',
             'description' => null,
             'location' => 'Salon B',
@@ -897,7 +1043,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('start_at');
 
-        $this->putJson('/api/panel/programs/' . $program->id, [
+        $this->putJson('/api/panel/programs/'.$program->id, [
             'title' => 'Guncellenecek Program',
             'description' => null,
             'location' => 'Salon B',
@@ -1044,7 +1190,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonPath('deducted_participant_count', 1);
 
-        $completeLog = \Spatie\Activitylog\Models\Activity::query()
+        $completeLog = Activity::query()
             ->where('description', 'program.completed')
             ->latest()
             ->first();
@@ -1062,7 +1208,7 @@ class PanelRegressionFixTest extends TestCase
             'manual_note' => 'Audit duzeltmesi',
         ])->assertOk();
 
-        $manualLog = \Spatie\Activitylog\Models\Activity::query()
+        $manualLog = Activity::query()
             ->where('description', 'attendance.manual_updated')
             ->latest()
             ->first();
@@ -1268,7 +1414,7 @@ class PanelRegressionFixTest extends TestCase
             ],
         ]);
 
-        $this->getJson('/api/panel/applications?project_id=' . $project->id)
+        $this->getJson('/api/panel/applications?project_id='.$project->id)
             ->assertOk()
             ->assertJsonPath('applications.data.0.form_entries.0.label', 'Motivasyon')
             ->assertJsonPath('applications.data.0.form_entries.1.file.original_name', 'cv.pdf')
@@ -1305,7 +1451,7 @@ class PanelRegressionFixTest extends TestCase
             'form_data' => [],
         ]);
 
-        $this->getJson('/api/panel/applications?project_id=' . $project->id)
+        $this->getJson('/api/panel/applications?project_id='.$project->id)
             ->assertOk()
             ->assertJsonPath('applications.data.0.available_statuses', ['rejected', 'waitlisted', 'interview_planned'])
             ->assertJsonPath('applications.data.0.workflow.next_step', 'plan_interview');
@@ -1333,7 +1479,7 @@ class PanelRegressionFixTest extends TestCase
             'form_data' => [],
         ]);
 
-        $this->getJson('/api/panel/projects/' . $project->id . '/modules')
+        $this->getJson('/api/panel/projects/'.$project->id.'/modules')
             ->assertOk()
             ->assertJsonPath('summary.applications.approved', 1);
     }
@@ -1375,7 +1521,7 @@ class PanelRegressionFixTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->getJson('/api/panel/projects/' . $project->id . '/application-form?period_id=' . $fall->id)
+        $this->getJson('/api/panel/projects/'.$project->id.'/application-form?period_id='.$fall->id)
             ->assertOk()
             ->assertJsonPath('application_form.period_id', $fall->id)
             ->assertJsonPath('application_form.fields.0.id', 'fall_question');
@@ -1417,7 +1563,7 @@ class PanelRegressionFixTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->getJson('/api/projects/' . $project->slug)
+        $this->getJson('/api/projects/'.$project->slug)
             ->assertOk()
             ->assertJsonPath('application_form.period_id', $activePeriod->id)
             ->assertJsonPath('application_form.fields.0.id', 'active_question');
@@ -1594,7 +1740,7 @@ class PanelRegressionFixTest extends TestCase
             'status' => 'pending',
         ]);
 
-        $this->putJson('/api/panel/applications/' . $application->id . '/status', [
+        $this->putJson('/api/panel/applications/'.$application->id.'/status', [
             'status' => 'accepted',
         ])
             ->assertStatus(422)
@@ -1679,7 +1825,7 @@ class PanelRegressionFixTest extends TestCase
             'form_data' => [],
         ]);
 
-        $this->putJson('/api/panel/applications/' . $application->id . '/status', [
+        $this->putJson('/api/panel/applications/'.$application->id.'/status', [
             'status' => 'accepted',
         ])->assertOk();
 
@@ -1825,7 +1971,7 @@ class PanelRegressionFixTest extends TestCase
         $actor->assignRole($role);
         Sanctum::actingAs($actor);
 
-        $this->getJson('/api/panel/participants?project_id=' . $project->id)
+        $this->getJson('/api/panel/participants?project_id='.$project->id)
             ->assertOk()
             ->assertJsonCount(1, 'participants')
             ->assertJsonPath('participants.0.graduation_status', 'graduated')
@@ -2192,7 +2338,7 @@ class PanelRegressionFixTest extends TestCase
             'credit' => 120,
         ]);
 
-        \App\Models\Internship::query()->create([
+        Internship::query()->create([
             'participant_id' => $diplomasiParticipant->id,
             'company_name' => 'KADEME',
             'position' => 'Stajyer',
@@ -2206,7 +2352,7 @@ class PanelRegressionFixTest extends TestCase
         ]);
         $student->badges()->attach($badge->id, ['project_id' => $kademePlus->id, 'awarded_at' => now()]);
 
-        \App\Models\RewardTier::query()->create([
+        RewardTier::query()->create([
             'project_id' => $kademePlus->id,
             'name' => 'Plus Hediye',
             'min_badges' => 1,
@@ -2243,7 +2389,7 @@ class PanelRegressionFixTest extends TestCase
         Role::findOrCreate('student', 'web');
         $student->assignRole('student');
 
-        $opportunity = \App\Models\VolunteerOpportunity::query()->create([
+        $opportunity = VolunteerOpportunity::query()->create([
             'project_id' => $project->id,
             'title' => 'Gonullu Etkinlik',
             'description' => 'Gonullu destek gerektiren buyuk etkinlik.',
@@ -2594,7 +2740,7 @@ class PanelRegressionFixTest extends TestCase
             'credit' => 100,
         ]);
 
-        $appointment = \App\Models\KpdAppointment::query()->create([
+        $appointment = KpdAppointment::query()->create([
             'counselor_id' => $coordinator->id,
             'counselee_id' => $student->id,
             'room_id' => $room->id,
@@ -2623,5 +2769,73 @@ class PanelRegressionFixTest extends TestCase
             'id' => $appointment->id,
             'status' => 'completed',
         ]);
+    }
+
+    public function test_user_can_create_kvkk_forget_request_once(): void
+    {
+        $student = User::factory()->create([
+            'surname' => 'Forget',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/user/kvkk/forget-request', [
+            'request_note' => 'Hesabimin anonimlestirilmesini talep ediyorum.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('forget_request.status', 'pending');
+
+        $this->postJson('/api/user/kvkk/forget-request')->assertStatus(422);
+
+        $this->assertDatabaseHas('kvkk_forget_requests', [
+            'user_id' => $student->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_panel_can_approve_kvkk_forget_and_anonymize_user(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $student = User::factory()->create([
+            'name' => 'Ayse',
+            'surname' => 'Yilmaz',
+            'email' => 'kvkk-anon@test.local',
+            'phone' => '5551112233',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $requestItem = KvkkForgetRequest::query()->create([
+            'user_id' => $student->id,
+            'status' => 'pending',
+            'request_note' => 'Unutulma hakki talebi',
+        ]);
+
+        Sanctum::actingAs($admin);
+        $this->postJson("/api/panel/kvkk/forget-requests/{$requestItem->id}/resolve", [
+            'decision' => 'approve',
+            'reviewer_note' => 'KVKK talebi uygun bulundu.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('forget_request.status', 'completed')
+            ->assertJsonPath('forget_request.user.kvkk_forgotten', true);
+
+        $this->assertDatabaseHas('kvkk_forget_requests', [
+            'id' => $requestItem->id,
+            'status' => 'completed',
+            'reviewed_by' => $admin->id,
+        ]);
+
+        $updatedStudent = User::query()->findOrFail($student->id);
+        $this->assertTrue((bool) $updatedStudent->kvkk_forgotten);
+        $this->assertNull($updatedStudent->phone);
+        $this->assertStringContainsString('@anon.local', (string) $updatedStudent->email);
     }
 }

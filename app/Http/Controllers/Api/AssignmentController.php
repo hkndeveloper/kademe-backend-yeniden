@@ -23,8 +23,7 @@ class AssignmentController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
         private readonly NotificationService $notificationService,
-    ) {
-    }
+    ) {}
 
     private function submissionPayload(AssignmentSubmission $submission, string $basePath): array
     {
@@ -90,11 +89,11 @@ class AssignmentController extends Controller
         }
 
         $extension = pathinfo($submission->file_path, PATHINFO_EXTENSION);
-        $filename = 'odev_teslimi_' . $submission->id;
+        $filename = 'odev_teslimi_'.$submission->id;
 
         return MediaStorage::disk()->download(
             $submission->file_path,
-            $filename . ($extension ? ".{$extension}" : '')
+            $filename.($extension ? ".{$extension}" : '')
         );
     }
 
@@ -129,7 +128,7 @@ class AssignmentController extends Controller
         $assignments = Assignment::whereIn('project_id', $projectIds)
             ->whereIn('period_id', $periodIds)
             // Öğrencinin teslim durumunu (submission) relation olarak dahil et (eğer varsa)
-            ->with(['submissions' => function($query) use ($user) {
+            ->with(['submissions' => function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             }])
             ->orderBy('due_date', 'asc')
@@ -248,6 +247,7 @@ class AssignmentController extends Controller
 
         return $this->streamSubmissionFile($submission);
     }
+
     public function panelIndex(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'assignments.view');
@@ -334,7 +334,7 @@ class AssignmentController extends Controller
             $this->notificationService->sendEmail(
                 $participantEmails,
                 'Yeni odev tanimlandi',
-                "Odev: {$assignment->title}\nSon teslim: " . ($assignment->due_date ?? 'belirtilmedi') . "\nLutfen panelden detaylari inceleyin.",
+                "Odev: {$assignment->title}\nSon teslim: ".($assignment->due_date ?? 'belirtilmedi')."\nLutfen panelden detaylari inceleyin.",
                 (int) $validated['project_id'],
                 $request->user()->id
             );
@@ -381,7 +381,7 @@ class AssignmentController extends Controller
         ];
         $rows = $assignments->map(function (Assignment $assignment) {
             $submissionSummary = $assignment->submissions
-                ->map(fn (AssignmentSubmission $submission) => trim(($submission->user?->name ?? '-') . ' ' . ($submission->user?->surname ?? '')) . " ({$submission->status})")
+                ->map(fn (AssignmentSubmission $submission) => trim(($submission->user?->name ?? '-').' '.($submission->user?->surname ?? ''))." ({$submission->status})")
                 ->implode('; ');
 
             return [
@@ -392,7 +392,7 @@ class AssignmentController extends Controller
                 $assignment->program?->title ?? '-',
                 $assignment->due_date?->format('d.m.Y H:i') ?? '-',
                 $assignment->submissions_count,
-                $assignment->creator ? trim($assignment->creator->name . ' ' . $assignment->creator->surname) : '-',
+                $assignment->creator ? trim($assignment->creator->name.' '.$assignment->creator->surname) : '-',
                 $assignment->created_at?->format('d.m.Y H:i') ?? '-',
                 $submissionSummary !== '' ? $submissionSummary : '-',
             ];
@@ -400,7 +400,7 @@ class AssignmentController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'odevler_' . now()->format('Ymd_His'),
+            'odevler_'.now()->format('Ymd_His'),
             'Odevler',
             $headings,
             $rows,
@@ -445,7 +445,7 @@ class AssignmentController extends Controller
             $this->notificationService->sendEmail(
                 [$studentEmail],
                 'Odev tesliminiz degerlendirildi',
-                "Odev: {$submission->assignment?->title}\nYeni durum: {$validated['status']}\nNot: " . ($validated['reviewer_note'] ?? '-'),
+                "Odev: {$submission->assignment?->title}\nYeni durum: {$validated['status']}\nNot: ".($validated['reviewer_note'] ?? '-'),
                 $submission->assignment?->project_id,
                 $request->user()->id
             );
@@ -469,6 +469,17 @@ class AssignmentController extends Controller
             ->findOrFail($id);
 
         $this->abortUnlessProjectAllowed($request, 'assignments.submissions.review', (int) $submission->assignment->project_id);
+        $request->attributes->set('audit.subject', $submission);
+        $request->attributes->set('audit.event', 'assignments.submission.downloaded');
+        $request->attributes->set('audit.description', 'assignments.submission.downloaded');
+        $request->attributes->set('audit.properties', [
+            'operation' => 'assignment_submission_download',
+            'submission_id' => $submission->id,
+            'assignment_id' => $submission->assignment_id,
+            'project_id' => $submission->assignment->project_id,
+            'status' => $submission->status,
+            'submitted_by' => $submission->user_id,
+        ]);
 
         return $this->streamSubmissionFile($submission);
     }

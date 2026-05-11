@@ -4,10 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Models\Attendance;
+use App\Models\CreditLog;
+use App\Models\KvkkForgetRequest;
 use App\Models\User;
-use App\Support\AdminExportResponder;
 use App\Services\PermissionResolver;
+use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -20,8 +24,7 @@ class UserController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     /**
      * GET /admin/users
@@ -46,7 +49,7 @@ class UserController extends Controller
             ->get()
             ->map(fn (Role $role) => [
                 'name' => $role->name,
-                'label' => config('permission_catalog.role_labels.' . $role->name) ?? Str::headline($role->name),
+                'label' => config('permission_catalog.role_labels.'.$role->name) ?? Str::headline($role->name),
             ])
             ->values();
 
@@ -140,7 +143,7 @@ class UserController extends Controller
         }
 
         if ($request->filled('university')) {
-            $query->where('university', 'like', '%' . $request->university . '%');
+            $query->where('university', 'like', '%'.$request->university.'%');
         }
 
         return response()->json([
@@ -174,8 +177,8 @@ class UserController extends Controller
         );
 
         $documents = $user->staffProfile?->personal_documents ?? [];
-        $creditScore = \App\Models\CreditLog::where('user_id', $user->id)->sum('amount');
-        $absentCount = \App\Models\Attendance::where('user_id', $user->id)->where('is_valid', false)->count();
+        $creditScore = CreditLog::where('user_id', $user->id)->sum('amount');
+        $absentCount = Attendance::where('user_id', $user->id)->where('is_valid', false)->count();
 
         return response()->json([
             'user' => $user,
@@ -226,7 +229,7 @@ class UserController extends Controller
             $user->update($columnUpdates);
         }
 
-        if (!empty($validated['role'])) {
+        if (! empty($validated['role'])) {
             $user->syncRoles([$validated['role']]);
             if (array_key_exists($validated['role'], config('permission_catalog.role_labels', []))) {
                 $user->forceFill(['role' => $validated['role']])->save();
@@ -321,7 +324,7 @@ class UserController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'kullanici_listesi_' . now()->format('Ymd_His'),
+            'kullanici_listesi_'.now()->format('Ymd_His'),
             'Kullanici Listesi',
             $headings,
             $rows,
@@ -387,7 +390,7 @@ class UserController extends Controller
 
         $user = $request->user();
 
-        if (!Hash::check($validated['current_password'], $user->password)) {
+        if (! Hash::check($validated['current_password'], $user->password)) {
             throw ValidationException::withMessages([
                 'current_password' => ['Mevcut sifreniz hatali.'],
             ]);
@@ -421,6 +424,178 @@ class UserController extends Controller
         return response()->json([
             'message' => 'KVKK aydinlatma metni basariyla onaylandi.',
         ]);
+    }
+
+    public function requestKvkkForget(Request $request)
+    {
+        $validated = $request->validate([
+            'request_note' => 'nullable|string|max:1000',
+        ]);
+
+        $user = $request->user();
+        if ((bool) $user->kvkk_forgotten) {
+            return response()->json([
+                'message' => 'Bu hesap icin unutulma hakki islemi daha once tamamlandi.',
+            ], 422);
+        }
+
+        $pendingExists = KvkkForgetRequest::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->exists();
+        if ($pendingExists) {
+            return response()->json([
+                'message' => 'Bu hesap icin bekleyen bir unutulma talebi zaten mevcut.',
+            ], 422);
+        }
+
+        $forgetRequest = KvkkForgetRequest::query()->create([
+            'user_id' => $user->id,
+            'status' => 'pending',
+            'request_note' => $validated['request_note'] ?? null,
+        ]);
+
+        $user->forceFill(['kvkk_forget_requested_at' => now()])->save();
+        $request->attributes->set('audit.subject', $forgetRequest);
+        $request->attributes->set('audit.event', 'users.kvkk_forget.requested');
+        $request->attributes->set('audit.description', 'users.kvkk_forget.requested');
+
+        return response()->json([
+            'message' => 'Unutulma hakki talebiniz alindi. Inceleme sonrasinda sonuc bilgilendirilecektir.',
+            'forget_request' => $forgetRequest,
+        ], 201);
+    }
+
+    public function listKvkkForgetRequests(Request $request)
+    {
+        $this->abortUnlessAllowed($request, 'users.view');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'users.view'),
+            403,
+            'Unutulma taleplerini listelemek icin tum sistem kapsami gerekir.'
+        );
+
+        $query = KvkkForgetRequest::query()
+            ->with(['user:id,name,surname,email,role,status,kvkk_forgotten', 'reviewer:id,name,surname'])
+            ->latest();
+        if ($request->filled('status')) {
+            $query->where('status', (string) $request->status);
+        }
+
+        return response()->json([
+            'forget_requests' => $query->paginate(20),
+        ]);
+    }
+
+    public function resolveKvkkForgetRequest(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'users.update');
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), 'users.update'),
+            403,
+            'Unutulma talebi islemek icin tum sistem kapsami gerekir.'
+        );
+
+        $validated = $request->validate([
+            'decision' => 'required|in:approve,reject',
+            'reviewer_note' => 'nullable|string|max:2000',
+        ]);
+
+        $forgetRequest = KvkkForgetRequest::query()->with('user')->findOrFail($id);
+        if ($forgetRequest->status !== 'pending') {
+            return response()->json([
+                'message' => 'Bu talep zaten sonuclandirilmis.',
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            if ($validated['decision'] === 'approve') {
+                $summary = $this->anonymizeUserData($forgetRequest->user);
+                $forgetRequest->update([
+                    'status' => 'completed',
+                    'reviewer_note' => $validated['reviewer_note'] ?? null,
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                    'anonymized_at' => now(),
+                    'anonymization_summary' => $summary,
+                ]);
+            } else {
+                $forgetRequest->update([
+                    'status' => 'rejected',
+                    'reviewer_note' => $validated['reviewer_note'] ?? null,
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                    'anonymized_at' => null,
+                    'anonymization_summary' => null,
+                ]);
+            }
+
+            DB::commit();
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+            throw $exception;
+        }
+
+        $request->attributes->set('audit.subject', $forgetRequest);
+        $request->attributes->set('audit.event', 'users.kvkk_forget.resolved');
+        $request->attributes->set('audit.description', 'users.kvkk_forget.resolved');
+        $request->attributes->set('audit.properties', [
+            'decision' => $validated['decision'],
+            'target_user_id' => $forgetRequest->user_id,
+            'anonymized_at' => optional($forgetRequest->anonymized_at)?->toISOString(),
+        ]);
+
+        return response()->json([
+            'message' => $validated['decision'] === 'approve'
+                ? 'Unutulma talebi onaylandi ve hesap anonimlestirildi.'
+                : 'Unutulma talebi reddedildi.',
+            'forget_request' => $forgetRequest->fresh(['user:id,name,surname,email,role,status,kvkk_forgotten', 'reviewer:id,name,surname']),
+        ]);
+    }
+
+    private function anonymizeUserData(User $user): array
+    {
+        $hash = substr(hash('sha256', 'kvkk:'.$user->id.':'.now()->timestamp), 0, 16);
+        $anonymousEmail = "forgotten-{$user->id}-{$hash}@anon.local";
+        $anonymousName = 'Anonim Kullanici';
+
+        $user->tokens()->delete();
+
+        $user->forceFill([
+            'name' => $anonymousName,
+            'surname' => (string) $user->id,
+            'email' => $anonymousEmail,
+            'phone' => null,
+            'address' => null,
+            'tc_no' => null,
+            'birth_date' => null,
+            'university' => null,
+            'department' => null,
+            'class_year' => null,
+            'hometown' => null,
+            'profile_photo_path' => null,
+            'password' => Hash::make(Str::random(64)),
+            'status' => 'passive',
+            'must_change_password' => false,
+            'kvkk_forgotten' => true,
+            'kvkk_forget_requested_at' => $user->kvkk_forget_requested_at ?? now(),
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+            'remember_token' => null,
+        ])->save();
+
+        $user->profile()->delete();
+        $user->staffProfile()->delete();
+
+        return [
+            'user_id' => $user->id,
+            'email_replaced' => true,
+            'profile_deleted' => true,
+            'staff_profile_deleted' => true,
+            'tokens_revoked' => true,
+        ];
     }
 
     private function normalizeUserStatus(string $status): string

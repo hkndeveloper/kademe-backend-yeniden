@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Public;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\PublicBlogResource;
+use App\Http\Resources\PublicProgramResource;
 use App\Models\BlogPost;
 use App\Models\Faq;
 use App\Models\Program;
@@ -28,17 +30,20 @@ class PublicContentController extends Controller
                 $search = $validated['search'];
                 $query->where(function ($builder) use ($search) {
                     $builder
-                        ->where('title', 'like', '%' . $search . '%')
-                        ->orWhere('summary', 'like', '%' . $search . '%')
-                        ->orWhere('content', 'like', '%' . $search . '%');
+                        ->where('title', 'like', '%'.$search.'%')
+                        ->orWhere('excerpt', 'like', '%'.$search.'%')
+                        ->orWhere('content', 'like', '%'.$search.'%');
                 });
             })
             ->when(! empty($validated['category_id']), fn ($query) => $query->where('category_id', $validated['category_id']))
             ->orderBy('published_at', 'desc')
             ->paginate($validated['per_page'] ?? 12)
             ->withQueryString();
+        $blogs->setCollection(PublicBlogResource::collection($blogs->getCollection())->collection);
 
-        return response()->json(['blogs' => $blogs]);
+        return response()->json([
+            'blogs' => $blogs,
+        ]);
     }
 
     /**
@@ -50,7 +55,9 @@ class PublicContentController extends Controller
             ->where('status', 'published')
             ->firstOrFail();
 
-        return response()->json(['blog' => $blog]);
+        return response()->json([
+            'blog' => new PublicBlogResource($blog),
+        ]);
     }
 
     /**
@@ -78,7 +85,7 @@ class PublicContentController extends Controller
         ]);
 
         $programs = Program::query()
-            ->with(['project:id,name,slug'])
+            ->with(['project:id,name,slug', 'period:id,name'])
             ->whereIn('status', ! empty($validated['status']) ? [$validated['status']] : ['scheduled', 'active', 'completed'])
             ->when(empty($validated['from']) && empty($validated['to']), fn ($query) => $query->where('start_at', '>=', now()->subDays(30)))
             ->when(! empty($validated['from']), fn ($query) => $query->where('start_at', '>=', $validated['from']))
@@ -88,15 +95,16 @@ class PublicContentController extends Controller
                 $search = $validated['search'];
                 $query->where(function ($builder) use ($search) {
                     $builder
-                        ->where('title', 'like', '%' . $search . '%')
-                        ->orWhere('description', 'like', '%' . $search . '%')
-                        ->orWhere('location', 'like', '%' . $search . '%')
-                        ->orWhereHas('project', fn ($projectQuery) => $projectQuery->where('name', 'like', '%' . $search . '%'));
+                        ->where('title', 'like', '%'.$search.'%')
+                        ->orWhere('description', 'like', '%'.$search.'%')
+                        ->orWhere('location', 'like', '%'.$search.'%')
+                        ->orWhereHas('project', fn ($projectQuery) => $projectQuery->where('name', 'like', '%'.$search.'%'));
                 });
             })
             ->orderBy('start_at', 'asc')
             ->paginate($validated['per_page'] ?? 12)
             ->withQueryString();
+        $programs->setCollection(PublicProgramResource::collection($programs->getCollection())->collection);
 
         return response()->json([
             'programs' => $programs,
@@ -109,11 +117,12 @@ class PublicContentController extends Controller
     public function activityDetail($id)
     {
         $program = Program::query()
-            ->with(['project:id,name,slug'])
+            ->with(['project:id,name,slug', 'period:id,name'])
+            ->whereIn('status', ['scheduled', 'active', 'completed'])
             ->findOrFail($id);
 
         return response()->json([
-            'program' => $program,
+            'program' => new PublicProgramResource($program),
         ]);
     }
 }

@@ -6,7 +6,6 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Participant;
-use App\Models\Project;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
@@ -24,8 +23,7 @@ class AdminApplicationController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
         private readonly NotificationService $notificationService,
-    ) {
-    }
+    ) {}
 
     private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): void
     {
@@ -135,7 +133,7 @@ class AdminApplicationController extends Controller
                         'original_name' => $value['original_name'] ?? basename((string) $value['path']),
                         'mime_type' => $value['mime_type'] ?? null,
                         'size' => $value['size'] ?? null,
-                        'download_url' => "/panel/applications/{$application->id}/form-files/" . rawurlencode($key),
+                        'download_url' => "/panel/applications/{$application->id}/form-files/".rawurlencode($key),
                     ] : null,
                 ];
             })
@@ -228,7 +226,7 @@ class AdminApplicationController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'basvurular_' . now()->format('Ymd_His'),
+            'basvurular_'.now()->format('Ymd_His'),
             'Basvurular',
             $headings,
             $rows,
@@ -315,7 +313,7 @@ class AdminApplicationController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'personel_basvurulari_' . now()->format('Ymd_His'),
+            'personel_basvurulari_'.now()->format('Ymd_His'),
             'Personel Basvurulari',
             $headings,
             $rows,
@@ -381,9 +379,9 @@ class AdminApplicationController extends Controller
         }
 
         $applications = $query
-                ->orderByDesc('created_at')
-                ->paginate($validated['per_page'] ?? 20)
-                ->withQueryString();
+            ->orderByDesc('created_at')
+            ->paginate($validated['per_page'] ?? 20)
+            ->withQueryString();
 
         $applications->getCollection()->transform(fn (Application $application) => $this->formatApplication($application));
 
@@ -417,7 +415,7 @@ class AdminApplicationController extends Controller
             return response()->json(['message' => 'Basvuru dosyasi depolamada bulunamadi.'], 404);
         }
 
-        $filename = $value['original_name'] ?? ('basvuru_dosyasi_' . $application->id);
+        $filename = $value['original_name'] ?? ('basvuru_dosyasi_'.$application->id);
 
         return MediaStorage::disk()->download($path, $filename);
     }
@@ -504,7 +502,7 @@ class AdminApplicationController extends Controller
             $this->notifyApplicationUser(
                 $application,
                 'Basvuru durumunuz guncellendi',
-                "Proje: " . ($application->project?->name ?? '-') . "\nYeni durum: {$application->status}",
+                'Proje: '.($application->project?->name ?? '-')."\nYeni durum: {$application->status}",
                 $request->user()->id
             );
 
@@ -558,7 +556,7 @@ class AdminApplicationController extends Controller
         $this->notifyApplicationUser(
             $application,
             'Mulakat planlandi',
-            "Proje: " . ($application->project?->name ?? '-') . "\nMulakat tarihi: {$validated['interview_at']}",
+            'Proje: '.($application->project?->name ?? '-')."\nMulakat tarihi: {$validated['interview_at']}",
             $request->user()->id
         );
 
@@ -599,7 +597,7 @@ class AdminApplicationController extends Controller
         $this->notifyApplicationUser(
             $application,
             'Basvurunuz yedek listeye alindi',
-            "Proje: " . ($application->project?->name ?? '-') . "\nDurum: yedek listede.",
+            'Proje: '.($application->project?->name ?? '-')."\nDurum: yedek listede.",
             $request->user()->id
         );
 
@@ -647,6 +645,18 @@ class AdminApplicationController extends Controller
         );
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular davet edilebilir.');
 
+        $this->expireOverdueWaitlistInvitations($application);
+        $activeInvitationExists = Application::query()
+            ->where('id', '!=', $application->id)
+            ->where('project_id', $application->project_id)
+            ->where('period_id', $application->period_id)
+            ->when($application->program_id, fn ($query) => $query->where('program_id', $application->program_id), fn ($query) => $query->whereNull('program_id'))
+            ->where('status', 'waitlisted')
+            ->whereNotNull('waitlist_invited_at')
+            ->where('waitlist_invitation_expires_at', '>', now())
+            ->exists();
+        abort_unless(! $activeInvitationExists, 422, 'Ayni kapsamda aktif yedek liste daveti zaten mevcut.');
+
         $expiresAt = $validated['expires_at'] ?? now()->addDays(3);
         $application->update([
             'waitlist_invited_at' => now(),
@@ -656,7 +666,7 @@ class AdminApplicationController extends Controller
         $this->notifyApplicationUser(
             $application,
             'Yedek listeden davet edildiniz',
-            "Proje: " . ($application->project?->name ?? '-') . "\nYedek listeden davet edildiniz. Son yanit tarihi: {$expiresAt}",
+            'Proje: '.($application->project?->name ?? '-')."\nYedek listeden davet edildiniz. Son yanit tarihi: {$expiresAt}",
             $request->user()->id
         );
 
@@ -664,6 +674,41 @@ class AdminApplicationController extends Controller
             'message' => 'Yedek liste daveti gonderildi.',
             'application' => $application->fresh(),
         ]);
+    }
+
+    public function refreshWaitlistInvitations(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
+        $application = Application::query()->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.waitlist.manage', (int) $application->project_id),
+            403,
+            'Bu basvuru icin yetkiniz bulunmuyor.'
+        );
+        abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular icin yenileme yapilabilir.');
+
+        $expiredCount = $this->expireOverdueWaitlistInvitations($application);
+
+        return response()->json([
+            'message' => 'Yedek davet sureleri guncellendi.',
+            'expired_count' => $expiredCount,
+        ]);
+    }
+
+    private function expireOverdueWaitlistInvitations(Application $application): int
+    {
+        return Application::query()
+            ->where('project_id', $application->project_id)
+            ->where('period_id', $application->period_id)
+            ->when($application->program_id, fn ($query) => $query->where('program_id', $application->program_id), fn ($query) => $query->whereNull('program_id'))
+            ->where('status', 'waitlisted')
+            ->whereNotNull('waitlist_invited_at')
+            ->whereNotNull('waitlist_invitation_expires_at')
+            ->where('waitlist_invitation_expires_at', '<=', now())
+            ->update([
+                'waitlist_invited_at' => null,
+                'waitlist_invitation_expires_at' => null,
+            ]);
     }
 
     private function nextWaitlistOrder(Application $application): int

@@ -8,9 +8,9 @@ use App\Models\DigitalBohca;
 use App\Models\Participant;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 use App\Support\MediaStorage;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DigitalBohcaController extends Controller
@@ -19,16 +19,15 @@ class DigitalBohcaController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function attachBohcaAudit(Request $request, DigitalBohca $material, string $operation): void
     {
         $request->attributes->set('audit.subject', $material);
-        $request->attributes->set('audit.event', 'digital_bohca.' . $operation);
-        $request->attributes->set('audit.description', 'digital_bohca.' . $operation);
+        $request->attributes->set('audit.event', 'digital_bohca.'.$operation);
+        $request->attributes->set('audit.description', 'digital_bohca.'.$operation);
         $request->attributes->set('audit.properties', [
-            'operation' => 'digital_bohca_' . $operation,
+            'operation' => 'digital_bohca_'.$operation,
             'material_id' => $material->id,
             'project_id' => $material->project_id,
             'target_user_id' => $material->user_id,
@@ -60,14 +59,14 @@ class DigitalBohcaController extends Controller
             ->pluck('project_id');
 
         // Bu projelere ait, öğrenciye görünür olan dosyalar (veya genele açık olanlar)
-        $materials = DigitalBohca::where(function($query) use ($projectIds, $user) {
-                // Sadece belli bir projeye atananlar
-                $query->whereIn('project_id', $projectIds)
-                      // Veya sadece bu öğrenciye özel yüklenenler
-                      ->orWhere('user_id', $user->id)
-                      // Veya herkese açık genel dosyalar
-                      ->orWhereNull('project_id');
-            })
+        $materials = DigitalBohca::where(function ($query) use ($projectIds, $user) {
+            // Sadece belli bir projeye atananlar
+            $query->whereIn('project_id', $projectIds)
+                  // Veya sadece bu öğrenciye özel yüklenenler
+                ->orWhere('user_id', $user->id)
+                  // Veya herkese açık genel dosyalar
+                ->orWhereNull('project_id');
+        })
             ->where('visible_to_student', true)
             ->with('uploader:id,name,surname,role')
             ->orderBy('created_at', 'desc')
@@ -75,7 +74,7 @@ class DigitalBohcaController extends Controller
             ->map(fn (DigitalBohca $material) => $this->materialPayload($material, '/digital-bohca'));
 
         return response()->json([
-            'materials' => $materials
+            'materials' => $materials,
         ]);
     }
 
@@ -181,16 +180,16 @@ class DigitalBohcaController extends Controller
             $material->id,
             $material->title,
             $material->project?->name ?? 'Genel',
-            $material->user ? trim($material->user->name . ' ' . $material->user->surname) : '-',
+            $material->user ? trim($material->user->name.' '.$material->user->surname) : '-',
             $material->file_type ?? '-',
             $material->visible_to_student ? 'Evet' : 'Hayir',
-            $material->uploader ? trim($material->uploader->name . ' ' . $material->uploader->surname) : '-',
+            $material->uploader ? trim($material->uploader->name.' '.$material->uploader->surname) : '-',
             $material->created_at?->format('d.m.Y H:i') ?? '-',
         ])->all();
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'digital_bohca_' . now()->format('Ymd_His'),
+            'digital_bohca_'.now()->format('Ymd_His'),
             'Digital Bohca',
             $headings,
             $rows,
@@ -220,6 +219,7 @@ class DigitalBohcaController extends Controller
                     ->orWhereNull('project_id');
             })
             ->firstOrFail();
+        $this->attachBohcaAudit($request, $material, 'downloaded');
 
         return $this->downloadMaterial($material);
     }
@@ -238,6 +238,7 @@ class DigitalBohcaController extends Controller
         ) {
             abort(403, 'Genel bohca materyalini gormek icin global kapsam gerekir.');
         }
+        $this->attachBohcaAudit($request, $material, 'downloaded');
 
         return $this->downloadMaterial($material);
     }
@@ -283,7 +284,7 @@ class DigitalBohcaController extends Controller
 
     private function downloadMaterial(DigitalBohca $material): JsonResponse|StreamedResponse
     {
-        if (!$material->file_path) {
+        if (! $material->file_path) {
             return response()->json(['message' => 'Dosya bulunamadi.'], 404);
         }
 
@@ -291,13 +292,13 @@ class DigitalBohcaController extends Controller
             return response()->json(['download_url' => MediaStorage::url($material->file_path)]);
         }
 
-        if (!MediaStorage::exists($material->file_path)) {
+        if (! MediaStorage::exists($material->file_path)) {
             return response()->json(['message' => 'Dosya storage uzerinde bulunamadi.'], 404);
         }
 
         $extension = pathinfo($material->file_path, PATHINFO_EXTENSION);
         $filename = str($material->title)->slug()->toString() ?: 'digital-bohca';
 
-        return MediaStorage::disk()->download($material->file_path, $filename . ($extension ? ".{$extension}" : ''));
+        return MediaStorage::disk()->download($material->file_path, $filename.($extension ? ".{$extension}" : ''));
     }
 }

@@ -11,19 +11,20 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Support\MediaStorage;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use App\Support\MediaStorage;
 
 class ApplicationController extends Controller
 {
     public function __construct(
         private readonly NotificationService $notificationService
-    ) {
-    }
+    ) {}
 
     private function resolveApplicantUser(array $applicant): User
     {
@@ -100,7 +101,7 @@ class ApplicationController extends Controller
         return $acceptedCount < (int) $quota;
     }
 
-    private function fileMetadata(string $path, \Illuminate\Http\UploadedFile $file): array
+    private function fileMetadata(string $path, UploadedFile $file): array
     {
         return [
             'path' => $path,
@@ -188,11 +189,11 @@ class ApplicationController extends Controller
         $this->notificationService->sendEmail(
             array_filter([$user->email]),
             'Basvurunuz alindi',
-            "Proje: {$project->name}\n" .
-            ($program ? "Program: {$program->title}\n" : '') .
+            "Proje: {$project->name}\n".
+            ($program ? "Program: {$program->title}\n" : '').
             ($autoRejectReason
                 ? "Basvurunuz otomatik degerlendirme kurali nedeniyle reddedildi: {$autoRejectReason}"
-                : "Basvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz." . ($initialStatus === 'waitlisted' ? "\nKontenjan dolu oldugu icin basvurunuz yedek listeye alindi." : '')),
+                : 'Basvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz.'.($initialStatus === 'waitlisted' ? "\nKontenjan dolu oldugu icin basvurunuz yedek listeye alindi." : '')),
             $project->id,
             $user->id
         );
@@ -291,6 +292,9 @@ class ApplicationController extends Controller
             'waitlist_order' => $application->waitlist_order,
             'waitlist_invited_at' => optional($application->waitlist_invited_at)?->toISOString(),
             'waitlist_invitation_expires_at' => optional($application->waitlist_invitation_expires_at)?->toISOString(),
+            'waitlist_invitation_active' => $application->status === 'waitlisted'
+                && $application->waitlist_invited_at !== null
+                && ($application->waitlist_invitation_expires_at === null || $application->waitlist_invitation_expires_at->isFuture()),
             'created_at' => optional($application->created_at)?->toISOString(),
             'interview_at' => optional($application->interview_at)?->toISOString(),
             'rejection_reason' => $application->rejection_reason,
@@ -298,6 +302,26 @@ class ApplicationController extends Controller
             'auto_rejection_reason' => $application->auto_rejection_reason,
             'form_entries' => $this->formEntriesForStudent($application),
         ];
+    }
+
+    private function assertWaitlistInvitationOpen(Application $application): void
+    {
+        if ($application->status !== 'waitlisted' || ! $application->waitlist_invited_at) {
+            throw ValidationException::withMessages([
+                'application' => ['Bu basvuru icin aktif bir yedek liste daveti bulunmuyor.'],
+            ]);
+        }
+
+        if ($application->waitlist_invitation_expires_at && now()->greaterThanOrEqualTo($application->waitlist_invitation_expires_at)) {
+            $application->update([
+                'waitlist_invited_at' => null,
+                'waitlist_invitation_expires_at' => null,
+            ]);
+
+            throw ValidationException::withMessages([
+                'application' => ['Yedek liste davet suresi doldu.'],
+            ]);
+        }
     }
 
     /**
@@ -344,50 +368,59 @@ class ApplicationController extends Controller
                     (is_array($value) && count(array_filter($value, fn ($item) => $item !== null && $item !== '')) === 0);
 
                 if ($isEmpty) {
-                    $errors[$fieldId] = [$label . ' alani zorunludur.'];
+                    $errors[$fieldId] = [$label.' alani zorunludur.'];
+
                     continue;
                 }
             }
 
             if ($value === null || $value === '') {
                 $normalized[$fieldId] = $type === 'checkbox' ? [] : $value;
+
                 continue;
             }
 
             if ($type === 'file') {
-                if ($uploadedFile instanceof \Illuminate\Http\UploadedFile) {
+                if ($uploadedFile instanceof UploadedFile) {
                     $path = MediaStorage::putFile('application-files', $uploadedFile);
                     $normalized[$fieldId] = $this->fileMetadata($path, $uploadedFile);
+
                     continue;
                 }
 
                 if (is_array($value) && isset($value['path'])) {
                     $normalized[$fieldId] = $value;
+
                     continue;
                 }
 
                 if (is_string($value)) {
                     $normalized[$fieldId] = trim($value);
+
                     continue;
                 }
 
-                $errors[$fieldId] = [$label . ' icin gecerli bir dosya bekleniyor.'];
+                $errors[$fieldId] = [$label.' icin gecerli bir dosya bekleniyor.'];
+
                 continue;
             }
 
             if (in_array($type, ['checkbox'], true)) {
                 if (! is_array($value)) {
-                    $errors[$fieldId] = [$label . ' icin birden fazla secim dizisi bekleniyor.'];
+                    $errors[$fieldId] = [$label.' icin birden fazla secim dizisi bekleniyor.'];
+
                     continue;
                 }
 
                 $normalized[$fieldId] = array_values(array_filter($value, fn ($item) => $item !== null && $item !== ''));
+
                 continue;
             }
 
             if (in_array($type, ['select', 'radio'], true) && isset($field['options']) && is_array($field['options'])) {
                 if (! in_array($value, $field['options'], true)) {
-                    $errors[$fieldId] = [$label . ' icin gecerli bir secim yapin.'];
+                    $errors[$fieldId] = [$label.' icin gecerli bir secim yapin.'];
+
                     continue;
                 }
             }
@@ -532,6 +565,106 @@ class ApplicationController extends Controller
             ->firstOrFail();
 
         return response()->json([
+            'application' => $this->formatStudentApplication($application),
+        ]);
+    }
+
+    public function respondWaitlistInvitation(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'decision' => 'required|in:accept,reject',
+        ]);
+
+        $application = Application::query()
+            ->with(['project:id,name', 'period:id,credit_start_amount', 'program:id,title,application_quota', 'user:id,email,role,status'])
+            ->where('id', $id)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        $this->assertWaitlistInvitationOpen($application);
+
+        DB::beginTransaction();
+        try {
+            if ($validated['decision'] === 'accept') {
+                $hasAnotherActiveProject = Participant::query()
+                    ->where('user_id', $application->user_id)
+                    ->where('status', 'active')
+                    ->where('project_id', '!=', $application->project_id)
+                    ->exists();
+                if ($hasAnotherActiveProject) {
+                    throw ValidationException::withMessages([
+                        'decision' => ['Aktif olarak baska bir projede yer aldiginiz icin daveti kabul edemezsiniz.'],
+                    ]);
+                }
+
+                $quota = $application->program?->application_quota ?? $application->project?->quota;
+                if ($quota !== null && (int) $quota > 0) {
+                    $acceptedCount = Application::query()
+                        ->where('project_id', $application->project_id)
+                        ->where('period_id', $application->period_id)
+                        ->when(
+                            $application->program_id,
+                            fn ($query) => $query->where('program_id', $application->program_id),
+                            fn ($query) => $query->whereNull('program_id')
+                        )
+                        ->where('status', 'accepted')
+                        ->where('id', '!=', $application->id)
+                        ->count();
+                    if ($acceptedCount >= (int) $quota) {
+                        throw ValidationException::withMessages([
+                            'decision' => ['Kontenjan dolu oldugu icin davet su an kabul edilemiyor.'],
+                        ]);
+                    }
+                }
+
+                $application->update([
+                    'status' => 'accepted',
+                    'waitlist_invited_at' => null,
+                    'waitlist_invitation_expires_at' => null,
+                    'rejection_reason' => null,
+                ]);
+
+                Participant::updateOrCreate([
+                    'user_id' => $application->user_id,
+                    'project_id' => $application->project_id,
+                    'period_id' => $application->period_id,
+                ], [
+                    'status' => 'active',
+                    'credit' => $application->period->credit_start_amount ?? 100,
+                    'enrolled_at' => now(),
+                ]);
+
+                if ($application->user && ! in_array($application->user->role, ['student', 'alumni'], true)) {
+                    $application->user->update([
+                        'role' => 'student',
+                        'status' => 'active',
+                    ]);
+                    $application->user->syncRoles(['student']);
+                }
+            } else {
+                $application->update([
+                    'status' => 'rejected',
+                    'rejection_reason' => 'Yedek liste daveti aday tarafindan reddedildi.',
+                    'waitlist_invited_at' => null,
+                    'waitlist_invitation_expires_at' => null,
+                ]);
+            }
+
+            DB::commit();
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            throw $e;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        $application->loadMissing(['project:id,name', 'period', 'program:id,title,start_at', 'form:id,fields']);
+
+        return response()->json([
+            'message' => $validated['decision'] === 'accept'
+                ? 'Yedek liste daveti kabul edildi.'
+                : 'Yedek liste daveti reddedildi.',
             'application' => $this->formatStudentApplication($application),
         ]);
     }

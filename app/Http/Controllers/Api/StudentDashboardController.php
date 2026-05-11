@@ -3,15 +3,23 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Participant;
-use App\Models\CreditLog;
 use App\Models\Badge;
 use App\Models\Certificate;
+use App\Models\CreditLog;
 use App\Models\EurodeskProject;
 use App\Models\Internship;
 use App\Models\Mentor;
+use App\Models\Participant;
+use App\Models\Project;
+use App\Models\ProjectModule;
+use App\Models\ProjectModuleEnrollment;
 use App\Models\RewardTier;
+use App\Models\User;
+use App\Support\ProjectSpecialModuleCatalog;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 class StudentDashboardController extends Controller
 {
@@ -47,31 +55,11 @@ class StudentDashboardController extends Controller
             ->take(10)
             ->get();
 
-        $kademePlusProjectIds = $participations
-            ->filter(fn (Participant $participation) => $participation->project !== null)
-            ->filter(function (Participant $participation) {
-                $type = mb_strtolower((string) ($participation->project?->type ?? ''));
-                $name = mb_strtolower((string) ($participation->project?->name ?? ''));
-
-                return str_contains($type, 'kademe_plus')
-                    || str_contains($type, 'kademe+')
-                    || str_contains($name, 'kademe plus')
-                    || str_contains($name, 'kademe+');
-            })
-            ->pluck('project_id')
-            ->unique()
-            ->values();
+        $kademePlusProjectIds = $this->kademePlusProjectIdsFromParticipations($participations);
 
         // KADEME+ disindaki rozetler ogrenci dashboard'inda gosterilmez.
-        $badges = $user->badges()
-            ->when(
-                $kademePlusProjectIds->isNotEmpty(),
-                fn ($query) => $query->where(function ($inner) use ($kademePlusProjectIds) {
-                    $inner->whereNull('badges.project_id')->orWhereIn('badges.project_id', $kademePlusProjectIds->all());
-                }),
-                fn ($query) => $query->whereNull('badges.project_id')
-            )
-            ->get();
+        $badges = $this->kademePlusBadgeBaseQuery($user, $kademePlusProjectIds)->get();
+        $profileBadgeFrame = $this->resolveProfileBadgeFrame($user, $kademePlusProjectIds);
 
         $latestAwardedIds = $user->badges()
             ->whereNotNull('badges.title_label')
@@ -91,7 +79,8 @@ class StudentDashboardController extends Controller
             'recent_credit_history' => $creditHistory,
             'earned_badges' => $badges,
             'monthly_titles' => $monthlyTitles,
-            'total_score' => $participations->sum('credit')
+            'total_score' => $participations->sum('credit'),
+            'profile_badge_frame' => $profileBadgeFrame,
         ]);
     }
 
@@ -161,7 +150,7 @@ class StudentDashboardController extends Controller
 
         return response()->json([
             'profile' => [
-                'full_name' => trim(($user->name ?? '') . ' ' . ($user->surname ?? '')),
+                'full_name' => trim(($user->name ?? '').' '.($user->surname ?? '')),
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'location' => $user->hometown,
@@ -271,16 +260,32 @@ class StudentDashboardController extends Controller
             ->groupBy(fn (Badge $badge) => $badge->pivot?->project_id ?: $badge->project_id ?: 0)
             ->map(fn ($badges) => $badges->count());
 
+        $moduleRows = ProjectModule::query()
+            ->whereIn('project_id', $projectIds)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        $modulesByProject = $moduleRows->groupBy('project_id');
+
+        $enrollmentRows = ProjectModuleEnrollment::query()
+            ->where('user_id', $user->id)
+            ->whereIn('project_module_id', $moduleRows->pluck('id'))
+            ->get()
+            ->keyBy('project_module_id');
+
         return response()->json([
             'projects' => $participations->map(function (Participant $participation) use (
                 $internshipsByParticipant,
                 $mentorsByProject,
                 $eurodeskByProject,
                 $rewardTiersByProject,
-                $badgeCountsByProject
+                $badgeCountsByProject,
+                $modulesByProject,
+                $enrollmentRows
             ) {
                 $project = $participation->project;
-                $moduleKeys = $this->projectModuleKeys($project?->type, $project?->name, $project?->slug);
+                $moduleKeys = ProjectSpecialModuleCatalog::moduleKeys($project?->type, $project?->name, $project?->slug);
                 $projectRewardTiers = ($rewardTiersByProject->get($project->id) ?? collect())
                     ->concat($rewardTiersByProject->get(0) ?? collect())
                     ->values();
@@ -352,35 +357,187 @@ class StudentDashboardController extends Controller
                             )->count(),
                         ]
                         : null,
+                    'kademe_modules' => in_array('participants_by_module', $moduleKeys, true)
+                        ? ($modulesByProject->get($project->id) ?? collect())->map(function (ProjectModule $module) use ($enrollmentRows) {
+                            $enrollment = $enrollmentRows->get($module->id);
+
+                            return [
+                                'id' => $module->id,
+                                'title' => $module->title,
+                                'description' => $module->description,
+                                'outcomes' => $module->outcomes ?? [],
+                                'instructors' => $module->instructors ?? [],
+                                'faq_items' => $module->faq_items ?? [],
+                                'warning_text' => $module->warning_text,
+                                'requires_consent' => (bool) $module->requires_consent,
+                                'consent_checkbox_label' => $module->consent_checkbox_label,
+                                'application_open' => (bool) $module->application_open,
+                                'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
+                                'enrollment' => $enrollment ? [
+                                    'id' => $enrollment->id,
+                                    'status' => $enrollment->status,
+                                    'consented_at' => optional($enrollment->consented_at)?->toIso8601String(),
+                                    'reviewed_at' => optional($enrollment->reviewed_at)?->toIso8601String(),
+                                    'note' => $enrollment->note,
+                                ] : null,
+                            ];
+                        })->values()
+                        : [],
                 ];
             })->values(),
         ]);
     }
 
-    private function projectModuleKeys(?string $type, ?string $name, ?string $slug): array
+    public function enrollKademeModule(Request $request, int $projectId, int $moduleId): JsonResponse
     {
-        $text = mb_strtolower(trim(implode(' ', array_filter([$type, $name, $slug]))));
+        $user = $request->user();
+        $project = Project::query()->findOrFail($projectId);
+        abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 404);
 
-        if (str_contains($text, 'diplomasi')) {
-            return ['digital_bohca', 'internships', 'uploaded_files'];
+        $module = ProjectModule::query()
+            ->where('project_id', $projectId)
+            ->where('id', $moduleId)
+            ->firstOrFail();
+
+        abort_unless($module->is_active && $module->application_open, 422, 'Bu modul icin basvuru su an kapali.');
+
+        $participant = $this->participationQueryFor($user)
+            ->where('project_id', $projectId)
+            ->first();
+
+        abort_unless($participant !== null, 403, 'Bu projenin katilimcisi degilsiniz.');
+
+        if (ProjectModuleEnrollment::query()->where('project_module_id', $module->id)->where('user_id', $user->id)->exists()) {
+            throw ValidationException::withMessages(['module' => 'Bu modul icin zaten kayit bulunuyor.']);
         }
 
-        if (str_contains($text, 'pergel')) {
-            return ['digital_bohca', 'mentors', 'assignments'];
+        if ($module->requires_consent) {
+            $request->validate([
+                'accepted_terms' => 'required|accepted',
+            ]);
         }
 
-        if (str_contains($text, 'kpd') || str_contains($text, 'psikolojik')) {
-            return ['digital_bohca', 'kpd_appointments', 'kpd_reports'];
+        $status = $module->requires_coordinator_approval ? 'pending' : 'approved';
+
+        $enrollment = ProjectModuleEnrollment::query()->create([
+            'project_module_id' => $module->id,
+            'user_id' => $user->id,
+            'participant_id' => $participant->id,
+            'status' => $status,
+            'consented_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => $status === 'approved'
+                ? 'Modul kaydiniz olusturuldu.'
+                : 'Basvurunuz koordinator onayina iletildi.',
+            'enrollment' => [
+                'id' => $enrollment->id,
+                'status' => $enrollment->status,
+                'consented_at' => optional($enrollment->consented_at)?->toIso8601String(),
+            ],
+        ], 201);
+    }
+
+    public function badgeLeaderboard(Request $request, int $projectId): JsonResponse
+    {
+        $user = $request->user();
+        $project = Project::query()->findOrFail($projectId);
+        abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 404);
+
+        $viewerParticipant = $this->participationQueryFor($user)
+            ->where('project_id', $projectId)
+            ->first();
+
+        abort_unless($viewerParticipant !== null, 403, 'Bu siralamayi gorme yetkiniz yok.');
+
+        $projectScope = Collection::make([$projectId]);
+
+        $participants = Participant::query()
+            ->where('project_id', $projectId)
+            ->where('status', 'active')
+            ->with(['user:id,name,surname,profile_photo_path,university,department'])
+            ->get();
+
+        $rows = $participants
+            ->filter(fn (Participant $p) => $p->user !== null)
+            ->map(function (Participant $p) use ($projectScope) {
+                $u = $p->user;
+                $badgeCount = $this->kademePlusBadgeBaseQuery($u, $projectScope)->count();
+
+                return [
+                    'user_id' => $u->id,
+                    'display_name' => trim(($u->name ?? '').' '.($u->surname ?? '')),
+                    'university' => $u->university,
+                    'department' => $u->department,
+                    'profile_photo_path' => $u->profile_photo_path,
+                    'badge_count' => $badgeCount,
+                    'profile_badge_frame' => $this->resolveProfileBadgeFrame($u, $projectScope),
+                ];
+            })
+            ->sort(function (array $a, array $b) {
+                if ($a['badge_count'] === $b['badge_count']) {
+                    return strcmp($a['display_name'], $b['display_name']);
+                }
+
+                return $b['badge_count'] <=> $a['badge_count'];
+            })
+            ->values();
+
+        $ranked = $rows->map(function (array $row, int $index) {
+            return array_merge($row, ['rank' => $index + 1]);
+        });
+
+        return response()->json([
+            'leaderboard' => $ranked->take(50)->values()->all(),
+            'me' => $ranked->firstWhere('user_id', $user->id),
+        ]);
+    }
+
+    private function kademePlusProjectIdsFromParticipations(Collection $participations): Collection
+    {
+        return $participations
+            ->filter(fn (Participant $participation) => $participation->project !== null)
+            ->filter(fn (Participant $participation) => $participation->project && ProjectSpecialModuleCatalog::usesKademePlusStyleBadges($participation->project))
+            ->pluck('project_id')
+            ->unique()
+            ->values();
+    }
+
+    private function kademePlusBadgeBaseQuery(User $user, Collection $kademePlusProjectIds)
+    {
+        return $user->badges()
+            ->when(
+                $kademePlusProjectIds->isNotEmpty(),
+                fn ($query) => $query->where(function ($inner) use ($kademePlusProjectIds) {
+                    $inner->whereNull('badges.project_id')->orWhereIn('badges.project_id', $kademePlusProjectIds->all());
+                }),
+                fn ($query) => $query->whereNull('badges.project_id')
+            );
+    }
+
+    private function resolveProfileBadgeFrame(User $user, Collection $kademePlusProjectIds): ?string
+    {
+        $candidates = $this->kademePlusBadgeBaseQuery($user, $kademePlusProjectIds)
+            ->whereNotNull('badges.frame_style')
+            ->get();
+
+        if ($candidates->isEmpty()) {
+            return null;
         }
 
-        if (str_contains($text, 'kademe_plus') || str_contains($text, 'kademe plus') || str_contains($text, 'kademe+')) {
-            return ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'];
-        }
+        $sorted = $candidates->sortByDesc(fn (Badge $badge) => $this->badgeTierWeight($badge->tier));
 
-        if (str_contains($text, 'eurodesk')) {
-            return ['digital_bohca', 'eurodesk_projects'];
-        }
+        return $sorted->first()?->frame_style;
+    }
 
-        return ['digital_bohca'];
+    private function badgeTierWeight(?string $tier): int
+    {
+        return match ($tier) {
+            'platinum' => 4,
+            'gold' => 3,
+            'silver' => 2,
+            default => 1,
+        };
     }
 }

@@ -8,9 +8,9 @@ use App\Http\Resources\RequestResource;
 use App\Models\Project;
 use App\Models\Request as WorkflowRequest;
 use App\Models\User;
+use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
-use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -21,8 +21,7 @@ class RequestController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private const REQUEST_TYPES = [
         'vehicle',
@@ -89,11 +88,11 @@ class RequestController extends Controller
         }
 
         $extension = pathinfo($workflowRequest->response_file_path, PATHINFO_EXTENSION);
-        $filename = 'talep_yanit_' . $workflowRequest->id;
+        $filename = 'talep_yanit_'.$workflowRequest->id;
 
         return MediaStorage::disk()->download(
             $workflowRequest->response_file_path,
-            $filename . ($extension ? ".{$extension}" : '')
+            $filename.($extension ? ".{$extension}" : '')
         );
     }
 
@@ -239,8 +238,8 @@ class RequestController extends Controller
             $workflowRequest->type,
             $workflowRequest->target_unit ?? '-',
             $workflowRequest->status,
-            $workflowRequest->requester ? trim($workflowRequest->requester->name . ' ' . $workflowRequest->requester->surname) : '-',
-            $workflowRequest->targetUser ? trim($workflowRequest->targetUser->name . ' ' . $workflowRequest->targetUser->surname) : '-',
+            $workflowRequest->requester ? trim($workflowRequest->requester->name.' '.$workflowRequest->requester->surname) : '-',
+            $workflowRequest->targetUser ? trim($workflowRequest->targetUser->name.' '.$workflowRequest->targetUser->surname) : '-',
             $workflowRequest->project?->name ?? '-',
             $workflowRequest->description,
             $workflowRequest->created_at?->format('d.m.Y H:i') ?? '-',
@@ -248,7 +247,7 @@ class RequestController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'talepler_' . now()->format('Ymd_His'),
+            'talepler_'.now()->format('Ymd_His'),
             'Talep Kayitlari',
             $headings,
             $rows,
@@ -259,8 +258,8 @@ class RequestController extends Controller
     {
         $this->abortUnlessAllowed($request, 'requests.create');
         $validated = $request->validate([
-            'type' => 'required|in:' . implode(',', self::REQUEST_TYPES),
-            'target_unit' => 'nullable|in:' . implode(',', self::TARGET_UNITS),
+            'type' => 'required|in:'.implode(',', self::REQUEST_TYPES),
+            'target_unit' => 'nullable|in:'.implode(',', self::TARGET_UNITS),
             'target_user_id' => 'nullable|exists:users,id',
             'description' => 'required|string|min:10|max:3000',
             'project_id' => 'nullable|exists:projects,id',
@@ -312,7 +311,7 @@ class RequestController extends Controller
     {
         $this->abortUnlessAllowed($request, 'requests.update_status');
         $validated = $request->validate([
-            'status' => 'required|in:' . implode(',', self::STATUS_OPTIONS),
+            'status' => 'required|in:'.implode(',', self::STATUS_OPTIONS),
         ]);
 
         $workflowRequest = WorkflowRequest::query()
@@ -329,8 +328,20 @@ class RequestController extends Controller
             ], 403);
         }
 
+        $before = [
+            'status' => $workflowRequest->status,
+        ];
         $workflowRequest->update([
             'status' => $validated['status'],
+        ]);
+        $request->attributes->set('audit.subject', $workflowRequest);
+        $request->attributes->set('audit.event', 'requests.status.updated');
+        $request->attributes->set('audit.description', 'requests.status.updated');
+        $request->attributes->set('audit.attribute_changes', [
+            'before' => $before,
+            'after' => [
+                'status' => $validated['status'],
+            ],
         ]);
 
         return response()->json([
@@ -365,6 +376,7 @@ class RequestController extends Controller
         }
 
         $oldPath = $workflowRequest->response_file_path;
+        $oldStatus = $workflowRequest->status;
         $path = MediaStorage::putFile('requests/responses', $request->file('response_file'));
 
         $workflowRequest->update([
@@ -375,6 +387,19 @@ class RequestController extends Controller
         if ($oldPath && $oldPath !== $path) {
             MediaStorage::delete($oldPath);
         }
+        $request->attributes->set('audit.subject', $workflowRequest);
+        $request->attributes->set('audit.event', 'requests.response_file.uploaded');
+        $request->attributes->set('audit.description', 'requests.response_file.uploaded');
+        $request->attributes->set('audit.attribute_changes', [
+            'before' => [
+                'status' => $oldStatus,
+                'response_file_path' => $oldPath,
+            ],
+            'after' => [
+                'status' => 'completed',
+                'response_file_path' => $path,
+            ],
+        ]);
 
         return response()->json([
             'message' => 'Dosya basariyla yuklendi ve talep tamamlandi.',
@@ -396,6 +421,16 @@ class RequestController extends Controller
             || $this->canManageRequest($request->user(), $workflowRequest, 'requests.update_status');
 
         abort_unless($canView, 403, 'Bu talep dosyasini indirme yetkiniz yok.');
+        $request->attributes->set('audit.subject', $workflowRequest);
+        $request->attributes->set('audit.event', 'requests.response_file.downloaded');
+        $request->attributes->set('audit.description', 'requests.response_file.downloaded');
+        $request->attributes->set('audit.properties', [
+            'operation' => 'request_response_file_download',
+            'request_id' => $workflowRequest->id,
+            'response_file_path' => $workflowRequest->response_file_path,
+            'request_status' => $workflowRequest->status,
+            'project_id' => $workflowRequest->project_id,
+        ]);
 
         return $this->streamResponseFile($workflowRequest);
     }

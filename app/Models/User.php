@@ -3,20 +3,20 @@
 namespace App\Models;
 
 use App\Services\NotificationService;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements CanResetPasswordContract
 {
     use CanResetPassword;
-    use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -153,6 +153,11 @@ class User extends Authenticatable implements CanResetPasswordContract
         return $this->hasMany(UserPermissionOverride::class);
     }
 
+    public function kvkkForgetRequests()
+    {
+        return $this->hasMany(KvkkForgetRequest::class);
+    }
+
     /**
      * Laravel Password broker token + Resend uzerinden sifre belirleme baglantisi.
      */
@@ -169,8 +174,8 @@ class User extends Authenticatable implements CanResetPasswordContract
             }
         }
 
-        $resetUrl = $frontend . '/auth/reset-password?token=' . urlencode($token) . '&email=' . urlencode($this->email);
-        $loginUrl = $frontend . '/auth/login';
+        $resetUrl = $frontend.'/auth/reset-password?token='.urlencode($token).'&email='.urlencode($this->email);
+        $loginUrl = $frontend.'/auth/login';
 
         $body = implode("\n", [
             "Merhaba {$this->name} {$this->surname},",
