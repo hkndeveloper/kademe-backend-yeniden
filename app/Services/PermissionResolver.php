@@ -306,7 +306,6 @@ class PermissionResolver
                 'support.',
                 'requests.',
                 'announcements.',
-                'content.',
                 'certificates.',
                 'digital_bohca.',
                 'assignments.',
@@ -327,7 +326,7 @@ class PermissionResolver
         }
 
         if ($user->role === 'staff') {
-            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'content.', 'certificates.', 'digital_bohca.', 'assignments.', 'kpd.'])) {
+            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'certificates.', 'digital_bohca.', 'assignments.', 'kpd.'])) {
                 return [
                     'scope_type' => 'assigned_projects',
                     'scope_payload' => ['project_ids' => $manageableProjectIds],

@@ -57,7 +57,7 @@ class AttendanceController extends Controller
                 'requires_feedback' => true,
                 'program_id' => $pendingFeedbackProgram->id,
                 'program_title' => $pendingFeedbackProgram->title,
-                'redirect_to' => '/student/feedback',
+                'redirect_to' => '/student/evaluate',
             ], 423);
         }
 

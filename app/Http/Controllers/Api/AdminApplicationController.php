@@ -77,21 +77,31 @@ class AdminApplicationController extends Controller
 
     private function assertProjectHasSeatFor(Application $application): void
     {
-        $quota = $application->project?->quota;
+        $quota = $application->program?->application_quota ?? $application->project?->quota;
         if ($quota === null || (int) $quota <= 0) {
             return;
         }
 
-        $activeParticipantCount = Participant::query()
-            ->where('project_id', $application->project_id)
-            ->where('period_id', $application->period_id)
-            ->where('status', 'active')
-            ->where('user_id', '!=', $application->user_id)
-            ->count();
+        if ($application->program?->application_quota !== null) {
+            $acceptedCount = Application::query()
+                ->where('project_id', $application->project_id)
+                ->where('period_id', $application->period_id)
+                ->where('program_id', $application->program_id)
+                ->where('status', 'accepted')
+                ->where('user_id', '!=', $application->user_id)
+                ->count();
+        } else {
+            $acceptedCount = Participant::query()
+                ->where('project_id', $application->project_id)
+                ->where('period_id', $application->period_id)
+                ->where('status', 'active')
+                ->where('user_id', '!=', $application->user_id)
+                ->count();
+        }
 
-        if ($activeParticipantCount >= (int) $quota) {
+        if ($acceptedCount >= (int) $quota) {
             throw ValidationException::withMessages([
-                'status' => ['Proje kontenjani dolu. Basvuruyu kabul etmeden once kontenjan acin veya yedek listede birakin.'],
+                'status' => ['Kontenjan dolu. Basvuruyu kabul etmeden once kontenjan acin veya yedek listede birakin.'],
             ]);
         }
     }
@@ -139,8 +149,12 @@ class AdminApplicationController extends Controller
             'id' => $application->id,
             'user' => $application->user,
             'period' => $application->period,
+            'program' => $application->program,
             'project' => $application->project,
             'status' => $application->status,
+            'waitlist_order' => $application->waitlist_order,
+            'waitlist_invited_at' => optional($application->waitlist_invited_at)?->toISOString(),
+            'waitlist_invitation_expires_at' => optional($application->waitlist_invitation_expires_at)?->toISOString(),
             'created_at' => optional($application->created_at)?->toISOString(),
             'interview_at' => optional($application->interview_at)?->toISOString(),
             'evaluation_note' => $application->evaluation_note,
@@ -172,7 +186,7 @@ class AdminApplicationController extends Controller
     {
         $this->abortUnlessAllowed($request, 'applications.export');
 
-        $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview']);
+        $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
         $query->whereIn('project_id', $this->manageableProjectIdList($request, 'applications.export'));
 
         if ($request->filled('project_id')) {
@@ -195,16 +209,18 @@ class AdminApplicationController extends Controller
 
         $applications = $query->orderByDesc('created_at')->get();
 
-        $headings = ['ID', 'Proje', 'Donem', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Degerlendirme Notu', 'Ret Nedeni', 'Basvuru Tarihi'];
+        $headings = ['ID', 'Proje', 'Donem', 'Program', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Yedek Sira', 'Degerlendirme Notu', 'Ret Nedeni', 'Basvuru Tarihi'];
         $rows = $applications->map(fn (Application $application) => [
             $application->id,
             $application->project->name ?? '-',
             $application->period->name ?? '-',
+            $application->program->title ?? '-',
             $application->user->name ?? '-',
             $application->user->surname ?? '-',
             $application->user->email ?? '-',
             $application->user->phone ?? '-',
             $application->status,
+            $application->waitlist_order ?? '-',
             $application->evaluation_note ?? '-',
             $application->rejection_reason ?? '-',
             $application->created_at?->format('d.m.Y H:i') ?? '-',
@@ -226,7 +242,7 @@ class AdminApplicationController extends Controller
         $projectIds = $this->manageableProjectIdList($request, 'applications.view');
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview'])
+            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview'])
             ->whereIn('project_id', $projectIds);
 
         if ($request->filled('project_id')) {
@@ -259,7 +275,7 @@ class AdminApplicationController extends Controller
         $projectIds = $this->manageableProjectIdList($request, 'applications.export');
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview'])
+            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview'])
             ->whereIn('project_id', $projectIds);
 
         if ($request->filled('project_id')) {
@@ -282,16 +298,18 @@ class AdminApplicationController extends Controller
 
         $applications = $query->orderByDesc('created_at')->get();
 
-        $headings = ['ID', 'Proje', 'Donem', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Basvuru Tarihi'];
+        $headings = ['ID', 'Proje', 'Donem', 'Program', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Yedek Sira', 'Basvuru Tarihi'];
         $rows = $applications->map(fn (Application $application) => [
             $application->id,
             $application->project->name ?? '-',
             $application->period->name ?? '-',
+            $application->program->title ?? '-',
             $application->user->name ?? '-',
             $application->user->surname ?? '-',
             $application->user->email ?? '-',
             $application->user->phone ?? '-',
             $application->status,
+            $application->waitlist_order ?? '-',
             $application->created_at?->format('d.m.Y H:i') ?? '-',
         ])->all();
 
@@ -334,7 +352,7 @@ class AdminApplicationController extends Controller
 
         $query = Application::query()
             ->whereIn('project_id', $ids)
-            ->with(['user:id,name,surname,email,phone', 'period', 'project:id,name,has_interview', 'form:id,fields']);
+            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview', 'form:id,fields']);
 
         if (! empty($validated['project_id'])) {
             abort_unless(in_array((int) $validated['project_id'], $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
@@ -418,7 +436,7 @@ class AdminApplicationController extends Controller
             'evaluation_note' => 'nullable|string',
         ]);
 
-        $application = Application::with(['period', 'project:id,name,has_interview,quota'])->findOrFail($id);
+        $application = Application::with(['period', 'program:id,title,application_quota', 'project:id,name,has_interview,quota'])->findOrFail($id);
 
         $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
@@ -573,6 +591,7 @@ class AdminApplicationController extends Controller
 
         $application->update([
             'status' => 'waitlisted',
+            'waitlist_order' => $application->waitlist_order ?: $this->nextWaitlistOrder($application),
             'evaluation_note' => $request->evaluation_note ?? $application->evaluation_note,
         ]);
 
@@ -588,5 +607,74 @@ class AdminApplicationController extends Controller
             'message' => 'Başvuru yedeğe alındı.',
             'application' => $application,
         ]);
+    }
+
+    public function updateWaitlistOrder(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
+        $validated = $request->validate([
+            'waitlist_order' => 'required|integer|min:1',
+        ]);
+
+        $application = Application::query()->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.waitlist.manage', (int) $application->project_id),
+            403,
+            'Bu basvuru icin yetkiniz bulunmuyor.'
+        );
+        abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular siralanabilir.');
+
+        $application->update(['waitlist_order' => (int) $validated['waitlist_order']]);
+
+        return response()->json([
+            'message' => 'Yedek liste sirasi guncellendi.',
+            'application' => $application->fresh(['user:id,name,surname,email', 'project:id,name', 'period:id,name', 'program:id,title']),
+        ]);
+    }
+
+    public function inviteFromWaitlist(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
+        $validated = $request->validate([
+            'expires_at' => 'nullable|date|after:now',
+        ]);
+
+        $application = Application::with(['user:id,email', 'project:id,name'])->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.waitlist.manage', (int) $application->project_id),
+            403,
+            'Bu basvuru icin yetkiniz bulunmuyor.'
+        );
+        abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular davet edilebilir.');
+
+        $expiresAt = $validated['expires_at'] ?? now()->addDays(3);
+        $application->update([
+            'waitlist_invited_at' => now(),
+            'waitlist_invitation_expires_at' => $expiresAt,
+        ]);
+
+        $this->notifyApplicationUser(
+            $application,
+            'Yedek listeden davet edildiniz',
+            "Proje: " . ($application->project?->name ?? '-') . "\nYedek listeden davet edildiniz. Son yanit tarihi: {$expiresAt}",
+            $request->user()->id
+        );
+
+        return response()->json([
+            'message' => 'Yedek liste daveti gonderildi.',
+            'application' => $application->fresh(),
+        ]);
+    }
+
+    private function nextWaitlistOrder(Application $application): int
+    {
+        $max = Application::query()
+            ->where('project_id', $application->project_id)
+            ->where('period_id', $application->period_id)
+            ->when($application->program_id, fn ($query) => $query->where('program_id', $application->program_id), fn ($query) => $query->whereNull('program_id'))
+            ->where('status', 'waitlisted')
+            ->max('waitlist_order');
+
+        return ((int) $max) + 1;
     }
 }

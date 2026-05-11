@@ -132,6 +132,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::put('/applications/{id}/status', [\App\Http\Controllers\Api\AdminApplicationController::class, 'updateStatus']);
     Route::put('/applications/{id}/interview', [\App\Http\Controllers\Api\AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [\App\Http\Controllers\Api\AdminApplicationController::class, 'addToWaitlist']);
+    Route::put('/applications/{id}/waitlist-order', [\App\Http\Controllers\Api\AdminApplicationController::class, 'updateWaitlistOrder']);
+    Route::post('/applications/{id}/waitlist-invite', [\App\Http\Controllers\Api\AdminApplicationController::class, 'inviteFromWaitlist']);
 
     // Etkinlik (Program) ve QR YÃ¶netimi
     Route::get('/programs', [\App\Http\Controllers\Api\AdminProgramController::class, 'index']);
@@ -294,6 +296,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::put('/applications/{id}/status', [\App\Http\Controllers\Api\AdminApplicationController::class, 'updateStatus']);
     Route::put('/applications/{id}/interview', [\App\Http\Controllers\Api\AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [\App\Http\Controllers\Api\AdminApplicationController::class, 'addToWaitlist']);
+    Route::put('/applications/{id}/waitlist-order', [\App\Http\Controllers\Api\AdminApplicationController::class, 'updateWaitlistOrder']);
+    Route::post('/applications/{id}/waitlist-invite', [\App\Http\Controllers\Api\AdminApplicationController::class, 'inviteFromWaitlist']);
 
     Route::get('/volunteer/opportunities', [\App\Http\Controllers\Api\VolunteerController::class, 'panelIndex']);
     Route::get('/volunteer/opportunities/export', [\App\Http\Controllers\Api\VolunteerController::class, 'panelExport']);

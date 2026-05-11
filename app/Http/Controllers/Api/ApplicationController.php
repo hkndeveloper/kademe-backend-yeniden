@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Models\ApplicationForm;
 use App\Models\Participant;
 use App\Models\Period;
+use App\Models\Program;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\NotificationService;
@@ -74,19 +75,29 @@ class ApplicationController extends Controller
         }
     }
 
-    private function projectPeriodHasAvailableSeat(Project $project, Period $period): bool
+    private function projectPeriodHasAvailableSeat(Project $project, Period $period, ?Program $program = null): bool
     {
-        if ($project->quota === null || (int) $project->quota <= 0) {
+        $quota = $program?->application_quota ?? $project->quota;
+        if ($quota === null || (int) $quota <= 0) {
             return true;
         }
 
-        $activeParticipantCount = Participant::query()
-            ->where('project_id', $project->id)
-            ->where('period_id', $period->id)
-            ->where('status', 'active')
-            ->count();
+        if ($program?->application_quota !== null) {
+            $acceptedCount = Application::query()
+                ->where('project_id', $project->id)
+                ->where('period_id', $period->id)
+                ->where('program_id', $program->id)
+                ->where('status', 'accepted')
+                ->count();
+        } else {
+            $acceptedCount = Participant::query()
+                ->where('project_id', $project->id)
+                ->where('period_id', $period->id)
+                ->where('status', 'active')
+                ->count();
+        }
 
-        return $activeParticipantCount < (int) $project->quota;
+        return $acceptedCount < (int) $quota;
     }
 
     private function fileMetadata(string $path, \Illuminate\Http\UploadedFile $file): array
@@ -100,7 +111,7 @@ class ApplicationController extends Controller
         ];
     }
 
-    private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false): Application
+    private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false, ?int $programId = null): Application
     {
         $this->ensureSingleProjectRule($user, $project);
         $this->ensureUserCanApply($user);
@@ -115,9 +126,26 @@ class ApplicationController extends Controller
             ]);
         }
 
+        $program = null;
+        if ($programId !== null) {
+            $program = Program::query()
+                ->where('id', $programId)
+                ->where('project_id', $project->id)
+                ->where('period_id', $currentPeriod->id)
+                ->whereIn('status', ['scheduled', 'active'])
+                ->first();
+
+            if (! $program) {
+                throw ValidationException::withMessages([
+                    'program_id' => ['Secilen program bu proje/donem icin basvuruya uygun degil.'],
+                ]);
+            }
+        }
+
         $existingApp = Application::where('user_id', $user->id)
             ->where('project_id', $project->id)
             ->where('period_id', $currentPeriod->id)
+            ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
             ->first();
 
         if ($existingApp) {
@@ -126,7 +154,7 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $form = $this->activeFormForPeriod($project, $currentPeriod);
+        $form = $this->activeFormForPeriod($project, $currentPeriod, $program);
 
         if ($form?->require_consent && ! $consentAccepted) {
             throw ValidationException::withMessages([
@@ -135,21 +163,36 @@ class ApplicationController extends Controller
         }
 
         $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
-        $initialStatus = $this->projectPeriodHasAvailableSeat($project, $currentPeriod) ? 'pending' : 'waitlisted';
+        $autoRejectReason = $this->autoRejectReason($form, $normalizedFormData, $user);
+        $initialStatus = $autoRejectReason
+            ? 'rejected'
+            : ($this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program) ? 'pending' : 'waitlisted');
+        $waitlistOrder = $initialStatus === 'waitlisted'
+            ? $this->nextWaitlistOrder($project, $currentPeriod, $program)
+            : null;
 
         $application = Application::create([
             'user_id' => $user->id,
             'project_id' => $project->id,
             'period_id' => $currentPeriod->id,
+            'program_id' => $program?->id,
             'application_form_id' => $form?->id,
             'form_data' => $normalizedFormData,
             'status' => $initialStatus,
+            'waitlist_order' => $waitlistOrder,
+            'auto_rejected' => (bool) $autoRejectReason,
+            'auto_rejection_reason' => $autoRejectReason,
+            'rejection_reason' => $autoRejectReason,
         ]);
 
         $this->notificationService->sendEmail(
             array_filter([$user->email]),
             'Basvurunuz alindi',
-            "Proje: {$project->name}\nBasvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz." . ($initialStatus === 'waitlisted' ? "\nKontenjan dolu oldugu icin basvurunuz yedek listeye alindi." : ''),
+            "Proje: {$project->name}\n" .
+            ($program ? "Program: {$program->title}\n" : '') .
+            ($autoRejectReason
+                ? "Basvurunuz otomatik degerlendirme kurali nedeniyle reddedildi: {$autoRejectReason}"
+                : "Basvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz." . ($initialStatus === 'waitlisted' ? "\nKontenjan dolu oldugu icin basvurunuz yedek listeye alindi." : '')),
             $project->id,
             $user->id
         );
@@ -174,8 +217,20 @@ class ApplicationController extends Controller
         return $application;
     }
 
-    private function activeFormForPeriod(Project $project, ?Period $period): ?ApplicationForm
+    private function activeFormForPeriod(Project $project, ?Period $period, ?Program $program = null): ?ApplicationForm
     {
+        if ($program) {
+            $programForm = ApplicationForm::where('project_id', $project->id)
+                ->where('program_id', $program->id)
+                ->where('is_active', true)
+                ->latest()
+                ->first();
+
+            if ($programForm) {
+                return $programForm;
+            }
+        }
+
         if ($period) {
             $periodForm = ApplicationForm::where('project_id', $project->id)
                 ->where('period_id', $period->id)
@@ -231,7 +286,11 @@ class ApplicationController extends Controller
             'id' => $application->id,
             'project' => $application->project,
             'period' => $application->period,
+            'program' => $application->program,
             'status' => $application->status,
+            'waitlist_order' => $application->waitlist_order,
+            'waitlist_invited_at' => optional($application->waitlist_invited_at)?->toISOString(),
+            'waitlist_invitation_expires_at' => optional($application->waitlist_invitation_expires_at)?->toISOString(),
             'created_at' => optional($application->created_at)?->toISOString(),
             'interview_at' => optional($application->interview_at)?->toISOString(),
             'rejection_reason' => $application->rejection_reason,
@@ -247,7 +306,7 @@ class ApplicationController extends Controller
     public function myApplications(Request $request)
     {
         $applications = Application::where('user_id', $request->user()->id)
-            ->with(['project', 'period', 'form:id,fields'])
+            ->with(['project', 'period', 'program:id,title,start_at', 'form:id,fields'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(fn (Application $application) => $this->formatStudentApplication($application));
@@ -343,6 +402,50 @@ class ApplicationController extends Controller
         return $normalized;
     }
 
+    private function autoRejectReason(?ApplicationForm $form, array $formData, User $user): ?string
+    {
+        foreach (($form?->auto_reject_rules ?? []) as $rule) {
+            $field = $rule['field'] ?? null;
+            $operator = $rule['operator'] ?? 'equals';
+            if (! is_string($field) || $field === '') {
+                continue;
+            }
+
+            $actual = match ($field) {
+                'email' => $user->email,
+                'phone' => $user->phone,
+                default => $formData[$field] ?? null,
+            };
+            $expected = $rule['value'] ?? null;
+            $matched = match ($operator) {
+                'not_equals' => (string) $actual !== (string) $expected,
+                'in' => is_array($expected) && in_array($actual, $expected, true),
+                'not_in' => is_array($expected) && ! in_array($actual, $expected, true),
+                'empty' => $actual === null || $actual === '' || $actual === [],
+                'not_empty' => ! ($actual === null || $actual === '' || $actual === []),
+                default => (string) $actual === (string) $expected,
+            };
+
+            if ($matched) {
+                return trim((string) ($rule['message'] ?? 'Basvurunuz kriter uyumsuzlugu nedeniyle reddedilmistir.'));
+            }
+        }
+
+        return null;
+    }
+
+    private function nextWaitlistOrder(Project $project, Period $period, ?Program $program = null): int
+    {
+        $max = Application::query()
+            ->where('project_id', $project->id)
+            ->where('period_id', $period->id)
+            ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
+            ->where('status', 'waitlisted')
+            ->max('waitlist_order');
+
+        return ((int) $max) + 1;
+    }
+
     /**
      * Bir projeye yeni basvuru yapma
      */
@@ -350,6 +453,7 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
+            'program_id' => 'nullable|exists:programs,id',
             'form_data' => 'nullable|array',
             'form_files' => 'nullable|array',
             'form_files.*' => 'file|max:20480',
@@ -369,7 +473,8 @@ class ApplicationController extends Controller
             $project,
             $validated['form_data'] ?? [],
             $request->file('form_files', []),
-            (bool) ($validated['consent_accepted'] ?? false)
+            (bool) ($validated['consent_accepted'] ?? false),
+            isset($validated['program_id']) ? (int) $validated['program_id'] : null
         );
 
         return response()->json([
@@ -382,6 +487,7 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
+            'program_id' => 'nullable|exists:programs,id',
             'form_data' => 'nullable|array',
             'form_files' => 'nullable|array',
             'form_files.*' => 'file|max:20480',
@@ -405,7 +511,8 @@ class ApplicationController extends Controller
             $project,
             $validated['form_data'] ?? [],
             $request->file('form_files', []),
-            (bool) ($validated['consent_accepted'] ?? false)
+            (bool) ($validated['consent_accepted'] ?? false),
+            isset($validated['program_id']) ? (int) $validated['program_id'] : null
         );
 
         return response()->json([
@@ -421,7 +528,7 @@ class ApplicationController extends Controller
     {
         $application = Application::where('id', $id)
             ->where('user_id', $request->user()->id)
-            ->with(['project', 'period', 'form:id,fields'])
+            ->with(['project', 'period', 'program:id,title,start_at', 'form:id,fields'])
             ->firstOrFail();
 
         return response()->json([

@@ -12,6 +12,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Support\AdminExportResponder;
 use App\Models\User;
+use App\Services\CreditService;
 use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
@@ -27,7 +28,8 @@ class AdminProgramController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly CreditService $creditService
     ) {
     }
 
@@ -122,7 +124,7 @@ class AdminProgramController extends Controller
         }
 
         $programs = $query->orderByDesc('start_at')->get();
-        $headings = ['ID', 'Proje', 'Donem', 'Baslik', 'Konum', 'Baslangic', 'Bitis', 'Durum', 'Yoklama Capi', 'Kredi Dusumu'];
+        $headings = ['ID', 'Proje', 'Donem', 'Baslik', 'Konum', 'Baslangic', 'Bitis', 'Durum', 'Yoklama Capi', 'Kredi Dusumu', 'Basvuru Kontenjani'];
         $rows = $programs->map(fn (Program $program) => [
             $program->id,
             $program->project?->name ?? '-',
@@ -134,6 +136,7 @@ class AdminProgramController extends Controller
             $program->status ?? '-',
             $program->radius_meters ?? '-',
             $program->credit_deduction ?? '-',
+            $program->application_quota ?? '-',
         ])->all();
 
         return AdminExportResponder::download(
@@ -164,6 +167,7 @@ class AdminProgramController extends Controller
             'start_at' => 'required|date',
             'end_at' => 'required|date|after:start_at',
             'credit_deduction' => 'required|integer|min:0',
+            'application_quota' => 'nullable|integer|min:1',
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
@@ -211,6 +215,7 @@ class AdminProgramController extends Controller
             'start_at' => 'required|date',
             'end_at' => 'required|date|after:start_at',
             'credit_deduction' => 'required|integer|min:0',
+            'application_quota' => 'nullable|integer|min:1',
             'status' => 'required|in:scheduled,active,completed,cancelled',
         ]);
 
@@ -306,30 +311,16 @@ class AdminProgramController extends Controller
                 ->get();
 
             foreach ($participants as $participant) {
-                $alreadyDeducted = CreditLog::query()
-                    ->where('participant_id', $participant->id)
-                    ->where('program_id', $program->id)
-                    ->where('type', 'deduction')
-                    ->exists();
+                $log = $this->creditService->deductOnceForProgram(
+                    $participant,
+                    $program,
+                    $request->user()->id,
+                    'Etkinlik tamamlandi, degerlendirme bekleniyor'
+                );
 
-                if ($alreadyDeducted) {
-                    continue;
+                if ($log !== null) {
+                    $deductedCount++;
                 }
-
-                CreditLog::create([
-                    'participant_id' => $participant->id,
-                    'user_id' => $participant->user_id,
-                    'project_id' => $program->project_id,
-                    'period_id' => $program->period_id,
-                    'program_id' => $program->id,
-                    'amount' => -$creditDeduction,
-                    'type' => 'deduction',
-                    'reason' => 'Etkinlik tamamlandi, degerlendirme bekleniyor',
-                    'created_by' => $request->user()->id,
-                ]);
-
-                $participant->decrement('credit', $creditDeduction);
-                $deductedCount++;
             }
         });
 
@@ -485,7 +476,7 @@ class AdminProgramController extends Controller
                 ]
             );
 
-            $this->syncManualAttendanceCredit(
+            $this->creditService->reconcileCompletedProgramAttendance(
                 $program,
                 $participant,
                 (bool) $validated['is_valid'],
@@ -516,49 +507,6 @@ class AdminProgramController extends Controller
             'message' => $attendance->is_valid ? 'Yoklama katildi olarak isaretlendi.' : 'Yoklama gelmedi olarak isaretlendi.',
             'attendance' => $attendance,
         ]);
-    }
-
-    private function syncManualAttendanceCredit(Program $program, Participant $participant, bool $isValid, int $adminId): void
-    {
-        if ($program->status !== 'completed') {
-            return;
-        }
-
-        $creditDeduction = max((int) ($program->credit_deduction ?? 0), 0);
-        if ($creditDeduction === 0) {
-            return;
-        }
-
-        $currentNet = (int) CreditLog::query()
-            ->where('participant_id', $participant->id)
-            ->where('program_id', $program->id)
-            ->sum('amount');
-        $targetNet = $isValid ? 0 : -$creditDeduction;
-        $delta = $targetNet - $currentNet;
-
-        if ($delta === 0) {
-            return;
-        }
-
-        CreditLog::query()->create([
-            'participant_id' => $participant->id,
-            'user_id' => $participant->user_id,
-            'project_id' => $program->project_id,
-            'period_id' => $program->period_id,
-            'program_id' => $program->id,
-            'amount' => $delta,
-            'type' => $delta > 0 ? 'restore' : 'manual_adjust',
-            'reason' => $isValid
-                ? 'Manuel yoklama katildi olarak duzeltildi'
-                : 'Manuel yoklama gelmedi olarak duzeltildi',
-            'created_by' => $adminId,
-        ]);
-
-        if ($delta > 0) {
-            $participant->increment('credit', $delta);
-        } else {
-            $participant->decrement('credit', abs($delta));
-        }
     }
 
     public function exportAttendanceDetails(Request $request, int $id)

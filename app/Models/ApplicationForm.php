@@ -12,14 +12,17 @@ class ApplicationForm extends Model
     protected $fillable = [
         'project_id',
         'period_id',
+        'program_id',
         'fields',
         'require_consent',
         'consent_text',
+        'auto_reject_rules',
         'is_active',
     ];
 
     protected $casts = [
         'fields' => 'array',
+        'auto_reject_rules' => 'array',
         'require_consent' => 'boolean',
         'is_active' => 'boolean',
     ];
@@ -32,6 +35,11 @@ class ApplicationForm extends Model
     public function period()
     {
         return $this->belongsTo(Period::class);
+    }
+
+    public function program()
+    {
+        return $this->belongsTo(Program::class);
     }
 
     public function applications()

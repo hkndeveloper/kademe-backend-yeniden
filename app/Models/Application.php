@@ -13,9 +13,13 @@ class Application extends Model
         'user_id',
         'project_id',
         'period_id',
+        'program_id',
         'application_form_id',
         'form_data',
         'status',
+        'waitlist_order',
+        'waitlist_invited_at',
+        'waitlist_invitation_expires_at',
         'rejection_reason',
         'interview_at',
         'auto_rejected',
@@ -26,6 +30,8 @@ class Application extends Model
     protected $casts = [
         'form_data' => 'array',
         'interview_at' => 'datetime',
+        'waitlist_invited_at' => 'datetime',
+        'waitlist_invitation_expires_at' => 'datetime',
         'auto_rejected' => 'boolean',
     ];
 
@@ -42,6 +48,11 @@ class Application extends Model
     public function period()
     {
         return $this->belongsTo(Period::class);
+    }
+
+    public function program()
+    {
+        return $this->belongsTo(Program::class);
     }
 
     public function form()

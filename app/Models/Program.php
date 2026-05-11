@@ -23,6 +23,7 @@ class Program extends Model
         'start_at',
         'end_at',
         'credit_deduction',
+        'application_quota',
         'qr_token',
         'qr_expires_at',
         'qr_rotation_seconds',

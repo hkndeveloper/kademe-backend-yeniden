@@ -101,6 +101,34 @@ class AdminDashboardController extends Controller
         $pendingFinancials = (clone $scopeFinancial)->where('status', 'pending')->count();
         $pendingSupport = (clone $scopeSupport)->where('status', 'open')->count();
 
+        $creditRiskQuery = Participant::query()
+            ->with(['user:id,name,surname,email', 'project:id,name,slug', 'period:id,name,credit_threshold'])
+            ->where('status', 'active')
+            ->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['projects'] ?? [-1]))
+            ->whereRaw('credit < COALESCE((SELECT credit_threshold FROM periods WHERE periods.id = participants.period_id), 75)');
+        $creditRiskCount = (clone $creditRiskQuery)->count();
+        $creditRiskParticipants = (clone $creditRiskQuery)
+            ->orderBy('credit')
+            ->take(5)
+            ->get()
+            ->map(fn (Participant $participant) => [
+                'id' => $participant->id,
+                'student' => $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
+                'email' => $participant->user?->email,
+                'project' => $participant->project ? [
+                    'id' => $participant->project->id,
+                    'name' => $participant->project->name,
+                    'slug' => $participant->project->slug,
+                ] : null,
+                'period' => $participant->period ? [
+                    'id' => $participant->period->id,
+                    'name' => $participant->period->name,
+                    'credit_threshold' => (int) $participant->period->credit_threshold,
+                ] : null,
+                'credit' => (int) $participant->credit,
+                'threshold' => (int) ($participant->period?->credit_threshold ?? 75),
+            ]);
+
         $projectsQuery = Project::query()->when(! $isGlobal, fn ($q) => $q->whereIn('id', $projectIdsByPermission['projects'] ?? [-1]));
         $projects = $projectsQuery->withCount([
             'participants as active_participants_count' => fn ($q) => $q->where('status', 'active'),
@@ -159,6 +187,10 @@ class AdminDashboardController extends Controller
                 'applications' => $pendingApplications,
                 'support' => $pendingSupport,
                 'financials' => $pendingFinancials,
+            ],
+            'credit_risk' => [
+                'count' => $creditRiskCount,
+                'participants' => $creditRiskParticipants,
             ],
             'project_occupancy' => $projectOccupancy,
             'sms' => [

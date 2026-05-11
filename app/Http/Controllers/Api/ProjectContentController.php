@@ -31,55 +31,7 @@ class ProjectContentController extends Controller
     public function manageable(Request $request): JsonResponse
     {
         $user = $request->user();
-        $allowedPermissions = [
-            'projects.view',
-            'programs.view',
-            'programs.create',
-            'programs.update',
-            'programs.complete',
-            'programs.qr.manage',
-            'applications.view',
-            'volunteer.view',
-            'volunteer.manage',
-            'financial.view',
-            'financial.create',
-            'financial.update',
-            'financial.delete',
-            'financial.approve',
-            'financial.reject',
-            'financial.mark_paid',
-            'financial.export',
-            'financial.invoice.download',
-            'announcements.create',
-            'announcements.view',
-            'announcements.update',
-            'announcements.delete',
-            'announcements.export',
-            'announcements.send_sms',
-            'announcements.send_email',
-            'projects.content.update',
-            'projects.application_form.update',
-            'periods.view',
-            'periods.create',
-            'periods.update',
-            'periods.export',
-            'digital_bohca.view',
-            'digital_bohca.create',
-            'assignments.view',
-            'assignments.create',
-            'certificates.view',
-            'certificates.create',
-            'certificates.delete',
-            'certificates.export',
-            'projects.internships.view',
-            'projects.internships.manage',
-            'projects.mentors.view',
-            'projects.mentors.manage',
-            'projects.eurodesk.view',
-            'projects.eurodesk.manage',
-            'projects.rewards.view',
-            'projects.rewards.manage',
-        ];
+        $allowedPermissions = $this->manageablePermissionNames();
         $validated = $request->validate([
             'permission' => ['nullable', 'string', Rule::in($allowedPermissions)],
         ]);
@@ -103,6 +55,21 @@ class ProjectContentController extends Controller
         return response()->json([
             'projects' => ProjectResource::collection($query->orderBy('name')->get()),
         ]);
+    }
+
+    private function manageablePermissionNames(): array
+    {
+        $catalog = config('permission_catalog.granular_permissions', []);
+        $permissions = collect($catalog)
+            ->flatten()
+            ->filter(fn ($permission) => is_string($permission) && $permission !== '')
+            ->values()
+            ->all();
+
+        return array_values(array_unique([
+            'projects.view',
+            ...$permissions,
+        ]));
     }
 
     public function exportManageable(Request $request)

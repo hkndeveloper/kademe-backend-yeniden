@@ -22,6 +22,16 @@ class PermissionMatrixController extends Controller
 {
     use AuthorizesGranularPermissions;
 
+    private const VALID_SCOPE_TYPES = [
+        'all',
+        'own_projects',
+        'assigned_projects',
+        'own_unit',
+        'selected_projects',
+        'self',
+        'none',
+    ];
+
     public function __construct(
         private readonly PermissionResolver $permissionResolver
     ) {
@@ -74,6 +84,8 @@ class PermissionMatrixController extends Controller
             'granular_permission_groups' => config('permission_catalog.granular_permissions', []),
             'role_permission_scopes' => $this->groupedRolePermissionScopes(),
             'role_scope_storage_ready' => Schema::hasTable('role_permission_scopes'),
+            'supported_scope_options' => $this->supportedScopeOptions(),
+            'default_role_scopes' => $this->defaultRoleScopes($roles),
         ]);
     }
 
@@ -286,6 +298,14 @@ class PermissionMatrixController extends Controller
 
         foreach ($validated['overrides'] as $override) {
             abort_unless(in_array($override['permission_name'], $allowedPermissions, true), 422, 'Gecersiz permission secildi.');
+            $scopeType = $override['scope_type'] ?? null;
+            if (is_string($scopeType) && $scopeType !== '') {
+                abort_unless(
+                    $this->scopeTypeAllowedForRolePermission($user->role, $override['permission_name'], $scopeType),
+                    422,
+                    "Bu kullanici/izin icin {$scopeType} scope desteklenmiyor: {$override['permission_name']}"
+                );
+            }
         }
 
         $user->permissionOverrides()->delete();
@@ -781,6 +801,11 @@ class PermissionMatrixController extends Controller
                 if (! is_string($scopeType)) {
                     continue;
                 }
+                abort_unless(
+                    $this->scopeTypeAllowedForRolePermission($roleName, $permissionName, $scopeType),
+                    422,
+                    "Bu izin icin {$scopeType} scope desteklenmiyor: {$permissionName}"
+                );
 
                 RolePermissionScope::query()->create([
                     'role_name' => $roleName,
@@ -790,6 +815,180 @@ class PermissionMatrixController extends Controller
                 ]);
             }
         }
+    }
+
+    private function supportedScopeOptions(): array
+    {
+        return collect($this->allGranularPermissionNames())
+            ->mapWithKeys(fn (string $permissionName) => [
+                $permissionName => $this->scopeOptionsForPermission($permissionName),
+            ])
+            ->all();
+    }
+
+    private function defaultRoleScopes($roles): array
+    {
+        $permissionNames = $this->allGranularPermissionNames();
+
+        return $roles
+            ->mapWithKeys(function (Role $role) use ($permissionNames) {
+                return [
+                    $role->name => collect($permissionNames)
+                        ->mapWithKeys(fn (string $permissionName) => [
+                            $permissionName => $this->defaultScopeForRolePermission($role->name, $permissionName),
+                        ])
+                        ->all(),
+                ];
+            })
+            ->all();
+    }
+
+    private function scopeTypeAllowedForRolePermission(string $roleName, string $permissionName, string $scopeType): bool
+    {
+        if (! in_array($scopeType, self::VALID_SCOPE_TYPES, true)) {
+            return false;
+        }
+
+        if ($roleName === 'super_admin') {
+            return $scopeType === 'all';
+        }
+
+        if (in_array($roleName, ['student', 'alumni'], true)) {
+            return in_array($scopeType, ['self', 'none'], true);
+        }
+
+        return in_array($scopeType, $this->scopeOptionsForPermission($permissionName), true);
+    }
+
+    private function scopeOptionsForPermission(string $permissionName): array
+    {
+        if ($this->permissionStartsWith($permissionName, [
+            'permissions.',
+            'settings.',
+            'logs.',
+            'newsletter.',
+            'chatbot.',
+            'content.',
+        ])) {
+            return ['all', 'none'];
+        }
+
+        if (in_array($permissionName, [
+            'users.create',
+            'users.delete',
+            'users.assign_role',
+            'calendar.google.connect',
+            'calendar.google.sync',
+        ], true)) {
+            return ['all', 'none'];
+        }
+
+        if ($this->permissionStartsWith($permissionName, ['users.'])) {
+            return ['all', 'own_unit', 'self', 'none'];
+        }
+
+        if ($permissionName === 'staff.leave.request') {
+            return ['all', 'own_unit', 'self', 'none'];
+        }
+
+        if ($this->permissionStartsWith($permissionName, ['staff.'])) {
+            return ['all', 'own_unit', 'none'];
+        }
+
+        if ($this->permissionStartsWith($permissionName, ['dashboard.'])) {
+            return ['all', 'own_projects', 'assigned_projects', 'own_unit', 'none'];
+        }
+
+        return ['all', 'own_projects', 'assigned_projects', 'selected_projects', 'none'];
+    }
+
+    private function defaultScopeForRolePermission(string $roleName, string $permissionName): string
+    {
+        if ($roleName === 'super_admin') {
+            return 'all';
+        }
+
+        if (in_array($roleName, ['student', 'alumni'], true)) {
+            return 'self';
+        }
+
+        $options = $this->scopeOptionsForPermission($permissionName);
+
+        if (
+            $permissionName === 'calendar.view'
+            && in_array($roleName, ['coordinator', 'staff'], true)
+            && in_array('all', $options, true)
+        ) {
+            return 'all';
+        }
+
+        if ($roleName === 'coordinator') {
+            if (
+                $this->permissionStartsWith($permissionName, [
+                    'projects.',
+                    'periods.',
+                    'programs.',
+                    'calendar.',
+                    'applications.',
+                    'volunteer.',
+                    'financial.',
+                    'support.',
+                    'requests.',
+                    'announcements.',
+                    'certificates.',
+                    'digital_bohca.',
+                    'assignments.',
+                    'kpd.',
+                ])
+                && in_array('own_projects', $options, true)
+            ) {
+                return 'own_projects';
+            }
+
+            if ($this->permissionStartsWith($permissionName, ['staff.', 'users.']) && in_array('own_unit', $options, true)) {
+                return 'own_unit';
+            }
+        }
+
+        if ($roleName === 'staff') {
+            if (
+                $this->permissionStartsWith($permissionName, [
+                    'requests.',
+                    'support.',
+                    'applications.',
+                    'volunteer.',
+                    'projects.',
+                    'programs.',
+                    'periods.',
+                    'calendar.',
+                    'announcements.',
+                    'certificates.',
+                    'digital_bohca.',
+                    'assignments.',
+                    'kpd.',
+                ])
+                && in_array('assigned_projects', $options, true)
+            ) {
+                return 'assigned_projects';
+            }
+
+            if ($this->permissionStartsWith($permissionName, ['staff.', 'users.']) && in_array('own_unit', $options, true)) {
+                return 'own_unit';
+            }
+        }
+
+        return in_array('none', $options, true) ? 'none' : $options[0];
+    }
+
+    private function permissionStartsWith(string $permissionName, array $prefixes): bool
+    {
+        foreach ($prefixes as $prefix) {
+            if (Str::startsWith($permissionName, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function sanitizeScopePayload(?string $scopeType, array $scopePayload): array

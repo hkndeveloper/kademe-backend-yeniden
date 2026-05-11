@@ -217,6 +217,27 @@ class PermissionResolverScopeTest extends TestCase
         $this->assertTrue($resolver->canAccessProject($coordinator, 'calendar.view', $otherProject->id));
     }
 
+    public function test_global_content_permissions_do_not_default_to_project_scope(): void
+    {
+        Permission::findOrCreate('content.view', 'web');
+
+        $coordinator = User::factory()->create([
+            'name' => 'Content',
+            'surname' => 'Scope',
+            'email' => 'content-scope@test.local',
+            'role' => 'coordinator',
+        ]);
+        Role::findOrCreate('coordinator', 'web');
+        $coordinator->assignRole('coordinator');
+        $coordinator->givePermissionTo('content.view');
+
+        $coordinator->refresh();
+        $resolver = $this->resolver();
+
+        $this->assertSame('none', $resolver->scopeFor($coordinator, 'content.view')['scope_type']);
+        $this->assertFalse($resolver->hasGlobalScope($coordinator, 'content.view'));
+    }
+
     public function test_own_projects_scope_payload_does_not_override_real_assignments(): void
     {
         Permission::findOrCreate('projects.view', 'web');

@@ -566,6 +566,180 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame(2, CreditLog::query()->where('program_id', $program->id)->where('type', 'deduction')->count());
     }
 
+    public function test_dashboard_stats_reports_credit_risk_participants(): void
+    {
+        $this->actingSuperAdmin();
+
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => 'Risk Donemi',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'credit_start_amount' => 100,
+            'credit_threshold' => 75,
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'name' => 'Risk',
+            'surname' => 'Student',
+            'email' => 'risk-student@test.local',
+            'role' => 'student',
+        ]);
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 70,
+        ]);
+
+        $this->getJson('/api/panel/dashboard/stats')
+            ->assertOk()
+            ->assertJsonPath('credit_risk.count', 1)
+            ->assertJsonPath('credit_risk.participants.0.student', 'Risk Student')
+            ->assertJsonPath('credit_risk.participants.0.credit', 70)
+            ->assertJsonPath('credit_risk.participants.0.threshold', 75);
+    }
+
+    public function test_application_can_target_program_and_auto_reject_by_dynamic_rule(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Application Program Project',
+            'slug' => 'application-program-project',
+            'type' => 'other',
+            'status' => 'active',
+            'application_open' => true,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Program Basvurusu',
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addHour(),
+            'status' => 'scheduled',
+            'created_by' => null,
+        ]);
+        ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'program_id' => $program->id,
+            'fields' => [
+                ['id' => 'department', 'label' => 'Bolum', 'type' => 'text', 'required' => true],
+            ],
+            'auto_reject_rules' => [
+                ['field' => 'department', 'operator' => 'equals', 'value' => 'Uyumsuz', 'message' => 'Bolum uyumsuzlugu nedeniyle reddedildi.'],
+            ],
+            'is_active' => true,
+        ]);
+        $student = User::factory()->create([
+            'surname' => 'AutoReject',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/applications', [
+            'project_id' => $project->id,
+            'program_id' => $program->id,
+            'form_data' => ['department' => 'Uyumsuz'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'rejected')
+            ->assertJsonPath('application.program_id', $program->id)
+            ->assertJsonPath('application.auto_rejected', true);
+
+        $this->assertDatabaseHas('applications', [
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'program_id' => $program->id,
+            'status' => 'rejected',
+            'auto_rejected' => true,
+        ]);
+    }
+
+    public function test_program_waitlist_order_and_invitation_can_be_managed(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = Project::query()->create([
+            'name' => 'Waitlist Project',
+            'slug' => 'waitlist-project',
+            'type' => 'other',
+            'status' => 'active',
+            'application_open' => true,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Kontenjanli Program',
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addHour(),
+            'application_quota' => 1,
+            'status' => 'scheduled',
+            'created_by' => $admin->id,
+        ]);
+        $acceptedUser = User::factory()->create(['surname' => 'Accepted', 'role' => 'student', 'status' => 'active']);
+        Application::query()->create([
+            'user_id' => $acceptedUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'program_id' => $program->id,
+            'status' => 'accepted',
+        ]);
+        $student = User::factory()->create([
+            'surname' => 'Waitlist',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        Sanctum::actingAs($student);
+        $applicationId = $this->postJson('/api/applications', [
+            'project_id' => $project->id,
+            'program_id' => $program->id,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'waitlisted')
+            ->assertJsonPath('application.waitlist_order', 1)
+            ->json('application.id');
+
+        Sanctum::actingAs($admin);
+        $this->putJson("/api/panel/applications/{$applicationId}/waitlist-order", [
+            'waitlist_order' => 3,
+        ])
+            ->assertOk()
+            ->assertJsonPath('application.waitlist_order', 3);
+
+        $this->postJson("/api/panel/applications/{$applicationId}/waitlist-invite")
+            ->assertOk()
+            ->assertJsonPath('message', 'Yedek liste daveti gonderildi.');
+
+        $this->assertDatabaseHas('applications', [
+            'id' => $applicationId,
+            'waitlist_order' => 3,
+        ]);
+        $this->assertNotNull(Application::query()->find($applicationId)?->waitlist_invited_at);
+    }
+
     public function test_program_creation_rejects_overlapping_time_across_projects(): void
     {
         $this->actingSuperAdmin();
@@ -619,6 +793,57 @@ class PanelRegressionFixTest extends TestCase
         $this->assertDatabaseMissing('programs', [
             'project_id' => $secondProject->id,
             'title' => 'Cakisan Program',
+        ]);
+    }
+
+    public function test_program_application_quota_can_be_created_and_updated(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Basvuru',
+            'start_date' => '2026-09-01',
+            'end_date' => '2026-12-31',
+            'status' => 'active',
+        ]);
+
+        $createResponse = $this->postJson('/api/panel/programs', [
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Kontenjanli Program',
+            'location' => 'Salon A',
+            'radius_meters' => 100,
+            'start_at' => '2026-10-11 10:00:00',
+            'end_at' => '2026-10-11 12:00:00',
+            'credit_deduction' => 10,
+            'application_quota' => 24,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('program.application_quota', 24);
+
+        $programId = $createResponse->json('program.id');
+
+        $this->putJson('/api/panel/programs/' . $programId, [
+            'title' => 'Kontenjanli Program',
+            'description' => null,
+            'location' => 'Salon A',
+            'latitude' => null,
+            'longitude' => null,
+            'radius_meters' => 100,
+            'guest_info' => null,
+            'start_at' => '2026-10-11 10:00:00',
+            'end_at' => '2026-10-11 12:00:00',
+            'credit_deduction' => 10,
+            'application_quota' => 30,
+            'status' => 'scheduled',
+        ])
+            ->assertOk()
+            ->assertJsonPath('program.application_quota', 30);
+
+        $this->assertDatabaseHas('programs', [
+            'id' => $programId,
+            'application_quota' => 30,
         ]);
     }
 
@@ -1885,6 +2110,8 @@ class PanelRegressionFixTest extends TestCase
             'role' => 'student',
             'status' => 'active',
             'kvkk_consent_at' => now(),
+            'tc_verified' => true,
+            'yok_verified' => false,
         ]);
         Role::findOrCreate('student', 'web');
         $student->assignRole('student');
@@ -1905,6 +2132,11 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonPath('user.profile.linkedin_url', 'linkedin.com/in/kademe')
             ->assertJsonPath('user.profile.github_url', 'kademe-user');
+
+        $this->getJson('/api/auth/me')
+            ->assertOk()
+            ->assertJsonPath('user.tc_verified', true)
+            ->assertJsonPath('user.yok_verified', false);
     }
 
     public function test_student_project_specials_returns_project_specific_modules(): void
@@ -2032,6 +2264,74 @@ class PanelRegressionFixTest extends TestCase
             'user_id' => $student->id,
             'status' => 'pending',
         ]);
+    }
+
+    public function test_qr_attendance_feedback_block_points_to_existing_evaluate_page(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Bahar',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'surname' => 'Feedback',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'credit' => 90,
+            'status' => 'active',
+        ]);
+
+        $previousProgram = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Onceki Oturum',
+            'start_at' => now()->subDays(2),
+            'end_at' => now()->subDays(2)->addHour(),
+            'credit_deduction' => 10,
+            'radius_meters' => 100,
+            'status' => 'completed',
+            'created_by' => $student->id,
+        ]);
+        Attendance::query()->create([
+            'program_id' => $previousProgram->id,
+            'user_id' => $student->id,
+            'method' => 'qr',
+            'is_valid' => true,
+        ]);
+        $currentProgram = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Yeni Oturum',
+            'start_at' => now()->addHour(),
+            'end_at' => now()->addHours(2),
+            'credit_deduction' => 10,
+            'radius_meters' => 100,
+            'status' => 'active',
+            'qr_token' => 'qr-feedback-block',
+            'qr_expires_at' => now()->addMinutes(5),
+            'created_by' => $student->id,
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/attendances/qr', [
+            'qr_token' => $currentProgram->qr_token,
+        ])
+            ->assertStatus(423)
+            ->assertJsonPath('requires_feedback', true)
+            ->assertJsonPath('program_id', $previousProgram->id)
+            ->assertJsonPath('redirect_to', '/student/evaluate');
     }
 
     public function test_kpd_panel_reports_respect_project_scope_for_coordinators(): void

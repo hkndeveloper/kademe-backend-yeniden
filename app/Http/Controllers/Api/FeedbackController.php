@@ -8,12 +8,18 @@ use App\Models\CreditLog;
 use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
+use App\Services\CreditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class FeedbackController extends Controller
 {
+    public function __construct(
+        private readonly CreditService $creditService
+    ) {
+    }
+
     private function questions(): array
     {
         return [
@@ -170,9 +176,7 @@ class FeedbackController extends Controller
             ], 422);
         }
 
-        $creditAmount = max((int) ($program->credit_deduction ?? 10), 0);
-
-        $savedFeedback = DB::transaction(function () use ($validated, $program, $anonymousToken, $participant, $user, $creditAmount) {
+        $savedFeedback = DB::transaction(function () use ($validated, $program, $anonymousToken, $participant) {
             $created = Feedback::create([
                 'program_id' => $program->id,
                 'anonymous_token' => $anonymousToken,
@@ -180,33 +184,7 @@ class FeedbackController extends Controller
                 'submitted_at' => now(),
             ]);
 
-            $rewardExists = CreditLog::query()
-                ->where('user_id', $user->id)
-                ->where('program_id', $program->id)
-                ->where('type', 'restore')
-                ->exists();
-
-            $deductionExists = CreditLog::query()
-                ->where('participant_id', $participant->id)
-                ->where('user_id', $user->id)
-                ->where('program_id', $program->id)
-                ->where('type', 'deduction')
-                ->exists();
-
-            if (! $rewardExists && $deductionExists && $creditAmount > 0) {
-                CreditLog::create([
-                    'participant_id' => $participant->id,
-                    'user_id' => $user->id,
-                    'project_id' => $program->project_id,
-                    'period_id' => $program->period_id,
-                    'program_id' => $program->id,
-                    'amount' => $creditAmount,
-                    'type' => 'restore',
-                    'reason' => 'Oturum degerlendirmesi tamamlandi',
-                ]);
-
-                $participant->increment('credit', $creditAmount);
-            }
+            $this->creditService->restoreOnceForFeedback($participant, $program);
 
             return $created;
         });
