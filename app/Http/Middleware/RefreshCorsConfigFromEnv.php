@@ -159,6 +159,13 @@ final class RefreshCorsConfigFromEnv
             && $this->isOriginInList($origin, $origins)
             && $this->shouldApplyCorsToPath($request)
         ) {
+            // Laravel CORS middleware (HandleCors) zaten header eklemişse tekrar ekleme.
+            $existingOrigin = $response->headers->has('Access-Control-Allow-Origin')
+                ? trim((string) $response->headers->get('Access-Control-Allow-Origin')) : '';
+            if ($existingOrigin !== '') {
+                return;
+            }
+
             $response->headers->set('Access-Control-Allow-Origin', $origin);
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
             $vary = (string) ($response->headers->get('Vary') ?? '');

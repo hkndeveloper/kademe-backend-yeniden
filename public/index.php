@@ -45,6 +45,12 @@ $response = $kernel->handle($request);
         return;
     }
 
+    // Laravel CORS middleware zaten header eklemişse tekrar ekleme.
+    $existingOrigin = $response->headers->get('Access-Control-Allow-Origin');
+    if (is_string($existingOrigin) && $existingOrigin !== '') {
+        return;
+    }
+
     $allowed = kademe_collect_cors_origins_early();
     if (! kademe_cors_origin_allowed($origin, $allowed)) {
         return;
