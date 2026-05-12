@@ -172,6 +172,19 @@ final class RefreshCorsConfigFromEnv
 
     private function shouldApplyCorsToPath(Request $request): bool
     {
+        // cors.php 'paths' => ['*'] oldugu icin tüm yollara CORS uygulanmali.
+        // HandleCors kaldirildi; bu middleware tamamen sorumluluk aliyor.
+        $configPaths = config('cors.paths', ['*']);
+        if (in_array('*', $configPaths, true)) {
+            return true;
+        }
+
+        // Config daha kisitliysa: request path kontrolu yap.
+        if ($request->is(...$configPaths)) {
+            return true;
+        }
+
+        // Yedek: /api ve /sanctum yollari her zaman CORS kapsaminda.
         $serverUri = (string) ($request->server->get('REQUEST_URI') ?? ($_SERVER['REQUEST_URI'] ?? ''));
         $pathFromServer = parse_url($serverUri, PHP_URL_PATH);
         if (is_string($pathFromServer) && $pathFromServer !== '') {
@@ -185,32 +198,7 @@ final class RefreshCorsConfigFromEnv
             }
         }
 
-        if ($request->is('api', 'api/*', 'sanctum/csrf-cookie', 'sanctum/*')) {
-            return true;
-        }
-
-        $path = trim($request->path(), '/');
-        if ($path === '') {
-            $rawPath = parse_url($request->getRequestUri(), PHP_URL_PATH);
-            $path = trim(is_string($rawPath) ? $rawPath : '', '/');
-        }
-
-        if (str_contains($path, '/')) {
-            $segments = explode('/', $path, 2);
-            if ($segments[0] === 'index.php' && isset($segments[1])) {
-                $path = $segments[1];
-            }
-        }
-
-        if ($path === 'api' || str_starts_with($path, 'api/') || $path === 'sanctum/csrf-cookie') {
-            return true;
-        }
-
-        $rawUriPath = parse_url($request->getRequestUri(), PHP_URL_PATH);
-
-        return is_string($rawUriPath)
-            && (str_contains($rawUriPath, '/api/') || str_ends_with($rawUriPath, '/api')
-                || str_contains($rawUriPath, '/sanctum/'));
+        return $request->is('api', 'api/*', 'sanctum/csrf-cookie', 'sanctum/*');
     }
 
     private function preflightResponse(string $allowedOrigin, Request $request): Response

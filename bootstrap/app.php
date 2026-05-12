@@ -18,6 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Railway / TLS sonlandirma: X-Forwarded-* güvenilir olsun (Host, Scheme, Client IP).
         $middleware->trustProxies(at: '*');
 
+        // Laravel'in yerlesik HandleCors middleware'ini kaldir.
+        // config:cache bosken veya Railway ortaminda env yuklenmediginde HandleCors
+        // CORS basliklarini eklemez/siler; custom middleware ile catisir.
+        $middleware->remove(\Illuminate\Http\Middleware\HandleCors::class);
+
         // Her istekten önce CORS izin listesi + gerekirse preflight cevabı.
         $middleware->prepend(\App\Http\Middleware\RefreshCorsConfigFromEnv::class);
         $middleware->prepend(\App\Http\Middleware\FinalizeApiCorsHeaders::class);
