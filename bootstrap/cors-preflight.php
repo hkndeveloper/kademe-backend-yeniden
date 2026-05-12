@@ -9,13 +9,33 @@ use Illuminate\Http\Request;
  * Middleware zincirine hic gelmeden 204 + CORS basliklari — tarayici blokajini kesin kaldir.
  */
 
+function kademe_read_env_string_early(string $key): ?string
+{
+    if (isset($_ENV[$key]) && is_string($_ENV[$key]) && $_ENV[$key] !== '') {
+        return $_ENV[$key];
+    }
+
+    foreach ($_SERVER as $serverKey => $value) {
+        if (! is_string($value) || $value === '') {
+            continue;
+        }
+        if (strcasecmp((string) $serverKey, $key) === 0) {
+            return $value;
+        }
+    }
+
+    $g = getenv($key);
+
+    return ($g !== false && is_string($g) && $g !== '') ? $g : null;
+}
+
 function kademe_collect_cors_origins_early(): array
 {
     $trim = static fn (string $v): string => trim($v, " \t\n\r\0\x0B\"'");
 
     $origins = [];
 
-    $raw = getenv('CORS_ALLOWED_ORIGINS');
+    $raw = kademe_read_env_string_early('CORS_ALLOWED_ORIGINS');
     if (is_string($raw) && $raw !== '') {
         foreach (explode(',', $raw) as $part) {
             $o = $trim($part);
@@ -25,7 +45,7 @@ function kademe_collect_cors_origins_early(): array
         }
     }
 
-    $frontend = getenv('FRONTEND_URL');
+    $frontend = kademe_read_env_string_early('FRONTEND_URL');
     if (is_string($frontend) && $frontend !== '') {
         $parsed = parse_url($trim($frontend));
         if (is_array($parsed) && isset($parsed['scheme'], $parsed['host'])) {

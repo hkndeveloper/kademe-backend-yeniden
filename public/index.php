@@ -37,6 +37,15 @@ RefreshCorsConfigFromEnv::applyGlobalsFallbackIfMissingCors($request, $response)
 // Son care: HeaderBag bazı ortamlarda edge'e yansimiyorsa PHP header() (curl'da ACAO gorunur).
 kademe_emit_native_cors_if_missing($request, $response);
 
+// prepare(): Symfony'nin nihai Content-Type / charset birlesiminden sonra tekrar CORS (edge).
+$response->prepare($request);
+RefreshCorsConfigFromEnv::applyCorsToResponse($request, $response);
+RefreshCorsConfigFromEnv::applyGlobalsFallbackIfMissingCors($request, $response);
+kademe_emit_native_cors_if_missing($request, $response);
+
+// Deploy / sorun giderme: bu baslik gorunmuyorsa istek bu index.php post-handle blogundan gecmiyordur.
+$response->headers->set('X-Kademe-Cors-Pipeline', 'post-handle');
+
 // JSON govde ama Content-Type text/html ise (php -S / eski cevap) duzelt.
 $ct = (string) ($response->headers->get('Content-Type') ?? '');
 $content = $response->getContent();
