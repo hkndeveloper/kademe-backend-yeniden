@@ -146,6 +146,12 @@ function kademe_emit_native_cors_if_missing(Request $request, \Symfony\Component
     } elseif (! preg_match('/\bOrigin\b/i', $vary)) {
         $response->headers->set('Vary', $vary.', Origin');
     }
+
+    // php artisan serve HeaderBag'i dusurur — native header() ile de gonder.
+    if (! headers_sent()) {
+        header('Access-Control-Allow-Origin: ' . $origin, true);
+        header('Access-Control-Allow-Credentials: true', true);
+    }
 }
 
 function kademe_maybe_exit_options_preflight(): void

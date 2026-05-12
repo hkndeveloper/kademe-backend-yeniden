@@ -30,21 +30,46 @@ $kernel = $app->make(Kernel::class);
 
 $response = $kernel->handle($request);
 
-// CORS: middleware zinciri / edge vakalarinda baslik dusse bile gonderimden hemen once ekle.
-RefreshCorsConfigFromEnv::applyCorsToResponse($request, $response);
-RefreshCorsConfigFromEnv::applyGlobalsFallbackIfMissingCors($request, $response);
+// ──────────────────────────────────────────────────────────────────────
+// CORS HEADER ENJEKSIYONU
+// php artisan serve + Railway ortaminda Symfony HeaderBag bazen header
+// dusurur. Response::send() öncesi PHP native header() ile ekle.
+// ──────────────────────────────────────────────────────────────────────
+(function () use ($request, $response) {
+    $origin = $request->headers->get('Origin');
+    if (! is_string($origin) || trim($origin) === '') {
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    }
+    $origin = is_string($origin) ? rtrim(trim($origin), '/') : '';
+    if ($origin === '') {
+        return;
+    }
 
-// Son care: HeaderBag bazı ortamlarda edge'e yansimiyorsa PHP header() (curl'da ACAO gorunur).
-kademe_emit_native_cors_if_missing($request, $response);
+    $allowed = kademe_collect_cors_origins_early();
+    if (! kademe_cors_origin_allowed($origin, $allowed)) {
+        return;
+    }
 
-// prepare(): Symfony'nin nihai Content-Type / charset birlesiminden sonra tekrar CORS (edge).
-$response->prepare($request);
-RefreshCorsConfigFromEnv::applyCorsToResponse($request, $response);
-RefreshCorsConfigFromEnv::applyGlobalsFallbackIfMissingCors($request, $response);
-kademe_emit_native_cors_if_missing($request, $response);
+    // Response HeaderBag'e ekle (send() bunu kullanacak).
+    $response->headers->set('Access-Control-Allow-Origin', $origin);
+    $response->headers->set('Access-Control-Allow-Credentials', 'true');
+    $vary = (string) ($response->headers->get('Vary') ?? '');
+    if ($vary === '') {
+        $response->headers->set('Vary', 'Origin');
+    } elseif (! preg_match('/\bOrigin\b/i', $vary)) {
+        $response->headers->set('Vary', $vary . ', Origin');
+    }
 
-// Deploy / sorun giderme: bu baslik gorunmuyorsa istek bu index.php post-handle blogundan gecmiyordur.
-$response->headers->set('X-Kademe-Cors-Pipeline', 'post-handle');
+    // PHP native header() ile de gonder — php artisan serve HeaderBag'i
+    // dusurse bile bu satir tarayiciya ulasir.
+    if (! headers_sent()) {
+        header('Access-Control-Allow-Origin: ' . $origin, true);
+        header('Access-Control-Allow-Credentials: true', true);
+    }
+})();
+
+// Debug marker
+$response->headers->set('X-Kademe-Cors-Pipeline', 'post-handle-v2');
 
 // JSON govde ama Content-Type text/html ise (php -S / eski cevap) duzelt.
 $ct = (string) ($response->headers->get('Content-Type') ?? '');

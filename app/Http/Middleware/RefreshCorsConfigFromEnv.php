@@ -167,6 +167,13 @@ final class RefreshCorsConfigFromEnv
             } elseif (! preg_match('/\bOrigin\b/i', $vary)) {
                 $response->headers->set('Vary', $vary.', Origin');
             }
+
+            // php artisan serve (PHP built-in server) HeaderBag'i dusurur.
+            // Native header() ile de gonder — belt-and-suspenders.
+            if (! headers_sent()) {
+                header('Access-Control-Allow-Origin: ' . $origin, true);
+                header('Access-Control-Allow-Credentials: true', true);
+            }
         }
     }
 

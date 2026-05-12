@@ -24,8 +24,9 @@ COPY . .
 # COPY cache sapmasin / eski imaj: CORS giris noktasi repoda olmali (yoksa build kirilir).
 RUN test -f public/index.php \
     && test -f bootstrap/cors-preflight.php \
-    && grep -q kademe_emit_native_cors_if_missing public/index.php \
-    && grep -q kademe_emit_native_cors_if_missing bootstrap/cors-preflight.php
+    && test -f server.php \
+    && grep -q kademe_collect_cors_origins_early bootstrap/cors-preflight.php \
+    && grep -q Access-Control-Allow-Origin server.php
 
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
     && php -r "file_exists('bootstrap/cache') || mkdir('bootstrap/cache', 0755, true);"
