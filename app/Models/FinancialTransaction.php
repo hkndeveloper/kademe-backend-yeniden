@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class FinancialTransaction extends Model
 {
     use HasFactory;
+    use LogsActivity;
 
     protected $fillable = [
         'project_id',
@@ -49,4 +52,13 @@ class FinancialTransaction extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 }
+
+

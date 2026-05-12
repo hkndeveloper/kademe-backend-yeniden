@@ -8,6 +8,7 @@ use App\Models\Application;
 use App\Models\Participant;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
+use App\Services\WaitlistService;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,7 @@ class AdminApplicationController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
         private readonly NotificationService $notificationService,
+        private readonly WaitlistService $waitlistService,
     ) {}
 
     private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): void
@@ -506,6 +508,10 @@ class AdminApplicationController extends Controller
                 $request->user()->id
             );
 
+            if ($validated['status'] === 'rejected') {
+                $this->waitlistService->inviteNextIfSeatAvailable($application, $request->user()->id);
+            }
+
             return response()->json([
                 'message' => 'Başvuru durumu başarıyla güncellendi.',
                 'application' => $application,
@@ -645,34 +651,16 @@ class AdminApplicationController extends Controller
         );
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular davet edilebilir.');
 
-        $this->expireOverdueWaitlistInvitations($application);
-        $activeInvitationExists = Application::query()
-            ->where('id', '!=', $application->id)
-            ->where('project_id', $application->project_id)
-            ->where('period_id', $application->period_id)
-            ->when($application->program_id, fn ($query) => $query->where('program_id', $application->program_id), fn ($query) => $query->whereNull('program_id'))
-            ->where('status', 'waitlisted')
-            ->whereNotNull('waitlist_invited_at')
-            ->where('waitlist_invitation_expires_at', '>', now())
-            ->exists();
-        abort_unless(! $activeInvitationExists, 422, 'Ayni kapsamda aktif yedek liste daveti zaten mevcut.');
-
         $expiresAt = $validated['expires_at'] ?? now()->addDays(3);
-        $application->update([
-            'waitlist_invited_at' => now(),
-            'waitlist_invitation_expires_at' => $expiresAt,
-        ]);
-
-        $this->notifyApplicationUser(
-            $application,
-            'Yedek listeden davet edildiniz',
-            'Proje: '.($application->project?->name ?? '-')."\nYedek listeden davet edildiniz. Son yanit tarihi: {$expiresAt}",
-            $request->user()->id
-        );
+        try {
+            $application = $this->waitlistService->inviteSpecific($application, $request->user()->id, $expiresAt);
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
             'message' => 'Yedek liste daveti gonderildi.',
-            'application' => $application->fresh(),
+            'application' => $application,
         ]);
     }
 
@@ -687,28 +675,19 @@ class AdminApplicationController extends Controller
         );
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular icin yenileme yapilabilir.');
 
-        $expiredCount = $this->expireOverdueWaitlistInvitations($application);
+        $expiredCount = $this->waitlistService->expireOverdueInvitations($application);
+        $invited = $this->waitlistService->inviteNextIfSeatAvailable($application, $request->user()->id);
 
         return response()->json([
             'message' => 'Yedek davet sureleri guncellendi.',
             'expired_count' => $expiredCount,
+            'auto_invited_application_id' => $invited?->id,
         ]);
     }
 
     private function expireOverdueWaitlistInvitations(Application $application): int
     {
-        return Application::query()
-            ->where('project_id', $application->project_id)
-            ->where('period_id', $application->period_id)
-            ->when($application->program_id, fn ($query) => $query->where('program_id', $application->program_id), fn ($query) => $query->whereNull('program_id'))
-            ->where('status', 'waitlisted')
-            ->whereNotNull('waitlist_invited_at')
-            ->whereNotNull('waitlist_invitation_expires_at')
-            ->where('waitlist_invitation_expires_at', '<=', now())
-            ->update([
-                'waitlist_invited_at' => null,
-                'waitlist_invitation_expires_at' => null,
-            ]);
+        return $this->waitlistService->expireOverdueInvitations($application);
     }
 
     private function nextWaitlistOrder(Application $application): int

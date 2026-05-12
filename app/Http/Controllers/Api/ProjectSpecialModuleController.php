@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Models\EurodeskPartnership;
 use App\Models\EurodeskProject;
 use App\Models\Internship;
 use App\Models\Mentor;
@@ -382,6 +383,54 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Mentor silindi.']);
     }
 
+    // -------------------------------------------------------
+    // Mentor-Katilimci eslestirme (Pergel)
+    // -------------------------------------------------------
+
+    public function assignMentorToParticipant(Request $request, int $projectId, int $mentorId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.mentors.manage');
+        $mentor = Mentor::query()->where('project_id', $projectId)->findOrFail($mentorId);
+
+        $validated = $request->validate([
+            'participant_id' => 'required|integer|exists:participants,id',
+            'period_id'      => 'nullable|integer|exists:periods,id',
+            'note'           => 'nullable|string|max:1000',
+        ]);
+
+        $mentor->participants()->syncWithoutDetaching([
+            $validated['participant_id'] => [
+                'period_id'   => $validated['period_id'] ?? null,
+                'assigned_by' => $request->user()->id,
+                'note'        => $validated['note'] ?? null,
+            ],
+        ]);
+
+        return response()->json(['message' => 'Katilimci mentor ile eslendi.']);
+    }
+
+    public function unassignMentorFromParticipant(Request $request, int $projectId, int $mentorId, int $participantId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.mentors.manage');
+        $mentor = Mentor::query()->where('project_id', $projectId)->findOrFail($mentorId);
+        $mentor->participants()->detach($participantId);
+
+        return response()->json(['message' => 'Katilimci mentor eslestirmesi kaldirildi.']);
+    }
+
+    public function mentorParticipants(Request $request, int $projectId, int $mentorId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.mentors.view');
+        $mentor = Mentor::query()->where('project_id', $projectId)->with([
+            'participants.user:id,name,surname,email',
+        ])->findOrFail($mentorId);
+
+        return response()->json([
+            'mentor'       => $mentor,
+            'participants' => $mentor->participants,
+        ]);
+    }
+
     public function storeEurodeskProject(Request $request, int $projectId): JsonResponse
     {
         $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -408,6 +457,57 @@ class ProjectSpecialModuleController extends Controller
         EurodeskProject::query()->where('project_id', $projectId)->findOrFail($id)->delete();
 
         return response()->json(['message' => 'Eurodesk proje bilgisi silindi.']);
+    }
+
+    // -------------------------------------------------------
+    // Eurodesk Partnership CRUD
+    // -------------------------------------------------------
+
+    public function storeEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($eurodeskProjectId);
+
+        $validated = $request->validate([
+            'organization_name' => 'required|string|max:255',
+            'country'           => 'nullable|string|max:100',
+            'contact_info'      => 'nullable|string|max:1000',
+        ]);
+
+        $partnership = $eurodeskProject->partnerships()->create($validated);
+
+        return response()->json(['message' => 'Ortaklik kaydedildi.', 'partnership' => $partnership], 201);
+    }
+
+    public function updateEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId, int $partnershipId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($eurodeskProjectId);
+
+        $partnership = EurodeskPartnership::query()
+            ->where('eurodesk_project_id', $eurodeskProject->id)
+            ->findOrFail($partnershipId);
+
+        $partnership->update($request->validate([
+            'organization_name' => 'required|string|max:255',
+            'country'           => 'nullable|string|max:100',
+            'contact_info'      => 'nullable|string|max:1000',
+        ]));
+
+        return response()->json(['message' => 'Ortaklik guncellendi.', 'partnership' => $partnership->fresh()]);
+    }
+
+    public function destroyEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId, int $partnershipId): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($eurodeskProjectId);
+
+        EurodeskPartnership::query()
+            ->where('eurodesk_project_id', $eurodeskProject->id)
+            ->findOrFail($partnershipId)
+            ->delete();
+
+        return response()->json(['message' => 'Ortaklik silindi.']);
     }
 
     private function validateEurodesk(Request $request): array
@@ -509,6 +609,18 @@ class ProjectSpecialModuleController extends Controller
             'message' => 'Hediye kaydi olusturuldu.',
             'reward_award' => $award->load(['participant.user:id,name,surname,email', 'tier:id,name,reward_description', 'awarder:id,name,surname']),
         ], 201);
+    }
+
+    public function markRewardDelivered(Request $request, int $projectId, int $id): JsonResponse
+    {
+        $this->project($request, $projectId, 'projects.rewards.manage');
+        $award = RewardAward::query()
+            ->where('project_id', $projectId)
+            ->findOrFail($id);
+
+        $award->markDelivered($request->user()->id);
+
+        return response()->json(['message' => 'Hediye teslim edildi olarak isaretlendi.', 'award' => $award->fresh()]);
     }
 
     public function destroyRewardAward(Request $request, int $projectId, int $id): JsonResponse

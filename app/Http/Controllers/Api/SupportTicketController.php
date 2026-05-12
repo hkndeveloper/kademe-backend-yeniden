@@ -383,27 +383,36 @@ class SupportTicketController extends Controller
      */
     public function storePublic(Request $request): JsonResponse
     {
+        $officialDocumentRequired = $request->input('category') === 'official_document';
+
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'subject' => 'required|string|max:255',
-            'category' => 'required|string|max:100',
+            'name'       => 'required|string|max:255',
+            'email'      => 'required|email|max:255',
+            'subject'    => 'required|string|max:255',
+            'category'   => 'required|string|max:100',
             'project_id' => 'nullable|exists:projects,id',
-            'message' => 'required|string',
+            'message'    => 'required|string',
+            'attachment' => $officialDocumentRequired ? 'required|file|max:10240' : 'nullable|file|max:10240',
         ]);
+
+        $attachmentPath = null;
+        if ($request->hasFile('attachment') && $request->file('attachment')?->isValid()) {
+            $attachmentPath = \App\Support\MediaStorage::putFile('support-attachments', $request->file('attachment'));
+        }
 
         $autoAssigneeId = $this->resolveAutoAssignee($validated['project_id'] ?? null, $validated['category'] ?? null);
 
         $ticket = SupportTicket::create([
-            'user_id' => null,
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'subject' => $validated['subject'],
-            'category' => $validated['category'],
-            'project_id' => $validated['project_id'] ?? null,
-            'assigned_to' => $autoAssigneeId,
-            'message' => $validated['message'],
-            'status' => $autoAssigneeId ? 'in_progress' : 'open',
+            'user_id'         => null,
+            'name'            => $validated['name'],
+            'email'           => $validated['email'],
+            'subject'         => $validated['subject'],
+            'category'        => $validated['category'],
+            'project_id'      => $validated['project_id'] ?? null,
+            'assigned_to'     => $autoAssigneeId,
+            'message'         => $validated['message'],
+            'attachment_path' => $attachmentPath,
+            'status'          => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
 
         $this->notifyTicketAssignee($ticket);

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Middleware\RefreshCorsConfigFromEnv;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // config:cache bos CORS ile build edildiyse bile runtime'da izin listesi dolsun (HandleCors).
+        RefreshCorsConfigFromEnv::syncCorsConfigFromEnv();
     }
 }

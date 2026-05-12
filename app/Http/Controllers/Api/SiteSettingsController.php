@@ -52,14 +52,18 @@ class SiteSettingsController extends Controller
                 'twitter_url' => '',
                 'youtube_url' => '',
                 'linkedin_url' => '',
+                // Sosyal medya otomasyon webhook (Buffer / Make.com / Zapier)
+                'sharing_webhook_url' => '',
             ],
             'navigation' => [
                 'header_links' => [
                     ['label' => 'Ana Sayfa', 'href' => '/'],
                     ['label' => 'Hakkimizda', 'href' => '/about'],
                     ['label' => 'Faaliyetler', 'href' => '/activities'],
+                    ['label' => 'Blog', 'href' => '/blog'],
                     ['label' => 'SSS', 'href' => '/faq'],
                     ['label' => 'Iletisim', 'href' => '/contact'],
+                    ['label' => 'Sertifika Sorgula', 'href' => '/certificates/verify'],
                 ],
                 'header_login_label' => 'Giris Yap',
                 'header_register_label' => 'Basvur',
@@ -145,6 +149,7 @@ class SiteSettingsController extends Controller
                     ['label' => 'Yillik Etkinlik', 'value' => '1,200+', 'icon' => 'calendar'],
                     ['label' => 'Sehir', 'value' => '81', 'icon' => 'globe'],
                 ],
+                'monthly_motivation_message' => 'Gelecek, bugunden ona hazirlananlara aittir. KADEME\'deki her adim, seni daha guclu bir vizyona tasir.',
             ],
             'about' => [
                 'hero_title' => 'Biz Kimiz?',
@@ -222,8 +227,12 @@ class SiteSettingsController extends Controller
 
     public function public(): JsonResponse
     {
+        $settings = $this->groupedSettings();
+        // OAuth / takvim gizli alanlari herkese acik endpoint'te donulmez.
+        unset($settings['google_calendar']);
+
         return response()->json([
-            'settings' => $this->groupedSettings(),
+            'settings' => $settings,
             'computed_homepage_stats' => $this->computedHomepageStats(),
         ]);
     }

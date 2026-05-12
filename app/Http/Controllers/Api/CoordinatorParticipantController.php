@@ -86,12 +86,21 @@ class CoordinatorParticipantController extends Controller
         $canViewParticipants = $this->permissionResolver->hasPermission($coordinator, 'projects.participants.view');
         $canViewAlumni = $this->permissionResolver->hasPermission($coordinator, 'projects.alumni.view');
         $canViewCv = $this->permissionResolver->hasPermission($coordinator, 'projects.student_cv.view');
+        $participantViewProjectIds = $canViewParticipants
+            ? $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.participants.view')
+            : [];
+        $alumniViewProjectIds = $canViewAlumni
+            ? $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.alumni.view')
+            : [];
+        $cvViewProjectIds = $canViewCv
+            ? $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.student_cv.view')
+            : [];
 
         $query = Participant::with([
             'project:id,name',
             'period:id,name',
             'user:id,name,surname,email,phone,university,department,class_year,hometown,profile_photo_path,status',
-            'user.profile:id,user_id,digital_cv_data,linkedin_url,github_url',
+            'user.profile:id,user_id,linkedin_url,github_url',
         ])->whereIn('project_id', $manageableProjectIds);
 
         if (! empty($validated['project_id'])) {
@@ -156,18 +165,18 @@ class CoordinatorParticipantController extends Controller
                     ? round($participants->avg('credit') ?? 0, 1)
                     : 0,
             ],
-            'participants' => $participants->map(function ($participant) use ($coordinator, $canViewCv, $canViewParticipants, $canViewAlumni) {
+            'participants' => $participants->map(function ($participant) use ($canViewCv, $canViewParticipants, $canViewAlumni, $participantViewProjectIds, $alumniViewProjectIds, $cvViewProjectIds) {
                 $user = $participant->user;
                 $profileAllowed = (
                     $canViewParticipants
-                    && $this->permissionResolver->canAccessProject($coordinator, 'projects.participants.view', (int) $participant->project_id)
+                    && in_array((int) $participant->project_id, $participantViewProjectIds, true)
                 ) || (
                     $canViewAlumni
-                    && $this->permissionResolver->canAccessProject($coordinator, 'projects.alumni.view', (int) $participant->project_id)
+                    && in_array((int) $participant->project_id, $alumniViewProjectIds, true)
                     && (! is_null($participant->graduated_at) || $participant->graduation_status === 'graduated')
                 );
                 $cvAllowed = $canViewCv
-                    && $this->permissionResolver->canAccessProject($coordinator, 'projects.student_cv.view', (int) $participant->project_id);
+                    && in_array((int) $participant->project_id, $cvViewProjectIds, true);
 
                 return [
                     'id' => $participant->id,
@@ -198,13 +207,46 @@ class CoordinatorParticipantController extends Controller
                         'status' => $user?->status,
                         'profile_photo' => $this->mediaUrl($user?->profile_photo_path),
                         'cv' => $cvAllowed ? [
-                            'digital_cv_data' => $user?->profile?->digital_cv_data,
+                            'has_digital_cv' => (bool) $user?->profile,
                             'linkedin_url' => $user?->profile?->linkedin_url,
                             'github_url' => $user?->profile?->github_url,
                         ] : null,
                     ],
                 ];
             })->values(),
+        ]);
+    }
+
+    public function cv(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'projects.student_cv.view');
+
+        $participant = Participant::with([
+            'project:id,name',
+            'user:id,name,surname',
+            'user.profile:id,user_id,digital_cv_data,linkedin_url,github_url',
+        ])->findOrFail($id);
+
+        $this->abortUnlessProjectAllowed($request, 'projects.student_cv.view', (int) $participant->project_id);
+
+        return response()->json([
+            'participant' => [
+                'id' => $participant->id,
+                'project' => [
+                    'id' => $participant->project?->id,
+                    'name' => $participant->project?->name,
+                ],
+                'user' => [
+                    'id' => $participant->user?->id,
+                    'name' => $participant->user?->name,
+                    'surname' => $participant->user?->surname,
+                    'cv' => [
+                        'digital_cv_data' => $participant->user?->profile?->digital_cv_data,
+                        'linkedin_url' => $participant->user?->profile?->linkedin_url,
+                        'github_url' => $participant->user?->profile?->github_url,
+                    ],
+                ],
+            ],
         ]);
     }
 

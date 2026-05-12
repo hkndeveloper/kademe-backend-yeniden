@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use App\Http\Controllers\Api\AdminApplicationController;
 use App\Http\Controllers\Api\AdminCertificateController;
@@ -88,6 +88,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
         Route::post('/change-password', [UserController::class, 'changePassword']);
         Route::get('/personality-test', [PersonalityTestController::class, 'show']);
         Route::post('/personality-test', [PersonalityTestController::class, 'submit']);
+
+        // Sistem bildirimleri
+        Route::get('/notifications', [\App\Http\Controllers\Api\SystemNotificationController::class, 'index']);
+        Route::patch('/notifications/{id}/read', [\App\Http\Controllers\Api\SystemNotificationController::class, 'markRead']);
+        Route::post('/notifications/read-all', [\App\Http\Controllers\Api\SystemNotificationController::class, 'markAllRead']);
+        Route::delete('/notifications/{id}', [\App\Http\Controllers\Api\SystemNotificationController::class, 'destroy']);
     });
 });
 
@@ -134,6 +140,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
     Route::post('/forum/posts/{postId}/replies', [ForumController::class, 'reply']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    // -- SOSYAL MEDYA PAYLASIM WEBHOOK
+    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
 
     Route::get('/digital-bohca', [DigitalBohcaController::class, 'index']);
     Route::get('/digital-bohca/{id}/download', [DigitalBohcaController::class, 'download']);
@@ -213,13 +221,20 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::post('/projects/{id}/special-modules/mentors', [ProjectSpecialModuleController::class, 'storeMentor']);
     Route::put('/projects/{id}/special-modules/mentors/{item}', [ProjectSpecialModuleController::class, 'updateMentor']);
     Route::delete('/projects/{id}/special-modules/mentors/{item}', [ProjectSpecialModuleController::class, 'destroyMentor']);
+    Route::get('/projects/{id}/special-modules/mentors/{mentorId}/participants', [ProjectSpecialModuleController::class, 'mentorParticipants']);
+    Route::post('/projects/{id}/special-modules/mentors/{mentorId}/participants', [ProjectSpecialModuleController::class, 'assignMentorToParticipant']);
+    Route::delete('/projects/{id}/special-modules/mentors/{mentorId}/participants/{participantId}', [ProjectSpecialModuleController::class, 'unassignMentorFromParticipant']);
     Route::post('/projects/{id}/special-modules/eurodesk-projects', [ProjectSpecialModuleController::class, 'storeEurodeskProject']);
     Route::put('/projects/{id}/special-modules/eurodesk-projects/{item}', [ProjectSpecialModuleController::class, 'updateEurodeskProject']);
     Route::delete('/projects/{id}/special-modules/eurodesk-projects/{item}', [ProjectSpecialModuleController::class, 'destroyEurodeskProject']);
+    Route::post('/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships', [ProjectSpecialModuleController::class, 'storeEurodeskPartnership']);
+    Route::put('/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}', [ProjectSpecialModuleController::class, 'updateEurodeskPartnership']);
+    Route::delete('/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}', [ProjectSpecialModuleController::class, 'destroyEurodeskPartnership']);
     Route::post('/projects/{id}/special-modules/reward-tiers', [ProjectSpecialModuleController::class, 'storeRewardTier']);
     Route::put('/projects/{id}/special-modules/reward-tiers/{item}', [ProjectSpecialModuleController::class, 'updateRewardTier']);
     Route::delete('/projects/{id}/special-modules/reward-tiers/{item}', [ProjectSpecialModuleController::class, 'destroyRewardTier']);
     Route::post('/projects/{id}/special-modules/reward-awards', [ProjectSpecialModuleController::class, 'storeRewardAward']);
+    Route::patch('/projects/{id}/special-modules/reward-awards/{item}/deliver', [ProjectSpecialModuleController::class, 'markRewardDelivered']);
     Route::delete('/projects/{id}/special-modules/reward-awards/{item}', [ProjectSpecialModuleController::class, 'destroyRewardAward']);
     Route::post('/projects/{id}/special-modules/kademe-modules', [ProjectSpecialModuleController::class, 'storeKademeModule']);
     Route::put('/projects/{id}/special-modules/kademe-modules/{item}', [ProjectSpecialModuleController::class, 'updateKademeModule']);
@@ -302,6 +317,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    // -- SOSYAL MEDYA PAYLASIM WEBHOOK
+    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
 
     // â”€â”€ KULLANICI YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Route::get('/users/export', [UserController::class, 'exportUsers']);
@@ -378,13 +395,20 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/projects/{id}/special-modules/mentors', [ProjectSpecialModuleController::class, 'storeMentor']);
     Route::put('/projects/{id}/special-modules/mentors/{item}', [ProjectSpecialModuleController::class, 'updateMentor']);
     Route::delete('/projects/{id}/special-modules/mentors/{item}', [ProjectSpecialModuleController::class, 'destroyMentor']);
+    Route::get('/projects/{id}/special-modules/mentors/{mentorId}/participants', [ProjectSpecialModuleController::class, 'mentorParticipants']);
+    Route::post('/projects/{id}/special-modules/mentors/{mentorId}/participants', [ProjectSpecialModuleController::class, 'assignMentorToParticipant']);
+    Route::delete('/projects/{id}/special-modules/mentors/{mentorId}/participants/{participantId}', [ProjectSpecialModuleController::class, 'unassignMentorFromParticipant']);
     Route::post('/projects/{id}/special-modules/eurodesk-projects', [ProjectSpecialModuleController::class, 'storeEurodeskProject']);
     Route::put('/projects/{id}/special-modules/eurodesk-projects/{item}', [ProjectSpecialModuleController::class, 'updateEurodeskProject']);
     Route::delete('/projects/{id}/special-modules/eurodesk-projects/{item}', [ProjectSpecialModuleController::class, 'destroyEurodeskProject']);
+    Route::post('/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships', [ProjectSpecialModuleController::class, 'storeEurodeskPartnership']);
+    Route::put('/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}', [ProjectSpecialModuleController::class, 'updateEurodeskPartnership']);
+    Route::delete('/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}', [ProjectSpecialModuleController::class, 'destroyEurodeskPartnership']);
     Route::post('/projects/{id}/special-modules/reward-tiers', [ProjectSpecialModuleController::class, 'storeRewardTier']);
     Route::put('/projects/{id}/special-modules/reward-tiers/{item}', [ProjectSpecialModuleController::class, 'updateRewardTier']);
     Route::delete('/projects/{id}/special-modules/reward-tiers/{item}', [ProjectSpecialModuleController::class, 'destroyRewardTier']);
     Route::post('/projects/{id}/special-modules/reward-awards', [ProjectSpecialModuleController::class, 'storeRewardAward']);
+    Route::patch('/projects/{id}/special-modules/reward-awards/{item}/deliver', [ProjectSpecialModuleController::class, 'markRewardDelivered']);
     Route::delete('/projects/{id}/special-modules/reward-awards/{item}', [ProjectSpecialModuleController::class, 'destroyRewardAward']);
     Route::post('/projects/{id}/special-modules/kademe-modules', [ProjectSpecialModuleController::class, 'storeKademeModule']);
     Route::put('/projects/{id}/special-modules/kademe-modules/{item}', [ProjectSpecialModuleController::class, 'updateKademeModule']);
@@ -444,6 +468,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    // -- SOSYAL MEDYA PAYLASIM WEBHOOK
+    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
 
     Route::get('/alumni-opportunities', [AlumniOpportunityController::class, 'panelIndex']);
     Route::get('/alumni-opportunities/{id}', [AlumniOpportunityController::class, 'panelShow']);
@@ -545,6 +571,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     // Unified aliases for role-specific pages under /panel/*
     Route::get('/participants', [CoordinatorParticipantController::class, 'index']);
     Route::get('/participants/export', [CoordinatorParticipantController::class, 'export']);
+    Route::get('/participants/{id}/cv', [CoordinatorParticipantController::class, 'cv']);
     Route::post('/participants/bulk-graduation', [CoordinatorParticipantController::class, 'bulkUpdateGraduationStatus']);
     Route::patch('/participants/{id}/graduation', [CoordinatorParticipantController::class, 'updateGraduationStatus']);
     Route::get('/members', [StaffController::class, 'unitMembers']);
@@ -561,6 +588,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/coordinator/financials', [FinancialTransactionController::class, 'store']);
     Route::get('/coordinator/participants', [CoordinatorParticipantController::class, 'index']);
     Route::get('/coordinator/participants/export', [CoordinatorParticipantController::class, 'export']);
+    Route::get('/coordinator/participants/{id}/cv', [CoordinatorParticipantController::class, 'cv']);
     Route::post('/coordinator/participants/bulk-graduation', [CoordinatorParticipantController::class, 'bulkUpdateGraduationStatus']);
     Route::patch('/coordinator/participants/{id}/graduation', [CoordinatorParticipantController::class, 'updateGraduationStatus']);
 });
@@ -594,3 +622,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('calendar')->group(function () {
     Route::put('/programs/{id}/assignments', [CalendarController::class, 'updateAssignments']);
 });
+
+
+
+

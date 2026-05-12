@@ -113,12 +113,13 @@ class DigitalBohcaController extends Controller
     {
         $this->abortUnlessAllowed($request, 'digital_bohca.create');
         $validated = $request->validate([
-            'project_id' => 'nullable|exists:projects,id',
-            'user_id' => 'nullable|exists:users,id',
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:2000',
-            'file' => 'required|file|max:20480',
+            'project_id'         => 'nullable|exists:projects,id',
+            'user_id'            => 'nullable|exists:users,id',
+            'title'              => 'required|string|max:255',
+            'description'        => 'nullable|string|max:2000',
+            'file'               => 'required|file|max:20480',
             'visible_to_student' => 'sometimes|boolean',
+            'category'           => ['nullable', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Models\DigitalBohca::CATEGORIES))],
         ]);
 
         if (! empty($validated['project_id'])) {
@@ -131,14 +132,15 @@ class DigitalBohcaController extends Controller
         $path = MediaStorage::putFile('digital-bohca', $file);
 
         $material = DigitalBohca::query()->create([
-            'project_id' => $validated['project_id'] ?? null,
-            'user_id' => $validated['user_id'] ?? null,
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'file_path' => $path,
-            'file_type' => $file->getClientOriginalExtension(),
+            'project_id'         => $validated['project_id'] ?? null,
+            'user_id'            => $validated['user_id'] ?? null,
+            'title'              => $validated['title'],
+            'description'        => $validated['description'] ?? null,
+            'file_path'          => $path,
+            'file_type'          => $file->getClientOriginalExtension(),
+            'category'           => $validated['category'] ?? 'general',
             'visible_to_student' => $validated['visible_to_student'] ?? true,
-            'uploaded_by' => $request->user()->id,
+            'uploaded_by'        => $request->user()->id,
         ]);
         $this->attachBohcaAudit($request, $material, 'created');
 
@@ -273,6 +275,8 @@ class DigitalBohcaController extends Controller
             'file_url' => MediaStorage::directDownloadsEnabled() ? MediaStorage::url($material->file_path) : null,
             'download_url' => "{$basePath}/{$material->id}/download",
             'file_type' => $material->file_type,
+            'category' => $material->category ?? 'general',
+            'category_label' => \App\Models\DigitalBohca::CATEGORIES[$material->category ?? 'general'] ?? 'Genel',
             'visible_to_student' => $material->visible_to_student,
             'created_at' => optional($material->created_at)?->toIso8601String(),
             'updated_at' => optional($material->updated_at)?->toIso8601String(),

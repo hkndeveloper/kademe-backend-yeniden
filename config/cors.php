@@ -15,13 +15,17 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    // '*' : bazı prod ortamlarda `api/*` ile eslesme sorunu olusup preflight HTML'e dusuyordu.
+    'paths' => ['*'],
 
     'allowed_methods' => ['*'],
 
     'allowed_origins' => array_values(
         array_filter(
-            array_map('trim', explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:3000')))
+            array_map(
+                static fn (string $v): string => trim($v, " \t\n\r\0\x0B\"'"),
+                explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:3000'))
+            )
         )
     ),
 

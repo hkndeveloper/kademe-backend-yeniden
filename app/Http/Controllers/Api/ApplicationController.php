@@ -11,6 +11,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\WaitlistService;
 use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -23,7 +24,8 @@ use Illuminate\Validation\ValidationException;
 class ApplicationController extends Controller
 {
     public function __construct(
-        private readonly NotificationService $notificationService
+        private readonly NotificationService $notificationService,
+        private readonly WaitlistService $waitlistService
     ) {}
 
     private function resolveApplicantUser(array $applicant): User
@@ -112,6 +114,39 @@ class ApplicationController extends Controller
         ];
     }
 
+    /**
+     * Aynı tarih/saat aralığında başka aktif/kabul bekleyen bir başvurusu var mı kontrol eder.
+     * Şartname 14.2: Çakışma kontrolü.
+     */
+    private function ensureNoScheduleConflict(User $user, ?Program $program): void
+    {
+        if (! $program || ! $program->start_at || ! $program->end_at) {
+            return;
+        }
+
+        $conflictingApplication = Application::query()
+            ->join('programs', 'applications.program_id', '=', 'programs.id')
+            ->where('applications.user_id', $user->id)
+            ->whereIn('applications.status', ['pending', 'accepted', 'waitlisted'])
+            ->where('programs.start_at', '<', $program->end_at)
+            ->where('programs.end_at', '>', $program->start_at)
+            ->where('applications.program_id', '!=', $program->id)
+            ->whereNotNull('applications.program_id')
+            ->select('programs.title', 'programs.start_at', 'programs.end_at')
+            ->first();
+
+        if ($conflictingApplication) {
+            $startFormatted = optional(new \Carbon\Carbon($conflictingApplication->start_at))->format('d.m.Y H:i');
+            $endFormatted   = optional(new \Carbon\Carbon($conflictingApplication->end_at))->format('d.m.Y H:i');
+
+            throw ValidationException::withMessages([
+                'program_id' => [
+                    "Saat cakismasi bulunmaktadir: \"{$conflictingApplication->title}\" ({$startFormatted} - {$endFormatted}) ile cakisiyor.",
+                ],
+            ]);
+        }
+    }
+
     private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false, ?int $programId = null): Application
     {
         $this->ensureSingleProjectRule($user, $project);
@@ -141,6 +176,8 @@ class ApplicationController extends Controller
                     'program_id' => ['Secilen program bu proje/donem icin basvuruya uygun degil.'],
                 ]);
             }
+
+            $this->ensureNoScheduleConflict($user, $program);
         }
 
         $existingApp = Application::where('user_id', $user->id)
@@ -641,6 +678,7 @@ class ApplicationController extends Controller
                     ]);
                     $application->user->syncRoles(['student']);
                 }
+                $scopeForNextInvitation = null;
             } else {
                 $application->update([
                     'status' => 'rejected',
@@ -648,6 +686,7 @@ class ApplicationController extends Controller
                     'waitlist_invited_at' => null,
                     'waitlist_invitation_expires_at' => null,
                 ]);
+                $scopeForNextInvitation = $application->fresh(['project:id,name,quota', 'program:id,title,application_quota']);
             }
 
             DB::commit();
@@ -657,6 +696,10 @@ class ApplicationController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             throw $e;
+        }
+
+        if (isset($scopeForNextInvitation) && $scopeForNextInvitation instanceof Application) {
+            $this->waitlistService->inviteNextIfSeatAvailable($scopeForNextInvitation);
         }
 
         $application->loadMissing(['project:id,name', 'period', 'program:id,title,start_at', 'form:id,fields']);

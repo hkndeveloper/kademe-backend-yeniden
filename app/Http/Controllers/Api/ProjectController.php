@@ -102,6 +102,26 @@ class ProjectController extends Controller
             ->map(fn (Program $program) => $this->formatPublicProgram($program))
             ->values();
 
+        $calendar = $programs
+            ->map(fn (Program $program) => $this->formatPublicProgram($program))
+            ->values();
+
+        $calendarMonths = $programs
+            ->filter(fn (Program $program) => ! is_null($program->start_at))
+            ->groupBy(fn (Program $program) => $program->start_at->format('Y-m'))
+            ->map(function ($items, string $key) {
+                $date = $items->first()->start_at;
+
+                return [
+                    'key' => $key,
+                    'label' => $date->translatedFormat('F Y'),
+                    'year' => (int) $date->format('Y'),
+                    'month' => (int) $date->format('m'),
+                    'count' => $items->count(),
+                ];
+            })
+            ->values();
+
         return [
             'summary' => [
                 'total' => $programs->count(),
@@ -110,6 +130,8 @@ class ProjectController extends Controller
             ],
             'upcoming' => $upcoming,
             'recent_completed' => $recentCompleted,
+            'calendar' => $calendar,
+            'calendar_months' => $calendarMonths,
         ];
     }
 

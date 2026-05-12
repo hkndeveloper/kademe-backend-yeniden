@@ -9,6 +9,7 @@ class RewardAward extends Model
 {
     use HasFactory;
 
+    /** status: given | delivered | cancelled */
     protected $fillable = [
         'project_id',
         'participant_id',
@@ -17,12 +18,32 @@ class RewardAward extends Model
         'reward_name',
         'status',
         'awarded_at',
+        'delivered_at',
+        'delivered_by',
         'note',
     ];
 
     protected $casts = [
-        'awarded_at' => 'datetime',
+        'awarded_at'   => 'datetime',
+        'delivered_at' => 'datetime',
     ];
+
+    public function deliverer()
+    {
+        return $this->belongsTo(User::class, 'delivered_by');
+    }
+
+    /**
+     * Hediyeyi teslim edildi olarak isaretler.
+     */
+    public function markDelivered(int $deliveredById): void
+    {
+        $this->update([
+            'status'       => 'delivered',
+            'delivered_at' => now(),
+            'delivered_by' => $deliveredById,
+        ]);
+    }
 
     public function project()
     {

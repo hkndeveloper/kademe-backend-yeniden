@@ -6,6 +6,7 @@ use App\Models\Participant;
 use App\Models\CreditLog;
 use App\Models\Program;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CreditService
 {
@@ -179,27 +180,81 @@ class CreditService
     }
 
     /**
-     * Puan belli bir sınırın (örn: 75) altına düşünce yapılacak işlemler
+     * Bir devamsizligi mazaretli olarak isaretle.
+     * Admin panelinden cagrilir.
      */
-    private function checkThresholdAndBlacklist(Participant $participant)
+    public function markExcused(CreditLog $log, bool $excused = true): void
     {
-        $threshold = $participant->period->credit_threshold ?? 75;
+        $log->update(['excused' => $excused]);
+    }
 
-        // Kredi sınırın altındaysa
-        if ($participant->credit < $threshold) {
-            
-            // Eğer 30'un altındaysa komple kara listeye al (Örnek Mantık)
-            if ($participant->credit <= 30) {
-                $user = $participant->user;
+    /**
+     * Puan belli bir sinirin (orn: 75) altina dusunce yapilacak islemler.
+     *
+     * Kural 1: Kredi < threshold (75) → uyari logu + event (ileride SMS gateway tetikleyebilir)
+     * Kural 2: Mazeretsiz devamsizlik >= 3 → kara liste
+     * Kural 3: Kredi <= 30 → kara liste
+     */
+    private function checkThresholdAndBlacklist(Participant $participant): void
+    {
+        $threshold = $participant->period?->credit_threshold ?? 75;
+
+        if ($participant->credit >= $threshold) {
+            return;
+        }
+
+        $user = $participant->user;
+
+        // Kural 1: Dusuk kredi uyarisi (SMS gateway kapsam disi olsa bile log olustur)
+        Log::info('credit.low_threshold_warning', [
+            'user_id'        => $user->id,
+            'participant_id' => $participant->id,
+            'project_id'     => $participant->project_id,
+            'credit'         => $participant->credit,
+            'threshold'      => $threshold,
+        ]);
+
+        // Kural 2: Mazeretsiz 3 devamsizlik → 6 ay kara liste
+        $unexcusedAbsenceCount = CreditLog::query()
+            ->where('participant_id', $participant->id)
+            ->where('type', 'deduction')
+            ->whereNotNull('program_id')
+            ->where('excused', false)
+            ->count();
+
+        if ($unexcusedAbsenceCount >= 3) {
+            Log::warning('credit.unexcused_absence_blacklist', [
+                'user_id'         => $user->id,
+                'participant_id'  => $participant->id,
+                'absence_count'   => $unexcusedAbsenceCount,
+            ]);
+
+            if ($user->status !== 'blacklisted') {
                 $user->update([
-                    'status' => 'blacklisted',
-                    'blacklist_count' => $user->blacklist_count + 1,
-                    // 6 aylık kara liste cezası
-                    'blacklisted_until' => now()->addMonths(6)
+                    'status'            => 'blacklisted',
+                    'blacklist_count'   => ($user->blacklist_count ?? 0) + 1,
+                    'blacklisted_until' => now()->addMonths(6),
                 ]);
             }
-            
-            // NOT: Burada ileride SendSmsJob tetiklenebilir "Krediniz risk seviyesinde"
+
+            return;
+        }
+
+        // Kural 3: Kredi <= 30 → aninda kara liste
+        if ($participant->credit <= 30) {
+            Log::warning('credit.hard_limit_blacklist', [
+                'user_id'        => $user->id,
+                'participant_id' => $participant->id,
+                'credit'         => $participant->credit,
+            ]);
+
+            if ($user->status !== 'blacklisted') {
+                $user->update([
+                    'status'            => 'blacklisted',
+                    'blacklist_count'   => ($user->blacklist_count ?? 0) + 1,
+                    'blacklisted_until' => now()->addMonths(6),
+                ]);
+            }
         }
     }
 }

@@ -10,12 +10,11 @@ use App\Models\Participant;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnnouncementController extends Controller
@@ -23,7 +22,8 @@ class AnnouncementController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService
     ) {
     }
 
@@ -396,7 +396,11 @@ class AnnouncementController extends Controller
 
         // SMS gönder
         if (!empty($validated['send_sms']) && $validated['send_sms']) {
-            $smsSent = $this->dispatchSms($targetUsers, $validated['title'] . ': ' . substr($validated['content'], 0, 140));
+            $smsSent = $this->dispatchSms(
+                $targetUsers,
+                $validated['title'] . ': ' . substr($validated['content'], 0, 140),
+                $announcement->project_id
+            );
         }
 
         // E-posta gönder
@@ -498,7 +502,7 @@ class AnnouncementController extends Controller
 
         $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.send_sms');
 
-        $sent = $this->dispatchSms($targetUsers, $validated['message']);
+        $sent = $this->dispatchSms($targetUsers, $validated['message'], $validated['project_id'] ?? null);
 
         return response()->json([
             'message' => 'SMS gönderimi tamamlandı.',
@@ -780,8 +784,15 @@ class AnnouncementController extends Controller
         return $query->get($columns);
     }
 
-    private function dispatchSms(\Illuminate\Database\Eloquent\Collection $users, string $message): int
+    private function dispatchSms(\Illuminate\Database\Eloquent\Collection $users, string $message, ?int $projectId = null): int
     {
+        return $this->notificationService->sendSms(
+            $users->pluck('phone')->filter()->values()->all(),
+            $message,
+            $projectId,
+            Auth::id()
+        );
+
         // SMS entegrasyonu (Faz 5'te Netgsm API'si eklenecek)
         // Şimdilik CommunicationLog'a kaydediyoruz
         $sent = 0;
@@ -807,6 +818,15 @@ class AnnouncementController extends Controller
 
     private function dispatchEmail(\Illuminate\Database\Eloquent\Collection $users, object $announcement, ?string $attachmentPath): int
     {
+        return $this->notificationService->sendEmail(
+            $users->pluck('email')->filter()->values()->all(),
+            (string) ($announcement->title ?? 'Duyuru'),
+            (string) ($announcement->content ?? ''),
+            $announcement->project_id ?? null,
+            Auth::id(),
+            $attachmentPath
+        );
+
         $emails = $users
             ->pluck('email')
             ->filter(fn ($email) => is_string($email) && $email !== '')

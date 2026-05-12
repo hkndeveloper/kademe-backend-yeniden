@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class SupportTicket extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $fillable = [
         'user_id',
@@ -15,6 +17,7 @@ class SupportTicket extends Model
         'email',
         'subject',
         'message',
+        'attachment_path',
         'category',
         'project_id',
         'assigned_to',
@@ -40,4 +43,14 @@ class SupportTicket extends Model
     {
         return $this->hasMany(SupportReply::class, 'ticket_id');
     }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 }
+
+

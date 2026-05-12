@@ -23,6 +23,7 @@ use App\Models\Project;
 use App\Models\RewardTier;
 use App\Models\RolePermissionScope;
 use App\Models\User;
+use App\Models\UserProfile;
 use App\Models\VolunteerOpportunity;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -876,14 +877,122 @@ class PanelRegressionFixTest extends TestCase
         Sanctum::actingAs($admin);
         $this->postJson("/api/panel/applications/{$expiredApp->id}/waitlist-refresh")
             ->assertOk()
-            ->assertJsonPath('expired_count', 1);
+            ->assertJsonPath('expired_count', 1)
+            ->assertJsonPath('auto_invited_application_id', $expiredApp->id);
 
         $this->assertDatabaseHas('applications', [
             'id' => $expiredApp->id,
             'status' => 'waitlisted',
-            'waitlist_invited_at' => null,
-            'waitlist_invitation_expires_at' => null,
         ]);
+        $this->assertNotNull(Application::query()->find($expiredApp->id)?->waitlist_invited_at);
+    }
+
+    public function test_waitlist_rejection_auto_invites_next_candidate_when_seat_is_available(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Waitlist Auto Invite Project',
+            'slug' => 'waitlist-auto-invite-project',
+            'type' => 'other',
+            'status' => 'active',
+            'application_open' => true,
+            'quota' => 1,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $firstUser = User::factory()->create([
+            'surname' => 'First',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        $secondUser = User::factory()->create([
+            'surname' => 'Second',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $firstUser->assignRole('student');
+        $secondUser->assignRole('student');
+
+        $firstApplication = Application::query()->create([
+            'user_id' => $firstUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'waitlist_order' => 1,
+            'waitlist_invited_at' => now()->subHour(),
+            'waitlist_invitation_expires_at' => now()->addDay(),
+        ]);
+        $secondApplication = Application::query()->create([
+            'user_id' => $secondUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'waitlist_order' => 2,
+        ]);
+
+        Sanctum::actingAs($firstUser);
+        $this->postJson("/api/applications/{$firstApplication->id}/waitlist-response", [
+            'decision' => 'reject',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('applications', [
+            'id' => $firstApplication->id,
+            'status' => 'rejected',
+        ]);
+        $this->assertNotNull(Application::query()->find($secondApplication->id)?->waitlist_invited_at);
+    }
+
+    public function test_admin_rejecting_application_auto_invites_first_waitlisted_candidate(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = Project::query()->create([
+            'name' => 'Admin Auto Invite Project',
+            'slug' => 'admin-auto-invite-project',
+            'type' => 'other',
+            'status' => 'active',
+            'application_open' => true,
+            'quota' => 1,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $pendingUser = User::factory()->create(['surname' => 'Pending', 'role' => 'student', 'status' => 'active']);
+        $waitlistedUser = User::factory()->create(['surname' => 'Waitlisted', 'role' => 'student', 'status' => 'active']);
+
+        $pendingApplication = Application::query()->create([
+            'user_id' => $pendingUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'pending',
+        ]);
+        $waitlistedApplication = Application::query()->create([
+            'user_id' => $waitlistedUser->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'waitlist_order' => 1,
+        ]);
+
+        Sanctum::actingAs($admin);
+        $this->putJson("/api/panel/applications/{$pendingApplication->id}/status", [
+            'status' => 'rejected',
+            'rejection_reason' => 'Kontenjan planlamasi degisti.',
+        ])->assertOk();
+
+        $this->assertNotNull(Application::query()->find($waitlistedApplication->id)?->waitlist_invited_at);
     }
 
     public function test_program_creation_rejects_overlapping_time_across_projects(): void
@@ -1346,7 +1455,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertStatus(423)
             ->assertJsonPath('requires_feedback', true)
             ->assertJsonPath('program_id', $previousProgram->id)
-            ->assertJsonPath('redirect_to', '/student/feedback');
+            ->assertJsonPath('redirect_to', '/student/evaluate');
 
         $this->postJson('/api/feedbacks', [
             'program_id' => $previousProgram->id,
@@ -1976,6 +2085,50 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonCount(1, 'participants')
             ->assertJsonPath('participants.0.graduation_status', 'graduated')
             ->assertJsonPath('summary.graduates', 1);
+    }
+
+    public function test_panel_participant_list_omits_heavy_cv_payload_and_cv_detail_loads_on_demand(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 CV',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'name' => 'CV',
+            'surname' => 'Student',
+            'role' => 'student',
+        ]);
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+        UserProfile::query()->create([
+            'user_id' => $student->id,
+            'digital_cv_data' => [
+                'summary' => str_repeat('A', 5000),
+                'education' => [['school' => 'Test University']],
+            ],
+            'linkedin_url' => 'https://linkedin.example/cv-student',
+        ]);
+
+        $this->getJson('/api/panel/participants?project_id='.$project->id)
+            ->assertOk()
+            ->assertJsonPath('participants.0.user.cv.has_digital_cv', true)
+            ->assertJsonPath('participants.0.user.cv.linkedin_url', 'https://linkedin.example/cv-student')
+            ->assertJsonMissingPath('participants.0.user.cv.digital_cv_data');
+
+        $this->getJson("/api/panel/participants/{$participant->id}/cv")
+            ->assertOk()
+            ->assertJsonPath('participant.user.cv.digital_cv_data.education.0.school', 'Test University')
+            ->assertJsonPath('participant.user.cv.linkedin_url', 'https://linkedin.example/cv-student');
     }
 
     public function test_panel_project_special_modules_can_store_and_list_records_with_scope(): void

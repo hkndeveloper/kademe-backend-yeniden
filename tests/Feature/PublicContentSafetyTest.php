@@ -146,6 +146,7 @@ class PublicContentSafetyTest extends TestCase
             'project_id' => $project->id,
             'period_id' => $period->id,
             'status' => 'active',
+            'enrolled_at' => now()->startOfYear(),
         ]);
 
         $response = $this->getJson('/api/projects/'.$project->slug);
@@ -153,7 +154,63 @@ class PublicContentSafetyTest extends TestCase
         $response->assertJsonPath('project.active_students.0.name', 'Ali Veli');
         $response->assertJsonPath('project.active_students.0.university', 'Test Uni');
         $response->assertJsonPath('project.active_students.0.department', 'Bilgisayar');
+        $response->assertJsonPath('project.active_student_groups.0.students.0.name', 'Ali Veli');
         $response->assertJsonMissingPath('project.active_students.0.email');
         $response->assertJsonMissingPath('project.active_students.0.phone');
+        $response->assertJsonMissingPath('project.active_student_groups.0.students.0.email');
+        $response->assertJsonMissingPath('project.active_student_groups.0.students.0.phone');
+    }
+
+    public function test_public_project_detail_exposes_safe_calendar_months(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Takvim Proje',
+            'slug' => 'takvim-proje',
+            'type' => 'kademe_plus',
+            'status' => 'active',
+            'application_open' => true,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026',
+            'start_date' => now()->startOfYear(),
+            'end_date' => now()->endOfYear(),
+            'status' => 'active',
+        ]);
+
+        Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Mayis Oturumu',
+            'location' => 'Istanbul',
+            'latitude' => 40.12,
+            'longitude' => 29.12,
+            'radius_meters' => 100,
+            'credit_deduction' => 10,
+            'qr_token' => 'SECRET_ONE',
+            'start_at' => now()->setDate(2026, 5, 20)->setTime(10, 0),
+            'end_at' => now()->setDate(2026, 5, 20)->setTime(12, 0),
+            'status' => 'scheduled',
+        ]);
+        Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Haziran Oturumu',
+            'start_at' => now()->setDate(2026, 6, 10)->setTime(14, 0),
+            'end_at' => now()->setDate(2026, 6, 10)->setTime(16, 0),
+            'status' => 'completed',
+        ]);
+
+        $response = $this->getJson('/api/projects/'.$project->slug);
+
+        $response->assertOk();
+        $response->assertJsonCount(2, 'programs.calendar');
+        $response->assertJsonCount(2, 'programs.calendar_months');
+        $response->assertJsonPath('programs.calendar_months.0.key', '2026-05');
+        $response->assertJsonPath('programs.calendar.0.title', 'Mayis Oturumu');
+        $response->assertJsonMissingPath('programs.calendar.0.qr_token');
+        $response->assertJsonMissingPath('programs.calendar.0.latitude');
+        $response->assertJsonMissingPath('programs.calendar.0.longitude');
+        $response->assertJsonMissingPath('programs.calendar.0.credit_deduction');
     }
 }

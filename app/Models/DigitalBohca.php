@@ -11,6 +11,19 @@ class DigitalBohca extends Model
 
     protected $table = 'digital_bohca';
 
+    /**
+     * Gecerli kategori degerleri:
+     * general | internship_documents | assignment | certificate | kpd_report | other
+     */
+    public const CATEGORIES = [
+        'general'              => 'Genel',
+        'internship_documents' => 'Staj Belgeleri',
+        'assignment'           => 'Odev',
+        'certificate'          => 'Sertifika',
+        'kpd_report'           => 'KPD Raporu',
+        'other'                => 'Diger',
+    ];
+
     protected $fillable = [
         'user_id',
         'project_id',
@@ -18,6 +31,7 @@ class DigitalBohca extends Model
         'description',
         'file_path',
         'file_type',
+        'category',
         'visible_to_student',
         'uploaded_by',
     ];

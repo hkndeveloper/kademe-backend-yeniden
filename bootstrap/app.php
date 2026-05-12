@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Middleware\RefreshCorsConfigFromEnv;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,6 +15,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Railway / TLS sonlandirma: X-Forwarded-* güvenilir olsun (Host, Scheme, Client IP).
+        $middleware->trustProxies(at: '*');
+
+        // Her istekten önce CORS izin listesi + gerekirse preflight cevabı.
+        $middleware->prepend(\App\Http\Middleware\RefreshCorsConfigFromEnv::class);
+        $middleware->prepend(\App\Http\Middleware\FinalizeApiCorsHeaders::class);
+
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
@@ -21,9 +31,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'audit.action' => \App\Http\Middleware\AuditAdminActions::class,
             'password.not_pending_setup' => \App\Http\Middleware\DenyIfPasswordSetupPending::class,
         ]);
-        
-        // API grubuna global olarak bazılarını ekleyebiliriz veya Route tarafında kullanırız.
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Yakalanan hatalar middleware zincirini kirpar; tarayici CORS yok sanir. API/Sanctum
+        // yollarinda izinli Origin icin exception cevabina da ACAO eklenir.
+        $exceptions->respond(function (SymfonyResponse $response, \Throwable $e, Request $request): SymfonyResponse {
+            RefreshCorsConfigFromEnv::applyCorsToResponse($request, $response);
+
+            return $response;
+        });
     })->create();

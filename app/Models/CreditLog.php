@@ -17,8 +17,13 @@ class CreditLog extends Model
         'amount',
         'type',
         'reason',
+        'excused',
         'program_id',
         'created_by',
+    ];
+
+    protected $casts = [
+        'excused' => 'boolean',
     ];
 
     public function participant()

@@ -15,12 +15,31 @@ return [
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s',
-        'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
-        Sanctum::currentApplicationUrlWithPort(),
-        // Sanctum::currentRequestHost(),
-    ))),
+    'stateful' => array_values(array_unique(array_filter(array_map(
+        static function (string $v): ?string {
+            $v = trim($v, " \t\n\r\0\x0B\"'");
+            if ($v === '') {
+                return null;
+            }
+            // SANCTUM yanlis: "http://localhost:3000" — scheme Sanctum icin gecersiz; host:port olmali.
+            if (preg_match('#^https?://#i', $v)) {
+                $parsed = parse_url($v);
+                if (! is_array($parsed) || ! isset($parsed['host'])) {
+                    return null;
+                }
+                $host = $parsed['host'];
+
+                return isset($parsed['port']) ? $host.':'.$parsed['port'] : $host;
+            }
+
+            return $v;
+        },
+        explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
+            '%s%s',
+            'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
+            Sanctum::currentApplicationUrlWithPort(),
+        )))
+    )))),
 
     /*
     |--------------------------------------------------------------------------
