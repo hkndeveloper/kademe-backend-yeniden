@@ -20,13 +20,6 @@ final class FinalizeApiCorsHeaders
         // Middleware uzerinden CORS header'lari ekle.
         RefreshCorsConfigFromEnv::applyCorsToResponse($request, $response);
 
-        // PHP native header() ile de gonder — belt-and-suspenders.
-        $acao = $response->headers->get('Access-Control-Allow-Origin');
-        if (is_string($acao) && $acao !== '' && ! headers_sent()) {
-            header('Access-Control-Allow-Origin: ' . $acao, true);
-            header('Access-Control-Allow-Credentials: true', true);
-        }
-
         return $response;
     }
 }
