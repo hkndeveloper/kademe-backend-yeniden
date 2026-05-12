@@ -57,7 +57,7 @@ class StudentKpdController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        abort_unless($user->role === 'student', 403, 'KPD randevulari yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'KPD randevulari yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $appointments = KpdAppointment::with([
             'counselor:id,name,surname,role',
@@ -107,7 +107,7 @@ class StudentKpdController extends Controller
 
     public function downloadReport(Request $request, int $id): JsonResponse|StreamedResponse
     {
-        abort_unless($request->user()->role === 'student', 403, 'KPD raporlari yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($request->user()->role, ['student', 'alumni'], true), 403, 'KPD raporlari yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $report = KpdReport::query()
             ->where('user_id', $request->user()->id)
@@ -118,7 +118,7 @@ class StudentKpdController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless($request->user()->role === 'student', 403, 'KPD randevulari yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($request->user()->role, ['student', 'alumni'], true), 403, 'KPD randevulari yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $validated = $request->validate([
             'counselor_id' => 'required|exists:users,id',
@@ -178,7 +178,7 @@ class StudentKpdController extends Controller
 
     public function cancel(Request $request, int $id): JsonResponse
     {
-        abort_unless($request->user()->role === 'student', 403, 'KPD randevulari yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($request->user()->role, ['student', 'alumni'], true), 403, 'KPD randevulari yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $appointment = KpdAppointment::query()
             ->where('counselee_id', $request->user()->id)

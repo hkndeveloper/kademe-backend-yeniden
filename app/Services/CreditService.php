@@ -205,7 +205,7 @@ class CreditService
 
         $user = $participant->user;
 
-        // Kural 1: Dusuk kredi uyarisi (SMS gateway kapsam disi olsa bile log olustur)
+        // Kural 1: Dusuk kredi uyarisi (SMS gateway kapsam disi olsa bile log + event olustur)
         Log::info('credit.low_threshold_warning', [
             'user_id'        => $user->id,
             'participant_id' => $participant->id,
@@ -213,6 +213,9 @@ class CreditService
             'credit'         => $participant->credit,
             'threshold'      => $threshold,
         ]);
+
+        // Event dispatch: ileride SMS, bildirim, e-posta listener'lari baglanabilir.
+        event(new \App\Events\CreditThresholdReached($participant, $threshold));
 
         // Kural 2: Mazeretsiz 3 devamsizlik → 6 ay kara liste
         $unexcusedAbsenceCount = CreditLog::query()

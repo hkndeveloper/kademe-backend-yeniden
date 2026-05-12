@@ -271,6 +271,19 @@ class RequestController extends Controller
             ], 422);
         }
 
+        // Tip bazlı zorunlu alan kontrolleri
+        $typeRequiresProject = in_array($validated['type'], ['vehicle', 'accommodation', 'ticket'], true);
+        if ($typeRequiresProject && empty($validated['project_id'])) {
+            return response()->json([
+                'message' => 'Bu talep tipi icin proje secimi zorunludur.',
+                'errors' => ['project_id' => ['Bu talep tipi icin proje secimi zorunludur.']],
+            ], 422);
+        }
+
+        if ($validated['type'] === 'official_doc' && ($validated['target_unit'] ?? null) !== 'official_affairs') {
+            $validated['target_unit'] = 'official_affairs';
+        }
+
         if (! empty($validated['project_id'])) {
             abort_unless(
                 $this->canAccessRequestProject($request->user(), 'requests.create', (int) $validated['project_id']),

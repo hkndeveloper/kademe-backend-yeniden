@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use App\Http\Controllers\Api\AdminApplicationController;
 use App\Http\Controllers\Api\AdminCertificateController;
@@ -59,6 +59,8 @@ Route::get('/site-config', [SiteSettingsController::class, 'public']);
 Route::post('/contact', [SupportTicketController::class, 'storePublic'])
     ->middleware('throttle:10,1');
 Route::post('/newsletter/subscribe', [NewsletterController::class, 'subscribe'])
+    ->middleware('throttle:20,1');
+Route::get('/newsletter/unsubscribe', [NewsletterController::class, 'unsubscribe'])
     ->middleware('throttle:20,1');
 
 // --- AUTH ROUTLARI --- //
@@ -202,6 +204,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
     Route::put('/programs/{id}/attendances/{participantId}', [AdminProgramController::class, 'markManualAttendance']);
     Route::get('/programs/{id}/attendances/export', [AdminProgramController::class, 'exportAttendanceDetails']);
+    Route::get('/programs/{id}/feedback-stats', [AdminProgramController::class, 'feedbackStats']);
+    Route::get('/programs/{id}/feedback-stats/export', [AdminProgramController::class, 'exportFeedback']);
 
     // Kredi (Puan) ve Rozet YÃ¶netimi
     Route::post('/credits/adjust', [AdminCreditController::class, 'adjustCredit']);
@@ -363,6 +367,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
     Route::put('/programs/{id}/attendances/{participantId}', [AdminProgramController::class, 'markManualAttendance']);
     Route::get('/programs/{id}/attendances/export', [AdminProgramController::class, 'exportAttendanceDetails']);
+    Route::get('/programs/{id}/feedback-stats', [AdminProgramController::class, 'feedbackStats']);
+    Route::get('/programs/{id}/feedback-stats/export', [AdminProgramController::class, 'exportFeedback']);
 
     Route::get('/applications', [AdminApplicationController::class, 'index']);
     Route::get('/applications/export', [AdminApplicationController::class, 'export']);

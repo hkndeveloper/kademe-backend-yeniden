@@ -87,7 +87,7 @@ class PublicContentController extends Controller
         $programs = Program::query()
             ->with(['project:id,name,slug', 'period:id,name'])
             ->whereIn('status', ! empty($validated['status']) ? [$validated['status']] : ['scheduled', 'active', 'completed'])
-            ->when(empty($validated['from']) && empty($validated['to']), fn ($query) => $query->where('start_at', '>=', now()->subDays(30)))
+            ->when(empty($validated['from']) && empty($validated['to']), fn ($query) => $query->where('start_at', '>=', now()->subYear()))
             ->when(! empty($validated['from']), fn ($query) => $query->where('start_at', '>=', $validated['from']))
             ->when(! empty($validated['to']), fn ($query) => $query->where('start_at', '<=', $validated['to']))
             ->when(! empty($validated['project_id']), fn ($query) => $query->where('project_id', $validated['project_id']))

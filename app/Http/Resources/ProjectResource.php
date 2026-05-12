@@ -26,6 +26,7 @@ class ProjectResource extends JsonResource
             'name' => trim(($user?->name ?? '') . ' ' . ($user?->surname ?? '')),
             'university' => $user?->university,
             'department' => $user?->department,
+            'class_year' => $user?->class_year,
             'image' => $this->mediaUrl($user?->profile_photo_path),
         ];
     }

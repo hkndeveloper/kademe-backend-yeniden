@@ -56,7 +56,7 @@ class FeedbackController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        abort_unless($user->role === 'student', 403, 'Degerlendirme yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Degerlendirme yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $attendedPrograms = Program::query()
             ->with(['project:id,name,slug,type'])
@@ -122,7 +122,7 @@ class FeedbackController extends Controller
         ]);
 
         $user = $request->user();
-        abort_unless($user->role === 'student', 403, 'Degerlendirme yalnizca ogrenci paneli icin kullanilabilir.');
+        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Degerlendirme yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
         $program = Program::query()->findOrFail($validated['program_id']);
 
         if ($program->status !== 'completed') {
@@ -154,12 +154,15 @@ class FeedbackController extends Controller
             ->where('user_id', $user->id)
             ->where('project_id', $program->project_id)
             ->where('period_id', $program->period_id)
-            ->where('status', 'active')
+            ->where(function ($query) {
+                $query->where('status', 'active')
+                    ->orWhere('graduation_status', 'graduated');
+            })
             ->first();
 
         if (! $participant) {
             return response()->json([
-                'message' => 'Bu programa ait aktif katilim kaydin bulunamadi.',
+                'message' => 'Bu programa ait aktif veya mezun katilim kaydin bulunamadi.',
             ], 422);
         }
 

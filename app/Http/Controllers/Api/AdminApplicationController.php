@@ -486,6 +486,12 @@ class AdminApplicationController extends Controller
                 ]);
 
                 if ($application->user) {
+                    // UserProfile satırı yoksa oluştur
+                    $application->user->profile()->firstOrCreate(
+                        ['user_id' => $application->user->id],
+                        []
+                    );
+
                     if (! in_array($application->user->role, ['student', 'alumni'], true)) {
                         $application->user->update([
                             'role' => 'student',

@@ -259,8 +259,12 @@ class AdminProgramController extends Controller
             'Tamamlanan veya iptal edilen program icin QR yoklama baslatilamaz.'
         );
 
+        $validated = $request->validate([
+            'rotation_seconds' => 'nullable|integer|min:10|max:120',
+        ]);
+
         $qrToken = 'prg_' . $program->id . '_' . Str::random(12);
-        $rotationSeconds = 30;
+        $rotationSeconds = (int) ($validated['rotation_seconds'] ?? 30);
         $expiresAt = now()->addSeconds($rotationSeconds);
 
         $program->update([
@@ -300,6 +304,16 @@ class AdminProgramController extends Controller
                 return;
             }
 
+            // Etkinlik tamamlandığında TÜM aktif katılımcılardan kredi düşümü yapılır.
+            // Yoklamaya gelip değerlendirme formunu dolduranlar krediyi geri kazanır (restore).
+            // Yoklamaya gelmeyenler krediyi kaybeder ama sonraki etkinliklere katılabilir.
+            $attendedUserIds = \App\Models\Attendance::query()
+                ->where('program_id', $program->id)
+                ->where('is_valid', true)
+                ->pluck('user_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
             $participants = Participant::query()
                 ->where('project_id', $program->project_id)
                 ->where('status', 'active')
@@ -311,11 +325,16 @@ class AdminProgramController extends Controller
                 ->get();
 
             foreach ($participants as $participant) {
+                $attended = in_array((int) $participant->user_id, $attendedUserIds, true);
+                $reason = $attended
+                    ? 'Etkinlik tamamlandi, degerlendirme bekleniyor'
+                    : 'Etkinlige katilim saglanmadi, kredi dusumu uygulandi';
+
                 $log = $this->creditService->deductOnceForProgram(
                     $participant,
                     $program,
                     $request->user()->id,
-                    'Etkinlik tamamlandi, degerlendirme bekleniyor'
+                    $reason
                 );
 
                 if ($log !== null) {
@@ -575,6 +594,125 @@ class AdminProgramController extends Controller
             $request->string('format')->toString() ?: 'csv',
             'program_' . $program->id . '_yoklama_' . now()->format('Ymd_His'),
             'Program Yoklama Detaylari',
+            $headings,
+            $rows,
+        );
+    }
+
+    /**
+     * GET /panel/programs/{id}/feedback-stats
+     * Etkinlik değerlendirme istatistikleri — soru bazlı ortalamalar + bireysel yanıtlar.
+     */
+    public function feedbackStats(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'programs.view');
+        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
+        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.view');
+
+        $feedbacks = Feedback::query()
+            ->where('program_id', $program->id)
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        $totalCount = $feedbacks->count();
+
+        // Soru bazlı istatistikler
+        $ratingKeys = ['content_quality', 'speaker_quality', 'organization_quality'];
+        $questionStats = [];
+
+        foreach ($ratingKeys as $key) {
+            $values = $feedbacks
+                ->map(fn (Feedback $f) => $f->responses[$key] ?? null)
+                ->filter(fn ($v) => $v !== null)
+                ->values();
+
+            $distribution = [];
+            for ($i = 1; $i <= 5; $i++) {
+                $distribution[$i] = $values->filter(fn ($v) => (int) $v === $i)->count();
+            }
+
+            $questionStats[$key] = [
+                'label' => match ($key) {
+                    'content_quality' => 'Icerik Kalitesi',
+                    'speaker_quality' => 'Konusmaci Kalitesi',
+                    'organization_quality' => 'Organizasyon Kalitesi',
+                    default => $key,
+                },
+                'count' => $values->count(),
+                'average' => $values->count() > 0 ? round($values->avg(), 2) : null,
+                'min' => $values->count() > 0 ? (int) $values->min() : null,
+                'max' => $values->count() > 0 ? (int) $values->max() : null,
+                'distribution' => $distribution,
+            ];
+        }
+
+        // Genel ortalama
+        $allRatings = $feedbacks->flatMap(function (Feedback $f) use ($ratingKeys) {
+            return collect($ratingKeys)->map(fn ($k) => $f->responses[$k] ?? null)->filter();
+        });
+        $overallAverage = $allRatings->count() > 0 ? round($allRatings->avg(), 2) : null;
+
+        // Bireysel yanıtlar (anonim — sadece puan + yorum)
+        $responses = $feedbacks->map(fn (Feedback $f) => [
+            'id' => $f->id,
+            'content_quality' => $f->responses['content_quality'] ?? null,
+            'speaker_quality' => $f->responses['speaker_quality'] ?? null,
+            'organization_quality' => $f->responses['organization_quality'] ?? null,
+            'comment' => $f->responses['comment'] ?? null,
+            'submitted_at' => optional($f->submitted_at)?->toIso8601String(),
+        ])->values();
+
+        // Yorumlu değerlendirme sayısı
+        $withCommentCount = $feedbacks->filter(fn (Feedback $f) => ! empty($f->responses['comment']))->count();
+
+        return response()->json([
+            'program' => [
+                'id' => $program->id,
+                'title' => $program->title,
+                'project' => $program->project?->name,
+                'period' => $program->period?->name,
+                'start_at' => optional($program->start_at)?->toIso8601String(),
+                'status' => $program->status,
+            ],
+            'summary' => [
+                'total_feedback' => $totalCount,
+                'with_comment' => $withCommentCount,
+                'overall_average' => $overallAverage,
+            ],
+            'question_stats' => $questionStats,
+            'responses' => $responses,
+        ]);
+    }
+
+    /**
+     * GET /panel/programs/{id}/feedback-stats/export
+     * Feedback verilerini dışa aktar.
+     */
+    public function exportFeedback(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'programs.view');
+        $program = Program::with(['project:id,name'])->findOrFail($id);
+        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.view');
+
+        $feedbacks = Feedback::query()
+            ->where('program_id', $program->id)
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        $headings = ['#', 'Icerik Kalitesi', 'Konusmaci Kalitesi', 'Organizasyon Kalitesi', 'Yorum', 'Gonderim Tarihi'];
+        $rows = $feedbacks->map(fn (Feedback $f, int $index) => [
+            $index + 1,
+            $f->responses['content_quality'] ?? '-',
+            $f->responses['speaker_quality'] ?? '-',
+            $f->responses['organization_quality'] ?? '-',
+            $f->responses['comment'] ?? '-',
+            $f->submitted_at?->format('d.m.Y H:i') ?? '-',
+        ])->all();
+
+        return AdminExportResponder::download(
+            $request->string('format')->toString() ?: 'csv',
+            'program_' . $program->id . '_degerlendirmeler_' . now()->format('Ymd_His'),
+            'Program Degerlendirmeleri',
             $headings,
             $rows,
         );

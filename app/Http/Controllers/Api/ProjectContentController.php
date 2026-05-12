@@ -455,6 +455,11 @@ class ProjectContentController extends Controller
             'require_consent' => 'sometimes|boolean',
             'consent_text' => 'nullable|string|max:5000',
             'is_active' => 'sometimes|boolean',
+            'auto_reject_rules' => 'nullable|array',
+            'auto_reject_rules.*.field_id' => 'required_with:auto_reject_rules|string|max:100',
+            'auto_reject_rules.*.operator' => 'required_with:auto_reject_rules|string|in:equals,not_equals,contains,gt,lt,gte,lte',
+            'auto_reject_rules.*.value' => 'required_with:auto_reject_rules|string|max:255',
+            'auto_reject_rules.*.reason' => 'nullable|string|max:500',
         ]);
 
         if (!empty($validated['period_id']) && !$project->periods->contains('id', $validated['period_id'])) {
@@ -493,6 +498,7 @@ class ProjectContentController extends Controller
                 'require_consent' => (bool) ($validated['require_consent'] ?? false),
                 'consent_text' => $validated['consent_text'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
+                'auto_reject_rules' => $validated['auto_reject_rules'] ?? null,
             ]
         );
 

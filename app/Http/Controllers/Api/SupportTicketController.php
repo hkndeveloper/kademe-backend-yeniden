@@ -210,10 +210,12 @@ class SupportTicketController extends Controller
         }
 
         $unitKeywords = match (true) {
-            str_contains($raw, 'tasar') || str_contains($raw, 'medya') || str_contains($raw, 'social') => ['medya', 'tasarim', 'icerik', 'content'],
-            str_contains($raw, 'evrak') => ['idari', 'operasyon'],
-            str_contains($raw, 'konaklama') || str_contains($raw, 'bilet') || str_contains($raw, 'ulas') || str_contains($raw, 'yemek') || str_contains($raw, 'arac') => ['operasyon', 'idari'],
-            str_contains($raw, 'teknik') || str_contains($raw, 'hata') => ['it', 'teknik', 'bilisim'],
+            str_contains($raw, 'tasar') || str_contains($raw, 'medya') || str_contains($raw, 'social') || str_contains($raw, 'media_design') => ['medya', 'tasarim', 'icerik', 'content'],
+            str_contains($raw, 'evrak') || str_contains($raw, 'official_document') || str_contains($raw, 'official') => ['idari', 'operasyon'],
+            str_contains($raw, 'konaklama') || str_contains($raw, 'bilet') || str_contains($raw, 'ulas') || str_contains($raw, 'yemek') || str_contains($raw, 'arac')
+                || str_contains($raw, 'accommodation') || str_contains($raw, 'ticket') || str_contains($raw, 'transport') || str_contains($raw, 'food') || str_contains($raw, 'vehicle') => ['operasyon', 'idari'],
+            str_contains($raw, 'teknik') || str_contains($raw, 'hata') || str_contains($raw, 'technical') || str_contains($raw, 'bug') => ['it', 'teknik', 'bilisim'],
+            str_contains($raw, 'general') || str_contains($raw, 'genel') || str_contains($raw, 'other') || str_contains($raw, 'diger') => [],
             default => [],
         };
 

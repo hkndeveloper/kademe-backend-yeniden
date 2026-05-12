@@ -13,3 +13,6 @@ use App\Jobs\RotateQrTokenJob;
 
 // QR Kod Rotasyonu: Ekran görüntüsü hilesine karşı 30-60 saniyede bir tetiklenir (Cron en sık dakikada bir çalışır, içeriğinde detaylı loop kurulabilir veya supervisor ile daemon olarak yönetilebilir)
 Schedule::job(new RotateQrTokenJob)->everyMinute();
+
+// Dönemlik Kredi Reset: Her gün gece yarısı, bugün başlayan dönemlerin katılımcı kredilerini resetler.
+Schedule::command('kademe:reset-period-credits')->dailyAt('00:05');

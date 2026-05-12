@@ -124,4 +124,54 @@ class NewsletterController extends Controller
             'subscriber' => $subscriber,
         ]);
     }
+
+    /**
+     * GET /newsletter/unsubscribe?token={token}&email={email}
+     * KVKK uyumlu: Kullanıcı giriş yapmadan e-bülten aboneliğinden çıkabilir.
+     */
+    public function unsubscribe(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'token' => 'required|string',
+        ]);
+
+        // Token doğrulama: email hash ile eşleşme
+        $expectedToken = hash('sha256', $validated['email'] . config('app.key'));
+        if (! hash_equals($expectedToken, $validated['token'])) {
+            return response()->json([
+                'message' => 'Gecersiz abonelik cikarma baglantisi.',
+            ], 403);
+        }
+
+        $subscriber = NewsletterSubscriber::where('email', $validated['email'])->first();
+        if (! $subscriber) {
+            return response()->json([
+                'message' => 'E-posta adresi e-bulten listesinde bulunamadi.',
+            ], 404);
+        }
+
+        if ($subscriber->unsubscribed_at) {
+            return response()->json([
+                'message' => 'Aboneliginiz zaten iptal edilmis.',
+            ]);
+        }
+
+        $subscriber->update(['unsubscribed_at' => now()]);
+
+        return response()->json([
+            'message' => 'E-bulten aboneliginiz basariyla iptal edildi.',
+        ]);
+    }
+
+    /**
+     * Unsubscribe linki oluştur (mail şablonlarında kullanılacak).
+     */
+    public static function generateUnsubscribeUrl(string $email): string
+    {
+        $token = hash('sha256', $email . config('app.key'));
+        $baseUrl = config('app.frontend_url', config('cors.allowed_origins.0', 'https://hakankekec.me'));
+
+        return $baseUrl . '/newsletter/unsubscribe?email=' . urlencode($email) . '&token=' . $token;
+    }
 }
