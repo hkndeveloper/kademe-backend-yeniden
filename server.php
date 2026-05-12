@@ -100,9 +100,9 @@ file_put_contents('php://stdout', "[$formattedDateTime] $remoteAddress [$request
         exit;
     }
 
-    // Normal istek — CORS basliklarini SIMDI gonder, Symfony'den once.
-    header('Access-Control-Allow-Origin: ' . $origin, true);
-    header('Access-Control-Allow-Credentials: true', true);
+    // Normal istek — CORS basliklarini BURADA gonderme, Symfony / Laravel Middleware
+    // (RefreshCorsConfigFromEnv) bunu kendi icinde HeaderBag uzerinden yapacak.
+    // Aksi takdirde cifte (duplicate) header olusuyor.
 })();
 
 require_once $publicPath.'/index.php';
