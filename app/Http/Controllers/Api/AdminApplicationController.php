@@ -501,6 +501,9 @@ class AdminApplicationController extends Controller
                     } elseif ($application->user->status !== 'active' && $application->user->role === 'student') {
                         $application->user->update(['status' => 'active']);
                     }
+
+                    // Kullanıcı onaylandığında/kabul edildiğinde şifre belirleme maili (reset linki) gönder
+                    \Illuminate\Support\Facades\Password::sendResetLink(['email' => $application->user->email]);
                 }
             }
 
