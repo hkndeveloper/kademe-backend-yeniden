@@ -32,6 +32,19 @@ class InboxController extends Controller
     }
 
     /** @return int[] */
+    private function participantPeriodIds(int $userId): array
+    {
+        return Participant::query()
+            ->where('user_id', $userId)
+            ->whereNotNull('period_id')
+            ->pluck('period_id')
+            ->unique()
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /** @return int[] */
     private function inboxProjectIds(User $user): array
     {
         return collect([
@@ -106,7 +119,15 @@ class InboxController extends Controller
 
     private function forumPostVisibleToUser(User $user, ForumPost $post): bool
     {
-        return in_array((int) $post->project_id, $this->inboxProjectIds($user), true);
+        if (! in_array((int) $post->project_id, $this->inboxProjectIds($user), true)) {
+            return false;
+        }
+
+        if ($post->period_id === null || $this->userHasPanelAnnouncementView($user)) {
+            return true;
+        }
+
+        return in_array((int) $post->period_id, $this->participantPeriodIds((int) $user->id), true);
     }
 
     public function recipientMessages(Request $request): JsonResponse
@@ -125,6 +146,7 @@ class InboxController extends Controller
         $user = $request->user();
         $userId = (int) $user->id;
         $projectIds = $this->inboxProjectIds($user);
+        $participantPeriodIds = $this->participantPeriodIds($userId);
         $projectFilter = isset($validated['project_id']) ? (int) $validated['project_id'] : null;
         if ($projectFilter !== null) {
             abort_unless(in_array($projectFilter, $projectIds, true), 403, 'Bu proje inbox filtresi icin yetkiniz yok.');
@@ -252,9 +274,18 @@ class InboxController extends Controller
 
         if (($validated['type'] ?? null) === null || $validated['type'] === 'forum_post') {
             $forumQuery = ForumPost::query()
-                ->with(['project:id,name', 'author:id,name,surname'])
+                ->with(['project:id,name', 'period:id,name,status', 'author:id,name,surname'])
                 ->whereIn('project_id', $projectFilter !== null ? [$projectFilter] : $projectIds)
                 ->where('user_id', '!=', $userId);
+
+            if (! $panelCanViewAnnouncements) {
+                $forumQuery->where(function ($query) use ($participantPeriodIds) {
+                    $query->whereNull('period_id');
+                    if ($participantPeriodIds !== []) {
+                        $query->orWhereIn('period_id', $participantPeriodIds);
+                    }
+                });
+            }
 
             if (! empty($validated['from'])) {
                 $forumQuery->whereDate('created_at', '>=', $validated['from']);
@@ -275,6 +306,11 @@ class InboxController extends Controller
                         'project' => $item->project ? ['id' => $item->project->id, 'name' => $item->project->name] : null,
                         'meta' => [
                             'author' => $item->author ? trim($item->author->name.' '.$item->author->surname) : null,
+                            'period' => $item->period ? [
+                                'id' => $item->period->id,
+                                'name' => $item->period->name,
+                                'status' => $item->period->status,
+                            ] : null,
                         ],
                         'timestamp' => optional($item->created_at)->toIso8601String(),
                     ];

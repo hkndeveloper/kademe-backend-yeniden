@@ -24,7 +24,7 @@ return [
         array_filter(
             array_map(
                 static fn (string $v): string => trim($v, " \t\n\r\0\x0B\"'"),
-                explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:3000'))
+                explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://hakankekec.me,http://hakankekec.me:3000,https://hakankekec.me,https://hakankekec.me:3000'))
             )
         )
     ),

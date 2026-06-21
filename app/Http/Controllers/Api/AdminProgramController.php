@@ -3,718 +3,357 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\CreditLog;
 use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
-use App\Models\Project;
-use App\Support\AdminExportResponder;
-use App\Models\User;
+use App\Models\ProgramPhoto;
 use App\Services\CreditService;
-use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
+use App\Support\AdminExportResponder;
+use App\Support\FeedbackFormResolver;
+use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AdminProgramController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
-    public function __construct(
-        private readonly PermissionResolver $permissionResolver,
-        private readonly CreditService $creditService
-    ) {
-    }
+    public function __construct(private readonly PermissionResolver $permissionResolver, private readonly CreditService $creditService) {}
 
-    private function canManageProject(User $user, Project $project, string $permission): bool
-    {
-        return $this->permissionResolver->canAccessProject($user, $permission, $project->id);
-    }
-
-    private function abortIfUnauthorized(User $user, Project $project, string $permission): void
-    {
-        abort_unless($this->canManageProject($user, $project, $permission), 403, 'Bu projeyi yonetme yetkiniz yok.');
-    }
-
-    private function assertPeriodBelongsToProject(Project $project, int $periodId): void
-    {
-        if (! $project->periods()->whereKey($periodId)->exists()) {
-            throw ValidationException::withMessages([
-                'period_id' => ['Secilen donem bu projeye ait degil.'],
-            ]);
-        }
-    }
-
-    private function assertNoProgramTimeConflict(string $startAt, string $endAt, ?int $ignoreProgramId = null): void
-    {
-        $start = Carbon::parse($startAt);
-        $end = Carbon::parse($endAt);
-
-        $conflictingProgram = Program::query()
-            ->with('project:id,name')
-            ->where('status', '!=', 'cancelled')
-            ->when($ignoreProgramId, fn ($query) => $query->whereKeyNot($ignoreProgramId))
-            ->where('start_at', '<', $end)
-            ->where('end_at', '>', $start)
-            ->orderBy('start_at')
-            ->first();
-
-        if (! $conflictingProgram) {
-            return;
-        }
-
-        $projectName = $conflictingProgram->project?->name ?? 'Baska proje';
-        $start = optional($conflictingProgram->start_at)?->format('d.m.Y H:i');
-        $end = optional($conflictingProgram->end_at)?->format('d.m.Y H:i');
-
-        throw ValidationException::withMessages([
-            'start_at' => ["Secilen saat araligi {$projectName} / {$conflictingProgram->title} programiyla cakisiyor ({$start} - {$end})."],
-        ]);
-    }
-
-    /**
-     * Projeye ait etkinlikleri listele.
-     */
     public function index(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.view');
-        $validated = $request->validate([
-            'project_id' => 'required|exists:projects,id',
-        ]);
-
-        $project = Project::findOrFail($validated['project_id']);
-        $this->abortIfUnauthorized($request->user(), $project, 'programs.view');
-
-        $query = Program::query()
-            ->with(['project:id,name', 'period:id,name'])
-            ->where('project_id', $project->id)
-            ->orderBy('start_at', 'desc');
-
-        if ($this->permissionResolver->hasPermission($request->user(), 'programs.attendance.view')) {
-            $query->withCount([
-                'attendances as attendance_count',
-                'feedbacks as feedback_count',
-            ]);
-        }
-
-        $programs = $query->get();
-
-        return response()->json(['programs' => $programs]);
+        $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
+        $ctx=$this->resolveProjectPeriodContext($request,'programs.view',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
+        $q=Program::query()->with(['project:id,name','period:id,name'])->withCount(['attendances','feedbacks'])->orderByDesc('start_at');
+        $this->applyProjectPeriodContext($q,$ctx);
+        return response()->json(['programs'=>$q->get()->map(fn(Program $p)=>$this->programPayload($p))->values()]);
     }
 
     public function export(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'programs.export');
-        $query = Program::query()->with(['project:id,name', 'period:id,name']);
-
-        if ($request->filled('project_id')) {
-            $project = Project::findOrFail($request->integer('project_id'));
-            $this->abortIfUnauthorized($request->user(), $project, 'programs.export');
-            $query->where('project_id', $project->id);
-        } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'programs.export')) {
-            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($request->user(), 'programs.export');
-            $query->whereIn('project_id', $manageableProjectIds);
-        }
-
-        $programs = $query->orderByDesc('start_at')->get();
-        $headings = ['ID', 'Proje', 'Donem', 'Baslik', 'Konum', 'Baslangic', 'Bitis', 'Durum', 'Yoklama Capi', 'Kredi Dusumu', 'Basvuru Kontenjani'];
-        $rows = $programs->map(fn (Program $program) => [
-            $program->id,
-            $program->project?->name ?? '-',
-            $program->period?->name ?? '-',
-            $program->title,
-            $program->location ?? '-',
-            optional($program->start_at)?->format('d.m.Y H:i') ?? '-',
-            optional($program->end_at)?->format('d.m.Y H:i') ?? '-',
-            $program->status ?? '-',
-            $program->radius_meters ?? '-',
-            $program->credit_deduction ?? '-',
-            $program->application_quota ?? '-',
-        ])->all();
-
-        return AdminExportResponder::download(
-            $request->string('format')->toString() ?: 'csv',
-            'programlar_' . now()->format('Ymd_His'),
-            'Programlar',
-            $headings,
-            $rows,
-        );
+        $this->abortUnlessAllowed($request,'programs.export');
+        $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
+        $ctx=$this->resolveProjectPeriodContext($request,'programs.export',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
+        $q=Program::query()->with(['project:id,name','period:id,name'])->orderByDesc('start_at');
+        $this->applyProjectPeriodContext($q,$ctx);
+        $rows=$q->get()->map(fn(Program $p)=>[$p->id,$p->project?->name??'-',$p->period?->name??'-',$p->title,$p->location??'-',optional($p->start_at)?->format('d.m.Y H:i')??'-',optional($p->end_at)?->format('d.m.Y H:i')??'-',$p->status,$p->credit_deduction??0])->all();
+        return AdminExportResponder::download($request->string('format')->toString()?:'csv','programlar_'.now()->format('Ymd_His'),'Programlar',['ID','Proje','Donem','Program','Yer','Baslangic','Bitis','Durum','Kredi Kesintisi'],$rows);
     }
 
-    /**
-     * Yeni etkinlik olustur.
-     */
-    public function store(Request $request, GoogleCalendarService $googleCalendar): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.create');
-        $validated = $request->validate([
-            'project_id' => 'required|exists:projects,id',
-            'period_id' => 'required|exists:periods,id',
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'location' => 'nullable|string|max:255',
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
-            'radius_meters' => 'required|integer|min:10',
-            'guest_info' => 'nullable|array',
-            'start_at' => 'required|date',
-            'end_at' => 'required|date|after:start_at',
-            'credit_deduction' => 'required|integer|min:0',
-            'application_quota' => 'nullable|integer|min:1',
-        ]);
-
-        $project = Project::findOrFail($validated['project_id']);
-        $this->abortIfUnauthorized($request->user(), $project, 'programs.create');
-        $this->assertPeriodBelongsToProject($project, (int) $validated['period_id']);
-        $this->assertNoProgramTimeConflict($validated['start_at'], $validated['end_at']);
-
-        $program = Program::create(array_merge($validated, [
-            'created_by' => $request->user()->id,
-            'status' => 'scheduled',
-        ]));
-
-        try {
-            $googleCalendar->syncProgram($program->fresh(['project:id,name', 'period:id,name']));
-        } catch (\Throwable $throwable) {
-            Log::warning('Program Google Calendar senkronizasyonu store sirasinda basarisiz oldu.', [
-                'program_id' => $program->id,
-                'message' => $throwable->getMessage(),
-            ]);
-        }
-
-        return response()->json([
-            'message' => 'Etkinlik basariyla planlandi.',
-            'program' => $program->fresh(['project:id,name', 'period:id,name']),
-        ], 201);
+        $v=$this->validatedProgramData($request,true);
+        $this->abortUnlessProjectAllowed($request,'programs.create',(int)$v['project_id']);
+        $this->assertPeriodWritable($request,(int)$v['period_id']);
+        $this->assertNoOverlap($v['start_at'],$v['end_at']??null,null,$v['status']??'scheduled');
+        $program=Program::query()->create($v+['created_by'=>$request->user()->id]);
+        return response()->json(['program'=>$this->programPayload($program->load(['project:id,name','period:id,name']))],201);
     }
 
-    /**
-     * Etkinlik guncelle.
-     */
-    public function update(Request $request, int $id, GoogleCalendarService $googleCalendar): JsonResponse
+    public function update(Request $request,int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.update');
-        $program = Program::with('project')->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.update');
-
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'location' => 'nullable|string|max:255',
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
-            'radius_meters' => 'required|integer|min:10',
-            'guest_info' => 'nullable|array',
-            'start_at' => 'required|date',
-            'end_at' => 'required|date|after:start_at',
-            'credit_deduction' => 'required|integer|min:0',
-            'application_quota' => 'nullable|integer|min:1',
-            'status' => 'required|in:scheduled,active,completed,cancelled',
-        ]);
-
-        if (in_array($validated['status'], ['completed', 'cancelled'], true)) {
-            $validated['qr_token'] = null;
-            $validated['qr_expires_at'] = null;
-        }
-
-        if ($validated['status'] !== 'cancelled') {
-            $this->assertNoProgramTimeConflict($validated['start_at'], $validated['end_at'], $program->id);
-        }
-
-        $program->update($validated);
-
-        try {
-            $googleCalendar->syncProgram($program->fresh(['project:id,name', 'period:id,name']));
-        } catch (\Throwable $throwable) {
-            Log::warning('Program Google Calendar senkronizasyonu update sirasinda basarisiz oldu.', [
-                'program_id' => $program->id,
-                'message' => $throwable->getMessage(),
-            ]);
-        }
-
-        return response()->json([
-            'message' => 'Program guncellendi.',
-            'program' => $program->fresh(['project:id,name', 'period:id,name']),
-        ]);
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.update',(int)$program->project_id);
+        $v=$this->validatedProgramData($request,false,$program);
+        $periodId=array_key_exists('period_id',$v)?(int)$v['period_id']:(int)$program->period_id;
+        $this->assertPeriodWritable($request,$periodId);
+        $this->assertNoOverlap($v['start_at']??$program->start_at,$v['end_at']??$program->end_at,$program->id,$v['status']??$program->status);
+        $program->update($v);
+        return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
     }
 
-    /**
-     * Dinamik QR kod uret.
-     */
-    public function generateQr(Request $request, int $id): JsonResponse
+    public function generateQr(Request $request,int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.qr.manage');
-        $program = Program::with('project')->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.qr.manage');
-        abort_if(
-            in_array($program->status, ['completed', 'cancelled'], true),
-            422,
-            'Tamamlanan veya iptal edilen program icin QR yoklama baslatilamaz.'
-        );
-
-        $validated = $request->validate([
-            'rotation_seconds' => 'nullable|integer|min:10|max:120',
-        ]);
-
-        $qrToken = 'prg_' . $program->id . '_' . Str::random(12);
-        $rotationSeconds = (int) ($validated['rotation_seconds'] ?? 30);
-        $expiresAt = now()->addSeconds($rotationSeconds);
-
-        $program->update([
-            'status' => 'active',
-            'qr_token' => $qrToken,
-            'qr_expires_at' => $expiresAt,
-            'qr_rotation_seconds' => $rotationSeconds,
-        ]);
-
-        return response()->json([
-            'qr_token' => $qrToken,
-            'expires_at' => $expiresAt,
-            'refresh_in_seconds' => $rotationSeconds,
-        ]);
+        $this->abortUnlessAllowed($request,'programs.qr.manage');
+        $v=$request->validate(['rotation_seconds'=>['nullable','integer','min:15','max:300']]);
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.qr.manage',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        if(!$program->isAttendanceWindowOpen()) throw ValidationException::withMessages(['start_at'=>['QR yoklama sadece program saat araliginda baslatilabilir.']])->status(422);
+        $rotation=(int)($v['rotation_seconds']??$program->qr_rotation_seconds??30);
+        $token='prg_'.$program->id.'_'.Str::random(48);
+        $expiresAt=now()->addSeconds($rotation);
+        $program->update(['qr_token'=>$token,'qr_expires_at'=>$expiresAt,'qr_rotation_seconds'=>$rotation,'status'=>$program->status==='scheduled'?'active':$program->status]);
+        return response()->json(['qr_token'=>$token,'expires_at'=>$expiresAt->toIso8601String(),'refresh_in_seconds'=>$rotation]);
     }
 
-    /**
-     * Etkinligi tamamla.
-     */
-    public function complete(Request $request, int $id, GoogleCalendarService $googleCalendar): JsonResponse
+    public function complete(Request $request,int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.complete');
-        $program = Program::with('project')->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.complete');
-
-        $creditDeduction = max((int) ($program->credit_deduction ?? 0), 0);
-        $deductedCount = 0;
-
-        DB::transaction(function () use ($program, $request, $creditDeduction, &$deductedCount) {
-            $program->update([
-                'status' => 'completed',
-                'qr_token' => null,
-                'qr_expires_at' => null,
-            ]);
-
-            if ($creditDeduction === 0) {
-                return;
+        $this->abortUnlessAllowed($request,'programs.complete');
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.complete',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $participants=$this->programParticipantsQuery($program)->where('status','active')->get();
+        $validUserIds=Attendance::query()->where('program_id',$program->id)->where('is_valid',true)->pluck('user_id')->map(fn($id)=>(int)$id)->all();
+        $deducted=0;
+        DB::transaction(function()use($program,$participants,$validUserIds,$request,&$deducted){
+            foreach($participants as $participant){
+                if(!$this->participantHasCreditImpact($participant)) continue;
+                $log=$this->creditService->deductOnceForProgram($participant,$program,$request->user()->id,in_array((int)$participant->user_id,$validUserIds,true)?'Etkinlik yoklamasi alindi, degerlendirme bekleniyor':'Etkinlik tamamlandi, katilim kaydi bulunamadi');
+                if($log) $deducted++;
             }
-
-            // Etkinlik tamamlandığında TÜM aktif katılımcılardan kredi düşümü yapılır.
-            // Yoklamaya gelip değerlendirme formunu dolduranlar krediyi geri kazanır (restore).
-            // Yoklamaya gelmeyenler krediyi kaybeder ama sonraki etkinliklere katılabilir.
-            $attendedUserIds = \App\Models\Attendance::query()
-                ->where('program_id', $program->id)
-                ->where('is_valid', true)
-                ->pluck('user_id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
-
-            $participants = Participant::query()
-                ->where('project_id', $program->project_id)
-                ->where('status', 'active')
-                ->when(
-                    $program->period_id,
-                    fn ($query) => $query->where('period_id', $program->period_id),
-                    fn ($query) => $query->whereNull('period_id')
-                )
-                ->get();
-
-            foreach ($participants as $participant) {
-                $attended = in_array((int) $participant->user_id, $attendedUserIds, true);
-                $reason = $attended
-                    ? 'Etkinlik tamamlandi, degerlendirme bekleniyor'
-                    : 'Etkinlige katilim saglanmadi, kredi dusumu uygulandi';
-
-                $log = $this->creditService->deductOnceForProgram(
-                    $participant,
-                    $program,
-                    $request->user()->id,
-                    $reason
-                );
-
-                if ($log !== null) {
-                    $deductedCount++;
-                }
-            }
+            $program->update(['status'=>'completed']);
         });
-
-        try {
-            $googleCalendar->syncProgram($program->fresh(['project:id,name', 'period:id,name']));
-        } catch (\Throwable $throwable) {
-            Log::warning('Program Google Calendar senkronizasyonu complete sirasinda basarisiz oldu.', [
-                'program_id' => $program->id,
-                'message' => $throwable->getMessage(),
-            ]);
-        }
-
         $request->attributes->set('audit.subject', $program);
         $request->attributes->set('audit.event', 'program.completed');
         $request->attributes->set('audit.description', 'program.completed');
-        $request->attributes->set('audit.properties', [
-            'operation' => 'program_complete',
-            'project_id' => $program->project_id,
-            'period_id' => $program->period_id,
-            'program_id' => $program->id,
-            'program_title' => $program->title,
-            'credit_deduction' => $creditDeduction,
-            'deducted_participant_count' => $deductedCount,
-            'status_after' => 'completed',
-        ]);
-
-        return response()->json([
-            'message' => 'Etkinlik ve yoklama alimi basariyla sonlandirildi.',
-            'deducted_participant_count' => $deductedCount,
-        ]);
+        $request->attributes->set('audit.properties', ['operation'=>'program_complete','project_id'=>$program->project_id,'period_id'=>$program->period_id,'program_id'=>$program->id,'program_title'=>$program->title,'deducted_participant_count'=>$deducted]);
+        return response()->json(['message'=>'Program tamamlandi.','program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name'])),'deducted_participant_count'=>$deducted]);
+    }
+    public function attendanceDetails(Request $request,int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.attendance.view');
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.attendance.view',(int)$program->project_id);
+        $records=$this->attendanceRecords($program);
+        $present=$records->filter(fn($r)=>(bool)$r['is_valid']&&$r['recorded_at'])->count();
+        return response()->json(['program'=>['id'=>$program->id,'title'=>$program->title,'project'=>$program->project?->name,'period'=>$program->period?->name],'summary'=>[
+            'attendance_count'=>$present,
+            'participant_count'=>$records->count(),
+            'absent_count'=>max($records->count()-$present,0),
+            'feedback_count'=>Feedback::query()->where('program_id',$program->id)->count(),
+            'deduction_count'=>CreditLog::query()->where('program_id',$program->id)->where('type','deduction')->count(),
+            'restore_count'=>CreditLog::query()->where('program_id',$program->id)->where(fn($q)=>$q->where('type','restore')->orWhere('amount','>',0))->count(),
+        ],'records'=>$records]);
     }
 
-    public function attendanceDetails(Request $request, int $id): JsonResponse
+    public function markManualAttendance(Request $request,int $id,int $participantId): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.attendance.view');
-        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.attendance.view');
-
-        $attendances = Attendance::query()
-            ->with(['user:id,name,surname,email', 'program:id,title'])
-            ->where('program_id', $program->id)
-            ->orderByDesc('created_at')
-            ->get();
-        $participants = Participant::query()
-            ->with('user:id,name,surname,email')
-            ->where('project_id', $program->project_id)
-            ->when(
-                $program->period_id,
-                fn ($query) => $query->where('period_id', $program->period_id),
-                fn ($query) => $query->whereNull('period_id')
-            )
-            ->where('status', 'active')
-            ->orderBy('id')
-            ->get();
-        $attendanceByUserId = $attendances->keyBy('user_id');
-
-        $creditLogsByUserId = CreditLog::query()
-            ->where('program_id', $program->id)
-            ->get()
-            ->groupBy('user_id');
-        $deductedUserIds = $creditLogsByUserId
-            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null)
-            ->keys()
-            ->map(fn ($id) => (int) $id)
-            ->values()
-            ->all();
-        $restoredUserIds = $creditLogsByUserId
-            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null && (int) $logs->sum('amount') >= 0)
-            ->keys()
-            ->map(fn ($id) => (int) $id)
-            ->values()
-            ->all();
-        $feedbackCount = Feedback::query()->where('program_id', $program->id)->count();
-
-        return response()->json([
-            'program' => [
-                'id' => $program->id,
-                'title' => $program->title,
-                'project' => $program->project?->name,
-                'period' => $program->period?->name,
-                'start_at' => optional($program->start_at)?->toIso8601String(),
-                'status' => $program->status,
-            ],
-            'summary' => [
-                'attendance_count' => $attendances->count(),
-                'participant_count' => $participants->count(),
-                'absent_count' => max($participants->count() - $attendances->where('is_valid', true)->count(), 0),
-                'feedback_count' => $feedbackCount,
-                'deduction_count' => count($deductedUserIds),
-                'restore_count' => count($restoredUserIds),
-            ],
-            'records' => $participants->map(function (Participant $participant) use ($attendanceByUserId, $restoredUserIds, $deductedUserIds) {
-                $uid = (int) $participant->user_id;
-                $attendance = $attendanceByUserId->get($uid);
-                $isValid = (bool) ($attendance?->is_valid ?? false);
-                $creditDeducted = in_array($uid, $deductedUserIds, true);
-                $creditRestored = in_array($uid, $restoredUserIds, true);
-
-                return [
-                    'id' => $attendance?->id,
-                    'participant_id' => $participant->id,
-                    'student' => $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
-                    'email' => $participant->user?->email,
-                    'method' => $attendance?->method,
-                    'is_valid' => $isValid,
-                    'attendance_status' => $isValid ? 'present' : 'absent',
-                    'latitude' => $attendance?->latitude,
-                    'longitude' => $attendance?->longitude,
-                    'feedback_submitted' => $creditRestored,
-                    'credit_deducted' => $creditDeducted,
-                    'credit_restored' => $creditRestored,
-                    'recorded_at' => optional($attendance?->created_at)?->toIso8601String(),
-                ];
-            })->values(),
-        ]);
-    }
-
-    public function markManualAttendance(Request $request, int $id, int $participantId): JsonResponse
-    {
-        $this->abortUnlessAllowed($request, 'programs.attendance.manage');
-        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.attendance.manage');
-
-        $validated = $request->validate([
-            'is_valid' => 'required|boolean',
-            'manual_note' => 'nullable|string|max:1000',
-        ]);
-
-        $participant = Participant::query()
-            ->where('id', $participantId)
-            ->where('project_id', $program->project_id)
-            ->when(
-                $program->period_id,
-                fn ($query) => $query->where('period_id', $program->period_id),
-                fn ($query) => $query->whereNull('period_id')
-            )
-            ->where('status', 'active')
-            ->firstOrFail();
-
-        $attendance = DB::transaction(function () use ($program, $participant, $validated, $request) {
-            $attendance = Attendance::query()->updateOrCreate(
-                [
-                    'program_id' => $program->id,
-                    'user_id' => $participant->user_id,
-                ],
-                [
-                    'method' => 'manual',
-                    'is_valid' => (bool) $validated['is_valid'],
-                    'manual_note' => $validated['manual_note'] ?? null,
-                    'recorded_by' => $request->user()->id,
-                    'latitude' => null,
-                    'longitude' => null,
-                ]
-            );
-
-            $this->creditService->reconcileCompletedProgramAttendance(
-                $program,
-                $participant,
-                (bool) $validated['is_valid'],
-                $request->user()->id
-            );
-
+        $this->abortUnlessAllowed($request,'programs.attendance.manage');
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.attendance.manage',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $v=$request->validate(['is_valid'=>['required','boolean'],'manual_note'=>['nullable','string','max:1000']]);
+        $participant=$this->programParticipantsQuery($program)->where('id',$participantId)->with('user:id,role')->firstOrFail();
+        $attendance=DB::transaction(function()use($program,$participant,$v,$request){
+            $attendance=Attendance::query()->updateOrCreate(['program_id'=>$program->id,'user_id'=>$participant->user_id],[
+                'method'=>'manual','is_valid'=>(bool)$v['is_valid'],'manual_note'=>$v['manual_note']??null,'recorded_by'=>$request->user()->id,'latitude'=>null,'longitude'=>null,
+            ]);
+            if($this->participantHasCreditImpact($participant)) $this->creditService->reconcileCompletedProgramAttendance($program,$participant,(bool)$v['is_valid'],$request->user()->id);
             return $attendance;
         });
-
         $request->attributes->set('audit.subject', $program);
         $request->attributes->set('audit.event', 'attendance.manual_updated');
         $request->attributes->set('audit.description', 'attendance.manual_updated');
-        $request->attributes->set('audit.properties', [
-            'operation' => 'manual_attendance_update',
-            'project_id' => $program->project_id,
-            'period_id' => $program->period_id,
-            'program_id' => $program->id,
-            'program_title' => $program->title,
-            'participant_id' => $participant->id,
-            'student_user_id' => $participant->user_id,
-            'attendance_id' => $attendance->id,
-            'is_valid' => (bool) $validated['is_valid'],
-            'manual_note_present' => ! empty($validated['manual_note']),
-            'program_status' => $program->status,
-        ]);
-
-        return response()->json([
-            'message' => $attendance->is_valid ? 'Yoklama katildi olarak isaretlendi.' : 'Yoklama gelmedi olarak isaretlendi.',
-            'attendance' => $attendance,
-        ]);
+        $request->attributes->set('audit.properties', ['operation'=>'manual_attendance_update','project_id'=>$program->project_id,'period_id'=>$program->period_id,'program_id'=>$program->id,'program_title'=>$program->title,'participant_id'=>$participant->id,'student_user_id'=>$participant->user_id,'attendance_id'=>$attendance->id,'is_valid'=>(bool)$v['is_valid'],'manual_note_present'=>!empty($v['manual_note']??null),'program_status'=>$program->status]);
+        return response()->json(['message'=>$attendance->is_valid?'Yoklama katildi olarak isaretlendi.':'Yoklama gelmedi olarak isaretlendi.','attendance'=>$attendance]);
     }
 
-    public function exportAttendanceDetails(Request $request, int $id)
+    public function exportAttendanceDetails(Request $request,int $id)
     {
-        $this->abortUnlessAllowed($request, 'programs.attendance.export');
-        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.attendance.export');
-
-        $attendances = Attendance::query()
-            ->with('user:id,name,surname,email')
-            ->where('program_id', $program->id)
-            ->orderByDesc('created_at')
-            ->get();
-        $participants = Participant::query()
-            ->with('user:id,name,surname,email')
-            ->where('project_id', $program->project_id)
-            ->when(
-                $program->period_id,
-                fn ($query) => $query->where('period_id', $program->period_id),
-                fn ($query) => $query->whereNull('period_id')
-            )
-            ->where('status', 'active')
-            ->orderBy('id')
-            ->get();
-        $attendanceByUserId = $attendances->keyBy('user_id');
-
-        $creditLogsByUserId = CreditLog::query()
-            ->where('program_id', $program->id)
-            ->get()
-            ->groupBy('user_id');
-        $deductedUserIds = $creditLogsByUserId
-            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null)
-            ->keys()
-            ->map(fn ($id) => (int) $id)
-            ->values()
-            ->all();
-        $restoredUserIds = $creditLogsByUserId
-            ->filter(fn ($logs) => $logs->firstWhere('type', 'deduction') !== null && (int) $logs->sum('amount') >= 0)
-            ->keys()
-            ->map(fn ($id) => (int) $id)
-            ->values()
-            ->all();
-
-        $headings = ['Yoklama ID', 'Ogrenci', 'E-posta', 'Durum', 'Yontem', 'Konum Dogrulamasi', 'Feedback', 'Kredi Kesildi', 'Kredi Iade', 'Enlem', 'Boylam', 'Kayit Zamani'];
-        $rows = $participants->map(function (Participant $participant) use ($attendanceByUserId, $restoredUserIds, $deductedUserIds) {
-            $uid = (int) $participant->user_id;
-            $attendance = $attendanceByUserId->get($uid);
-
-            return [
-                $attendance?->id ?? '-',
-                $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
-                $participant->user?->email ?? '-',
-                $attendance?->is_valid ? 'geldi' : 'gelmedi',
-                $attendance?->method ?? '-',
-                $attendance ? ($attendance->is_valid ? 'dogrulandi' : 'alan disi') : '-',
-                in_array($uid, $restoredUserIds, true) ? 'gonderildi' : 'bekliyor',
-                in_array($uid, $deductedUserIds, true) ? 'evet' : 'hayir',
-                in_array($uid, $restoredUserIds, true) ? 'evet' : 'hayir',
-                $attendance?->latitude ?? '-',
-                $attendance?->longitude ?? '-',
-                optional($attendance?->created_at)?->format('d.m.Y H:i:s') ?? '-',
-            ];
-        })->all();
-
-        return AdminExportResponder::download(
-            $request->string('format')->toString() ?: 'csv',
-            'program_' . $program->id . '_yoklama_' . now()->format('Ymd_His'),
-            'Program Yoklama Detaylari',
-            $headings,
-            $rows,
-        );
+        $this->abortUnlessAllowed($request,'programs.attendance.export');
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.attendance.export',(int)$program->project_id);
+        $rows=$this->attendanceRecords($program)->map(fn(array $r)=>[$r['id']??'-',$r['student'],$r['email']??'-',$r['attendance_status']??'-',$r['method']??'-',$r['feedback_submitted']?'evet':'hayir',$r['credit_deducted']?'evet':'hayir',$r['credit_restored']?'evet':'hayir',$r['recorded_at']??'-'])->all();
+        return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_'.$program->id.'_yoklama_'.now()->format('Ymd_His'),'Program Yoklama Detaylari',['Yoklama ID','Katilimci','E-posta','Durum','Yontem','Feedback','Kredi Kesildi','Kredi Iade','Kayit Zamani'],$rows);
     }
 
-    /**
-     * GET /panel/programs/{id}/feedback-stats
-     * Etkinlik değerlendirme istatistikleri — soru bazlı ortalamalar + bireysel yanıtlar.
-     */
-    public function feedbackStats(Request $request, int $id): JsonResponse
+    public function feedbackSummary(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'programs.view');
-        $program = Program::with(['project:id,name', 'period:id,name'])->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.view');
+        $this->abortUnlessAllowed($request,'programs.view');
+        return response()->json($this->buildFeedbackSummary($request));
+    }
 
-        $feedbacks = Feedback::query()
-            ->where('program_id', $program->id)
-            ->orderByDesc('submitted_at')
-            ->get();
+    public function exportFeedbackSummary(Request $request)
+    {
+        $this->abortUnlessAllowed($request,'programs.view');
+        $summary=$this->buildFeedbackSummary($request);
+        $rows=collect($summary['programs']??[])->map(fn(array $p)=>[$p['id'],$p['project']??'-',$p['period']??'-',$p['title'],$p['feedback_count'],$p['overall_average']??'-',$p['with_comment']])->all();
+        return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_degerlendirme_ozeti_'.now()->format('Ymd_His'),'Program Degerlendirme Ozeti',['Program ID','Proje','Donem','Program','Degerlendirme','Sayisal Ortalama','Yorumlu Degerlendirme'],$rows);
+    }
 
-        $totalCount = $feedbacks->count();
-
-        // Soru bazlı istatistikler
-        $ratingKeys = ['content_quality', 'speaker_quality', 'organization_quality'];
-        $questionStats = [];
-
-        foreach ($ratingKeys as $key) {
-            $values = $feedbacks
-                ->map(fn (Feedback $f) => $f->responses[$key] ?? null)
-                ->filter(fn ($v) => $v !== null)
-                ->values();
-
-            $distribution = [];
-            for ($i = 1; $i <= 5; $i++) {
-                $distribution[$i] = $values->filter(fn ($v) => (int) $v === $i)->count();
-            }
-
-            $questionStats[$key] = [
-                'label' => match ($key) {
-                    'content_quality' => 'Icerik Kalitesi',
-                    'speaker_quality' => 'Konusmaci Kalitesi',
-                    'organization_quality' => 'Organizasyon Kalitesi',
-                    default => $key,
-                },
-                'count' => $values->count(),
-                'average' => $values->count() > 0 ? round($values->avg(), 2) : null,
-                'min' => $values->count() > 0 ? (int) $values->min() : null,
-                'max' => $values->count() > 0 ? (int) $values->max() : null,
-                'distribution' => $distribution,
-            ];
+    public function feedbackStats(Request $request,int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.view');
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.view',(int)$program->project_id);
+        $feedbacks=Feedback::query()->where('program_id',$program->id)->orderByDesc('submitted_at')->get();
+        $questions=FeedbackFormResolver::forProgram($program);
+        $ratingQuestions=FeedbackFormResolver::ratingQuestions($questions);
+        $choiceQuestions=FeedbackFormResolver::choiceQuestions($questions);
+        $commentQuestions=FeedbackFormResolver::commentQuestions($questions);
+        $questionStats=[];
+        foreach($ratingQuestions as $q){
+            $key=$q['id'];
+            $values=$feedbacks->map(fn(Feedback $f)=>$f->responses[$key]??null)->filter(fn($v)=>is_numeric($v))->map(fn($v)=>(float)$v)->values();
+            $dist=[]; for($s=(int)($q['min']??1);$s<=(int)($q['max']??5);$s++) $dist[(string)$s]=$values->filter(fn($v)=>(float)$v===(float)$s)->count();
+            $questionStats[$key]=['label'=>$q['label'],'type'=>'rating','count'=>$values->count(),'average'=>$values->count()>0?round($values->avg(),2):null,'min'=>$values->count()>0?$values->min():null,'max'=>$values->count()>0?$values->max():null,'distribution'=>$dist];
         }
-
-        // Genel ortalama
-        $allRatings = $feedbacks->flatMap(function (Feedback $f) use ($ratingKeys) {
-            return collect($ratingKeys)->map(fn ($k) => $f->responses[$k] ?? null)->filter();
-        });
-        $overallAverage = $allRatings->count() > 0 ? round($allRatings->avg(), 2) : null;
-
-        // Bireysel yanıtlar (anonim — sadece puan + yorum)
-        $responses = $feedbacks->map(fn (Feedback $f) => [
-            'id' => $f->id,
-            'content_quality' => $f->responses['content_quality'] ?? null,
-            'speaker_quality' => $f->responses['speaker_quality'] ?? null,
-            'organization_quality' => $f->responses['organization_quality'] ?? null,
-            'comment' => $f->responses['comment'] ?? null,
-            'submitted_at' => optional($f->submitted_at)?->toIso8601String(),
-        ])->values();
-
-        // Yorumlu değerlendirme sayısı
-        $withCommentCount = $feedbacks->filter(fn (Feedback $f) => ! empty($f->responses['comment']))->count();
-
-        return response()->json([
-            'program' => [
-                'id' => $program->id,
-                'title' => $program->title,
-                'project' => $program->project?->name,
-                'period' => $program->period?->name,
-                'start_at' => optional($program->start_at)?->toIso8601String(),
-                'status' => $program->status,
-            ],
-            'summary' => [
-                'total_feedback' => $totalCount,
-                'with_comment' => $withCommentCount,
-                'overall_average' => $overallAverage,
-            ],
-            'question_stats' => $questionStats,
-            'responses' => $responses,
-        ]);
+        foreach($choiceQuestions as $q){
+            $key=$q['id'];
+            $values=$feedbacks->map(fn(Feedback $f)=>$f->responses[$key]??null)->filter(fn($v)=>$v!==null&&$v!=='')->values();
+            $dist=collect($q['options']??[])->mapWithKeys(fn($o)=>[$o=>$values->filter(fn($v)=>(string)$v===(string)$o)->count()])->all();
+            $questionStats[$key]=['label'=>$q['label'],'type'=>'choice','count'=>$values->count(),'distribution'=>$dist];
+        }        $allRatings=$feedbacks->flatMap(fn(Feedback $f)=>collect($ratingQuestions)->map(fn($q)=>$f->responses[$q['id']]??null)->filter(fn($v)=>is_numeric($v))->map(fn($v)=>(float)$v));
+        $responses=$feedbacks->map(function(Feedback $f)use($questions,$commentQuestions){
+            $answers=collect($questions)->mapWithKeys(fn($q)=>[$q['id']=>$f->responses[$q['id']]??null])->all();
+            $textAnswers=collect($commentQuestions)->map(function($q)use($f){$value=trim((string)($f->responses[$q['id']]??'')); return $value===''?null:['question_id'=>$q['id'],'question'=>$q['label'],'answer'=>$value];})->filter()->values()->all();
+            $primary=$commentQuestions[0]['id']??'comment';
+            return ['id'=>$f->id,'anonymous_report_id'=>$this->feedbackReportId($f),'is_anonymous'=>true,'identity_redacted'=>true,'answers'=>$answers,'text_answers'=>$textAnswers,'comment'=>$answers[$primary]??null,'submitted_at'=>optional($f->submitted_at)?->toIso8601String()]+$answers;
+        })->values();
+        $textResponses=$responses->flatMap(fn(array $r)=>collect($r['text_answers']??[])->map(fn(array $a)=>['anonymous_report_id'=>$r['anonymous_report_id'],'question_id'=>$a['question_id'],'question'=>$a['question'],'answer'=>$a['answer'],'submitted_at'=>$r['submitted_at']]))->values()->all();
+        $withComment=$feedbacks->filter(fn(Feedback $f)=>collect($commentQuestions)->contains(fn($q)=>trim((string)($f->responses[$q['id']]??''))!==''))->count();
+        $textCount=$feedbacks->sum(fn(Feedback $f)=>collect($commentQuestions)->filter(fn($q)=>trim((string)($f->responses[$q['id']]??''))!=='')->count());
+        return response()->json(['program'=>['id'=>$program->id,'title'=>$program->title,'project'=>$program->project?->name,'period'=>$program->period?->name,'start_at'=>optional($program->start_at)?->toIso8601String(),'status'=>$program->status],'summary'=>['total_feedback'=>$feedbacks->count(),'with_comment'=>$withComment,'overall_average'=>$allRatings->count()>0?round($allRatings->avg(),2):null,'rating_question_count'=>count($ratingQuestions),'choice_question_count'=>count($choiceQuestions),'text_question_count'=>count($commentQuestions),'text_response_count'=>$textCount,'anonymous'=>true,'identity_redacted'=>true,'public_id_enabled'=>Feedback::usesPublicIdColumn()],'questions'=>$questions,'question_stats'=>$questionStats,'text_responses'=>$textResponses,'responses'=>$responses]);
     }
 
-    /**
-     * GET /panel/programs/{id}/feedback-stats/export
-     * Feedback verilerini dışa aktar.
-     */
-    public function exportFeedback(Request $request, int $id)
+    public function exportFeedback(Request $request,int $id)
     {
-        $this->abortUnlessAllowed($request, 'programs.view');
-        $program = Program::with(['project:id,name'])->findOrFail($id);
-        $this->abortIfUnauthorized($request->user(), $program->project, 'programs.view');
+        $this->abortUnlessAllowed($request,'programs.view');
+        $program=Program::query()->with(['project:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.view',(int)$program->project_id);
+        $feedbacks=Feedback::query()->where('program_id',$program->id)->orderByDesc('submitted_at')->get();
+        $questions=FeedbackFormResolver::forProgram($program);
+        $headings=array_merge(['Anonim Rapor ID'],array_map(fn($q)=>$q['label'],$questions),['Gonderim Zamani']);
+        $rows=$feedbacks->map(fn(Feedback $f)=>array_merge([$this->feedbackReportId($f)],array_map(fn($q)=>$f->responses[$q['id']]??'-',$questions),[optional($f->submitted_at)?->format('d.m.Y H:i')??'-']))->all();
+        return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_'.$program->id.'_feedback_'.now()->format('Ymd_His'),'Program Degerlendirme Sonuclari',$headings,$rows);
+    }
 
-        $feedbacks = Feedback::query()
-            ->where('program_id', $program->id)
-            ->orderByDesc('submitted_at')
-            ->get();
+    public function photos(Request $request,int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.view');
+        $program=Program::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.view',(int)$program->project_id);
+        return response()->json(['photos'=>$program->photos()->get()]);
+    }
 
-        $headings = ['#', 'Icerik Kalitesi', 'Konusmaci Kalitesi', 'Organizasyon Kalitesi', 'Yorum', 'Gonderim Tarihi'];
-        $rows = $feedbacks->map(fn (Feedback $f, int $index) => [
-            $index + 1,
-            $f->responses['content_quality'] ?? '-',
-            $f->responses['speaker_quality'] ?? '-',
-            $f->responses['organization_quality'] ?? '-',
-            $f->responses['comment'] ?? '-',
-            $f->submitted_at?->format('d.m.Y H:i') ?? '-',
-        ])->all();
+    public function uploadPhoto(Request $request,int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.media.upload');
+        $program=Program::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.media.upload',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $v=$request->validate(['photo'=>['required','image','max:5120'],'caption'=>['nullable','string','max:255']]);
+        $path=MediaStorage::putFile('program-photos/'.$program->id,$v['photo']);
+        $photo=ProgramPhoto::query()->create(['program_id'=>$program->id,'url'=>$path,'caption'=>$v['caption']??null,'sort_order'=>((int)ProgramPhoto::query()->where('program_id',$program->id)->max('sort_order'))+1,'created_by'=>$request->user()->id]);
+        return response()->json(['photo'=>$photo],201);
+    }
 
-        return AdminExportResponder::download(
-            $request->string('format')->toString() ?: 'csv',
-            'program_' . $program->id . '_degerlendirmeler_' . now()->format('Ymd_His'),
-            'Program Degerlendirmeleri',
-            $headings,
-            $rows,
-        );
+    public function reorderPhotos(Request $request,int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.media.upload');
+        $program=Program::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.media.upload',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $v=$request->validate(['photo_ids'=>['required','array']]);
+        foreach($v['photo_ids'] as $i=>$photoId) ProgramPhoto::query()->where('program_id',$program->id)->where('id',$photoId)->update(['sort_order'=>$i+1]);
+        return response()->json(['photos'=>$program->photos()->get()]);
+    }
+
+    public function updatePhoto(Request $request,int $id,int $photoId): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.media.upload');
+        $program=Program::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.media.upload',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $v=$request->validate(['caption'=>['nullable','string','max:255']]);
+        $photo=ProgramPhoto::query()->where('program_id',$program->id)->findOrFail($photoId);
+        $photo->update(['caption'=>$v['caption']??null]);
+        return response()->json(['photo'=>$photo]);
+    }
+
+    public function deletePhoto(Request $request,int $id,int $photoId): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.media.upload');
+        $program=Program::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.media.upload',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $photo=ProgramPhoto::query()->where('program_id',$program->id)->findOrFail($photoId);
+        MediaStorage::delete($photo->getRawOriginal('url'));
+        $photo->delete();
+        return response()->json(['message'=>'Fotograf silindi.']);
+    }
+
+    public function updateVisibility(Request $request,int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request,'programs.update');
+        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request,'programs.update',(int)$program->project_id);
+        $this->assertPeriodWritable($request,$program->period_id);
+        $v=$request->validate(['is_public'=>['sometimes','boolean'],'is_featured'=>['sometimes','boolean']]);
+        $program->update($v);
+        return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
+    }
+    private function validatedProgramData(Request $request,bool $creating,?Program $program=null): array
+    {
+        $rules=['project_id'=>[$creating?'required':'sometimes','integer','exists:projects,id'],'period_id'=>[$creating?'required':'sometimes','integer','exists:periods,id'],'title'=>[$creating?'required':'sometimes','string','max:255'],'description'=>['nullable','string'],'location'=>['nullable','string','max:255'],'latitude'=>['nullable','numeric','between:-90,90'],'longitude'=>['nullable','numeric','between:-180,180'],'radius_meters'=>['nullable','integer','min:10','max:5000'],'guest_info'=>['nullable','array'],'start_at'=>[$creating?'required':'sometimes','date'],'end_at'=>[$creating?'required':'sometimes','date','after_or_equal:start_at'],'credit_deduction'=>['nullable','integer','min:0'],'application_quota'=>['nullable','integer','min:1'],'target_audience'=>['nullable','array'],'target_audience.*'=>['string',Rule::in(['student','alumni'])],'feedback_form_template_id'=>['nullable','integer','exists:feedback_form_templates,id'],'status'=>['nullable',Rule::in(['scheduled','active','completed','cancelled'])],'is_public'=>['nullable','boolean'],'is_featured'=>['nullable','boolean']];
+        $v=$request->validate($rules);
+        if(isset($v['target_audience'])) $v['target_audience']=collect($v['target_audience'])->unique()->values()->all(); elseif($creating) $v['target_audience']=['student'];
+        $v['radius_meters']=$v['radius_meters']??$program?->radius_meters??100;
+        $v['credit_deduction']=$v['credit_deduction']??$program?->credit_deduction??0;
+        $v['status']=$v['status']??$program?->status??'scheduled';
+        return $v;
+    }
+
+    private function assertNoOverlap(mixed $startAt,mixed $endAt,?int $ignoreId,?string $status): void
+    {
+        if($status==='cancelled'||!$startAt||!$endAt) return;
+        $exists=Program::query()->when($ignoreId,fn($q)=>$q->where('id','!=',$ignoreId))->where('status','!=','cancelled')->where('start_at','<',$endAt)->where('end_at','>',$startAt)->exists();
+        if($exists) throw ValidationException::withMessages(['start_at'=>['Secilen saat araliginda baska bir program bulunuyor.']]);
+    }
+
+    private function programPayload(Program $p): array
+    {
+        return ['id'=>$p->id,'title'=>$p->title,'description'=>$p->description,'location'=>$p->location,'latitude'=>$p->latitude,'longitude'=>$p->longitude,'radius_meters'=>$p->radius_meters,'guest_info'=>$p->guest_info,'start_at'=>optional($p->start_at)?->toIso8601String(),'end_at'=>optional($p->end_at)?->toIso8601String(),'credit_deduction'=>$p->credit_deduction,'application_quota'=>$p->application_quota,'target_audience'=>$p->targetAudience(),'feedback_form_template_id'=>$p->feedback_form_template_id,'status'=>$p->status,'project_id'=>$p->project_id,'project'=>$p->project?['id'=>$p->project->id,'name'=>$p->project->name]:null,'period'=>$p->period?['id'=>$p->period->id,'name'=>$p->period->name]:null,'attendance_count'=>$p->attendances_count??null,'feedback_count'=>$p->feedbacks_count??null,'is_public'=>(bool)$p->is_public,'is_featured'=>(bool)$p->is_featured,'questions'=>FeedbackFormResolver::forProgram($p)];
+    }
+
+    private function programParticipantsQuery(Program $program)
+    {
+        return Participant::query()->with('user:id,name,surname,email,role')->where('project_id',$program->project_id)->when($program->period_id,fn($q)=>$q->where('period_id',$program->period_id));
+    }
+
+    private function participantHasCreditImpact(Participant $p): bool
+    {
+        return $p->user?->role!=='alumni'&&$p->status!=='graduated'&&$p->graduation_status!=='graduated';
+    }
+
+    private function attendanceRecords(Program $program)
+    {
+        $att=Attendance::query()->where('program_id',$program->id)->get()->keyBy('user_id');
+        $logsByUser=CreditLog::query()->where('program_id',$program->id)->get()->groupBy('user_id');
+        $tokens=Feedback::query()->where('program_id',$program->id)->pluck('anonymous_token')->filter()->all();
+        return $this->programParticipantsQuery($program)->orderBy('id')->get()->map(function(Participant $p)use($att,$logsByUser,$tokens,$program){
+            $a=$att->get($p->user_id); $logs=$logsByUser->get($p->user_id,collect());
+            $deducted=$logs->contains(fn(CreditLog $l)=>$l->type==='deduction'||(int)$l->amount<0);
+            $restored=$logs->contains(fn(CreditLog $l)=>$l->type==='restore'||(int)$l->amount>0);
+            $expected=hash('sha256',sprintf('%s:%s:%s',$p->user_id,$program->id,config('app.key')));
+            return ['id'=>$a?->id,'participant_id'=>$p->id,'student'=>$p->user?trim($p->user->name.' '.$p->user->surname):'Silinmis kullanici','email'=>$p->user?->email,'role'=>$p->user?->role,'credit_applicable'=>$this->participantHasCreditImpact($p),'method'=>$a?->method,'is_valid'=>(bool)($a?->is_valid??false),'attendance_status'=>$a?->is_valid?'present':'absent','latitude'=>$a?->latitude,'longitude'=>$a?->longitude,'feedback_submitted'=>in_array($expected,$tokens,true)||$restored,'credit_deducted'=>$deducted,'credit_restored'=>$restored,'recorded_at'=>optional($a?->created_at)?->toIso8601String()];
+        })->values();
+    }
+
+    private function buildFeedbackSummary(Request $request): array
+    {
+        $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
+        $ctx=$this->resolveProjectPeriodContext($request,'programs.view',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
+        $q=Program::query()->with(['project:id,name','period:id,name'])->whereHas('feedbacks')->orderByDesc('start_at');
+        $this->applyProjectPeriodContext($q,$ctx);
+        $programs=$q->get(); $byProgram=Feedback::query()->whereIn('program_id',$programs->pluck('id'))->orderByDesc('submitted_at')->get()->groupBy('program_id');
+        $questionStats=[]; $programRows=[]; $recent=[]; $allRatings=collect(); $withComment=0;
+        foreach($programs as $program){
+            $feedbacks=$byProgram->get($program->id,collect()); $questions=FeedbackFormResolver::forProgram($program); $rating=FeedbackFormResolver::ratingQuestions($questions); $choices=FeedbackFormResolver::choiceQuestions($questions); $comments=FeedbackFormResolver::commentQuestions($questions); $programRatings=collect(); $programWithComment=0;
+            foreach($rating as $question){$key=$question['id']; $values=$feedbacks->map(fn(Feedback $f)=>$f->responses[$key]??null)->filter(fn($v)=>is_numeric($v))->map(fn($v)=>(float)$v)->values(); $questionStats[$key]??=['label'=>$question['label'],'type'=>'rating','count'=>0,'sum'=>0,'distribution'=>[]]; for($s=(int)($question['min']??1);$s<=(int)($question['max']??5);$s++){ $questionStats[$key]['distribution'][(string)$s]??=0; $questionStats[$key]['distribution'][(string)$s]+=$values->filter(fn($v)=>(float)$v===(float)$s)->count(); } $questionStats[$key]['count']+=$values->count(); $questionStats[$key]['sum']+=$values->sum(); $programRatings=$programRatings->merge($values); $allRatings=$allRatings->merge($values);}
+            foreach($choices as $question){$key=$question['id']; $values=$feedbacks->map(fn(Feedback $f)=>$f->responses[$key]??null)->filter(fn($v)=>$v!==null&&$v!=='')->values(); $questionStats[$key]??=['label'=>$question['label'],'type'=>'choice','count'=>0,'distribution'=>collect($question['options']??[])->mapWithKeys(fn($o)=>[$o=>0])->all()]; foreach(($question['options']??[]) as $o){$questionStats[$key]['distribution'][$o]??=0; $questionStats[$key]['distribution'][$o]+=$values->filter(fn($v)=>(string)$v===(string)$o)->count();} $questionStats[$key]['count']+=$values->count();}
+            foreach($feedbacks as $f){$has=false; foreach($comments as $question){$comment=trim((string)($f->responses[$question['id']]??'')); if($comment==='') continue; $has=true; $recent[]=['program_id'=>$program->id,'program_title'=>$program->title,'project'=>$program->project?->name,'question'=>$question['label'],'comment'=>$comment,'submitted_at'=>optional($f->submitted_at)?->toIso8601String()];} if($has){$programWithComment++; $withComment++;}}
+            $programRows[]=['id'=>$program->id,'title'=>$program->title,'project'=>$program->project?->name,'period'=>$program->period?->name,'start_at'=>optional($program->start_at)?->toIso8601String(),'feedback_count'=>$feedbacks->count(),'with_comment'=>$programWithComment,'overall_average'=>$programRatings->count()>0?round($programRatings->avg(),2):null,'rating_count'=>$programRatings->count()];
+        }
+        $normalized=collect($questionStats)->map(function(array $s){ if(($s['type']??null)==='rating'){ $c=(int)($s['count']??0); $s['average']=$c>0?round(((float)$s['sum'])/$c,2):null; unset($s['sum']); } return $s; })->all();
+        $rows=collect($programRows); $break=function(string $key,string $fallback)use($rows):array{return $rows->groupBy(fn(array $r)=>$r[$key]?:$fallback)->map(function($items,string $name){$count=(int)$items->sum('rating_count');$avg=$count>0?round($items->sum(fn(array $r)=>(($r['overall_average']??0)*(int)($r['rating_count']??0)))/$count,2):null; return ['name'=>$name,'program_count'=>$items->count(),'feedback_count'=>(int)$items->sum('feedback_count'),'with_comment'=>(int)$items->sum('with_comment'),'overall_average'=>$avg];})->sortByDesc('feedback_count')->values()->all();};
+        return ['summary'=>['program_count'=>$programs->count(),'total_feedback'=>$byProgram->flatten(1)->count(),'with_comment'=>$withComment,'overall_average'=>$allRatings->count()>0?round($allRatings->avg(),2):null],'programs'=>$programRows,'project_breakdown'=>$break('project','Projesiz'),'period_breakdown'=>$break('period','Donemsiz'),'question_stats'=>$normalized,'recent_comments'=>collect($recent)->sortByDesc('submitted_at')->take(20)->values()->all()];
+    }
+
+    private function feedbackReportId(Feedback $f): string
+    {
+        $source=$f->public_id?:($f->anonymous_token?:(string)$f->id);
+        return strtoupper(substr(hash('sha256',$source.':'.config('app.key')),0,12));
     }
 }

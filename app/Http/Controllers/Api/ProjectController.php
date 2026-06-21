@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectResource;
 use App\Models\ApplicationForm;
+use App\Models\DigitalBohca;
 use App\Models\EurodeskProject;
 use App\Models\Internship;
 use App\Models\KpdRoom;
@@ -60,6 +61,7 @@ class ProjectController extends Controller
             ->where('status', 'active')
             ->with([
                 'periods',
+                'participants.period:id,name,status,start_date,end_date',
                 'participants.user',
             ])
             ->firstOrFail();
@@ -210,6 +212,27 @@ class ProjectController extends Controller
                 ->values();
         }
 
+        if (in_array('uploaded_files', $keys, true)) {
+            $currentPeriod = $project->periods->firstWhere('status', 'active');
+            $payload['uploaded_files'] = DigitalBohca::query()
+                ->where('project_id', $project->id)
+                ->where('visible_to_student', true)
+                ->when($currentPeriod, fn ($query) => $query->where(function ($builder) use ($currentPeriod) {
+                    $builder->whereNull('period_id')->orWhere('period_id', $currentPeriod->id);
+                }))
+                ->latest()
+                ->take(8)
+                ->get()
+                ->map(fn (DigitalBohca $material) => [
+                    'id' => $material->id,
+                    'title' => $material->title,
+                    'description' => $material->description,
+                    'file_type' => $material->file_type,
+                    'category' => $material->category,
+                ])
+                ->values();
+        }
+
         if (in_array('reward_tiers', $keys, true)) {
             $payload['reward_tiers'] = RewardTier::query()
                 ->where(function ($query) use ($project) {
@@ -222,8 +245,12 @@ class ProjectController extends Controller
         }
 
         if (in_array('eurodesk_projects', $keys, true)) {
+            $currentPeriod = $project->periods->firstWhere('status', 'active');
             $payload['eurodesk_projects'] = EurodeskProject::query()
                 ->where('project_id', $project->id)
+                ->when($currentPeriod, fn ($query) => $query->where(function ($builder) use ($currentPeriod) {
+                    $builder->whereNull('period_id')->orWhere('period_id', $currentPeriod->id);
+                }))
                 ->latest('start_date')
                 ->take(10)
                 ->get()

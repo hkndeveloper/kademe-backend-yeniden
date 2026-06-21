@@ -2,90 +2,72 @@
 
 namespace App\Services;
 
-use App\Models\Program;
 use App\Models\Attendance;
 use App\Models\Participant;
+use App\Models\Program;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 
 class AttendanceService
 {
-    protected QrCodeService $qrCodeService;
-    protected CreditService $creditService;
-
-    public function __construct(QrCodeService $qrCodeService, CreditService $creditService)
-    {
-        $this->qrCodeService = $qrCodeService;
-        $this->creditService = $creditService;
+    public function __construct(
+        protected QrCodeService $qrCodeService
+    ) {
     }
 
-    /**
-     * QR Kod ile yoklama işlemi (Controllerdan buraya taşındı)
-     */
-    public function markQrAttendance(User $user, string $qrToken, ?float $lat, ?float $lng)
+    public function markQrAttendance(User $user, string $qrToken, ?float $lat, ?float $lng): array
     {
-        $program = Program::where('qr_token', $qrToken)
+        $program = Program::query()
+            ->where('qr_token', $qrToken)
             ->where('status', 'active')
             ->first();
 
-        if (!$program) {
-            throw new \Exception('Geçersiz veya süresi dolmuş QR kod.');
+        if (! $program) {
+            throw new \Exception('Gecersiz veya suresi dolmus QR kod.');
         }
 
         if ($program->qr_expires_at && now()->isAfter($program->qr_expires_at)) {
-            throw new \Exception('Bu QR kodun süresi dolmuş. Lütfen ekrandaki yeni kodu okutun.');
+            throw new \Exception('Bu QR kodun suresi dolmus. Lutfen ekrandaki yeni kodu okutun.');
         }
 
-        $participant = Participant::where('user_id', $user->id)
+        $participant = Participant::query()
+            ->where('user_id', $user->id)
             ->where('project_id', $program->project_id)
-            ->where('period_id', $program->period_id)
+            ->when(
+                $program->period_id,
+                fn ($query) => $query->where('period_id', $program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
             ->where('status', 'active')
             ->first();
 
-        if (!$participant) {
-            throw new \Exception('Bu programa katılma yetkiniz bulunmuyor.');
+        if (! $participant) {
+            throw new \Exception('Bu programa katilma yetkiniz bulunmuyor.');
         }
 
-        $existing = Attendance::where('program_id', $program->id)
+        $existing = Attendance::query()
+            ->where('program_id', $program->id)
             ->where('user_id', $user->id)
             ->exists();
 
         if ($existing) {
-            throw new \Exception('Yoklamanız zaten alınmış.');
+            throw new \Exception('Yoklamaniz zaten alinmis.');
         }
 
-        // Lokasyon Doğrulama (Eğer programda kısıt varsa)
         $isValidLocation = $this->qrCodeService->validateLocation($program, $lat, $lng);
 
-        DB::beginTransaction();
-        try {
-            $attendance = Attendance::create([
-                'program_id' => $program->id,
-                'user_id' => $user->id,
-                'method' => 'qr',
-                'latitude' => $lat,
-                'longitude' => $lng,
-                'is_valid' => $isValidLocation,
-            ]);
+        $attendance = Attendance::query()->create([
+            'program_id' => $program->id,
+            'user_id' => $user->id,
+            'method' => 'qr',
+            'latitude' => $lat,
+            'longitude' => $lng,
+            'is_valid' => $isValidLocation,
+        ]);
 
-            // Krediyi artır (Yoklama bonusu veya telafi)
-            $this->creditService->reward(
-                $participant, 
-                10, // Program başına varsayılan katılım ödülü
-                'Etkinlik Katılımı (QR)', 
-                $program->id
-            );
-
-            DB::commit();
-
-            return [
-                'attendance' => $attendance,
-                'location_warning' => !$isValidLocation,
-                'current_credit' => $participant->credit
-            ];
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        return [
+            'attendance' => $attendance,
+            'location_warning' => ! $isValidLocation,
+            'current_credit' => $participant->credit,
+        ];
     }
 }

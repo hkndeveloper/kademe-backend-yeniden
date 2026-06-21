@@ -11,14 +11,18 @@ class CalendarEvent extends Model
 
     protected $fillable = [
         'project_id',
+        'period_id',
         'program_id',
+        'event_type',
         'title',
         'description',
         'location',
         'start_at',
         'end_at',
+        'status',
         'google_event_id',
         'assigned_users',
+        'metadata',
         'created_by',
     ];
 
@@ -26,11 +30,17 @@ class CalendarEvent extends Model
         'start_at' => 'datetime',
         'end_at' => 'datetime',
         'assigned_users' => 'array',
+        'metadata' => 'array',
     ];
 
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function program()

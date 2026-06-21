@@ -114,7 +114,8 @@ class NewsletterController extends Controller
         $this->notificationService->sendEmail(
             [$subscriber->email],
             'E-bulten aboneligi basarili',
-            "Merhaba " . ($subscriber->name ?: 'degerli kullanici') . ",\nKADEME e-bulten aboneliginiz aktif edildi.",
+            "Merhaba " . ($subscriber->name ?: 'degerli kullanici') . ",\nKADEME e-bulten aboneliginiz aktif edildi.\n\n"
+                . 'Abonelikten cikmak icin: ' . NewsletterController::generateUnsubscribeUrl($subscriber->email),
             null,
             null
         );

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\DigitalBohca;
 use App\Models\Participant;
@@ -16,6 +17,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class DigitalBohcaController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -57,6 +59,17 @@ class DigitalBohcaController extends Controller
                 }
             })
             ->pluck('project_id');
+        $periodIds = Participant::where('user_id', $user->id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->pluck('period_id')
+            ->filter();
 
         // Bu projelere ait, öğrenciye görünür olan dosyalar (veya genele açık olanlar)
         $materials = DigitalBohca::where(function ($query) use ($projectIds, $user) {
@@ -67,8 +80,12 @@ class DigitalBohcaController extends Controller
                   // Veya herkese açık genel dosyalar
                 ->orWhereNull('project_id');
         })
+            ->where(function ($query) use ($periodIds) {
+                $query->whereNull('period_id')
+                    ->orWhereIn('period_id', $periodIds);
+            })
             ->where('visible_to_student', true)
-            ->with('uploader:id,name,surname,role')
+            ->with(['period:id,name,status', 'uploader:id,name,surname,role'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(fn (DigitalBohca $material) => $this->materialPayload($material, '/digital-bohca'));
@@ -80,15 +97,26 @@ class DigitalBohcaController extends Controller
 
     public function panelIndex(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'digital_bohca.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+        ]);
         $user = $request->user();
-        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'digital_bohca.view');
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'digital_bohca.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
+        $projectIds = $context->projectIdsForQuery();
 
         $query = DigitalBohca::query()
-            ->with(['project:id,name', 'user:id,name,surname,email', 'uploader:id,name,surname'])
+            ->with(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname'])
             ->orderByDesc('created_at');
 
-        if (! $this->permissionResolver->hasGlobalScope($user, 'digital_bohca.view')) {
+        if ($context->projectId !== null) {
+            $query->where('project_id', $context->projectId);
+        } elseif (! $this->permissionResolver->hasGlobalScope($user, 'digital_bohca.view')) {
             $query->where(function ($builder) use ($projectIds, $user) {
                 $builder->whereIn('project_id', $projectIds);
 
@@ -98,8 +126,10 @@ class DigitalBohcaController extends Controller
             });
         }
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', $request->integer('project_id'));
+        if ($context->periodId !== null) {
+            $query->where(function ($builder) use ($context) {
+                $builder->whereNull('period_id')->orWhere('period_id', $context->periodId);
+            });
         }
 
         return response()->json([
@@ -114,6 +144,7 @@ class DigitalBohcaController extends Controller
         $this->abortUnlessAllowed($request, 'digital_bohca.create');
         $validated = $request->validate([
             'project_id'         => 'nullable|exists:projects,id',
+            'period_id'          => 'nullable|exists:periods,id',
             'user_id'            => 'nullable|exists:users,id',
             'title'              => 'required|string|max:255',
             'description'        => 'nullable|string|max:2000',
@@ -128,11 +159,18 @@ class DigitalBohcaController extends Controller
             abort(403, 'Genel bohca materyali olusturmak icin global kapsam gerekir.');
         }
 
+        if (! empty($validated['period_id'])) {
+            $periodProjectId = (int) \App\Models\Period::query()->whereKey((int) $validated['period_id'])->value('project_id');
+            abort_unless(! empty($validated['project_id']) && $periodProjectId === (int) $validated['project_id'], 422, 'Secilen donem bu projeye ait degil.');
+            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+        }
+
         $file = $request->file('file');
         $path = MediaStorage::putFile('digital-bohca', $file);
 
         $material = DigitalBohca::query()->create([
             'project_id'         => $validated['project_id'] ?? null,
+            'period_id'          => $validated['period_id'] ?? null,
             'user_id'            => $validated['user_id'] ?? null,
             'title'              => $validated['title'],
             'description'        => $validated['description'] ?? null,
@@ -147,7 +185,7 @@ class DigitalBohcaController extends Controller
         return response()->json([
             'message' => 'Dijital bohca materyali yuklendi.',
             'material' => $this->materialPayload(
-                $material->load(['project:id,name', 'user:id,name,surname,email', 'uploader:id,name,surname']),
+                $material->load(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname']),
                 '/panel/digital-bohca'
             ),
         ], 201);
@@ -155,24 +193,37 @@ class DigitalBohcaController extends Controller
 
     public function panelExport(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'digital_bohca.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'format' => 'nullable|string|max:20',
+        ]);
         $user = $request->user();
-        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'digital_bohca.view');
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'digital_bohca.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
+        $projectIds = $context->projectIdsForQuery();
 
         $query = DigitalBohca::query()
-            ->with(['project:id,name', 'user:id,name,surname,email', 'uploader:id,name,surname'])
+            ->with(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname'])
             ->orderByDesc('created_at');
 
-        if (! $this->permissionResolver->hasGlobalScope($user, 'digital_bohca.view')) {
+        if ($context->projectId !== null) {
+            $query->where('project_id', $context->projectId);
+        } elseif (! $this->permissionResolver->hasGlobalScope($user, 'digital_bohca.view')) {
             $query->where(function ($builder) use ($projectIds, $user) {
                 $builder->whereIn('project_id', $projectIds);
                 $builder->orWhere('uploaded_by', $user->id);
             });
         }
 
-        if ($request->filled('project_id')) {
-            $projectId = $request->integer('project_id');
-            $query->where('project_id', $projectId);
+        if ($context->periodId !== null) {
+            $query->where(function ($builder) use ($context) {
+                $builder->whereNull('period_id')->orWhere('period_id', $context->periodId);
+            });
         }
 
         $materials = $query->get();
@@ -211,6 +262,17 @@ class DigitalBohcaController extends Controller
                 }
             })
             ->pluck('project_id');
+        $periodIds = Participant::where('user_id', $user->id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->pluck('period_id')
+            ->filter();
 
         $material = DigitalBohca::query()
             ->whereKey($id)
@@ -219,6 +281,10 @@ class DigitalBohcaController extends Controller
                 $query->whereIn('project_id', $projectIds)
                     ->orWhere('user_id', $user->id)
                     ->orWhereNull('project_id');
+            })
+            ->where(function ($query) use ($periodIds) {
+                $query->whereNull('period_id')
+                    ->orWhereIn('period_id', $periodIds);
             })
             ->firstOrFail();
         $this->attachBohcaAudit($request, $material, 'downloaded');
@@ -255,6 +321,7 @@ class DigitalBohcaController extends Controller
         } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'digital_bohca.delete')) {
             abort(403, 'Genel bohca materyali silmek icin global kapsam gerekir.');
         }
+        $this->assertPeriodWritable($request, $material->period_id);
 
         MediaStorage::delete($material->file_path);
         $this->attachBohcaAudit($request, $material, 'deleted');
@@ -268,6 +335,7 @@ class DigitalBohcaController extends Controller
         return [
             'id' => $material->id,
             'project_id' => $material->project_id,
+            'period_id' => $material->period_id,
             'user_id' => $material->user_id,
             'title' => $material->title,
             'description' => $material->description,
@@ -281,6 +349,7 @@ class DigitalBohcaController extends Controller
             'created_at' => optional($material->created_at)?->toIso8601String(),
             'updated_at' => optional($material->updated_at)?->toIso8601String(),
             'project' => $material->relationLoaded('project') ? $material->project : null,
+            'period' => $material->relationLoaded('period') ? $material->period : null,
             'user' => $material->relationLoaded('user') ? $material->user : null,
             'uploader' => $material->relationLoaded('uploader') ? $material->uploader : null,
         ];

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Participant;
@@ -20,6 +21,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class AdminApplicationController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
@@ -54,7 +56,10 @@ class AdminApplicationController extends Controller
         $hasInterview = (bool) $application->project?->has_interview;
 
         if (! $hasInterview) {
-            return ['accepted', 'rejected', 'waitlisted'];
+            return match ($application->status) {
+                'pending', 'waitlisted' => ['accepted', 'rejected', 'waitlisted'],
+                default => [],
+            };
         }
 
         return match ($application->status) {
@@ -184,21 +189,29 @@ class AdminApplicationController extends Controller
 
     public function export(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'applications.export');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'status' => 'nullable|string',
+            'search' => 'nullable|string|max:255',
+            'format' => 'nullable|string|max:20',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'applications.export',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
-        $query->whereIn('project_id', $this->manageableProjectIdList($request, 'applications.export'));
+        $this->applyProjectPeriodContext($query, $context);
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', (int) $request->project_id);
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
             $query->whereHas('user', function ($builder) use ($search) {
                 $builder
                     ->where('name', 'like', "%$search%")
@@ -237,24 +250,29 @@ class AdminApplicationController extends Controller
 
     public function staffIndex(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'applications.view');
-
-        $projectIds = $this->manageableProjectIdList($request, 'applications.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'status' => 'nullable|string',
+            'search' => 'nullable|string|max:255',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'applications.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview'])
-            ->whereIn('project_id', $projectIds);
+            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
+        $this->applyProjectPeriodContext($query, $context);
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', (int) $request->project_id);
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
             $query->whereHas('user', function ($builder) use ($search) {
                 $builder
                     ->where('name', 'like', "%$search%")
@@ -270,24 +288,30 @@ class AdminApplicationController extends Controller
 
     public function staffExport(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'applications.export');
-
-        $projectIds = $this->manageableProjectIdList($request, 'applications.export');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'status' => 'nullable|string',
+            'search' => 'nullable|string|max:255',
+            'format' => 'nullable|string|max:20',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'applications.export',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview'])
-            ->whereIn('project_id', $projectIds);
+            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
+        $this->applyProjectPeriodContext($query, $context);
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', (int) $request->project_id);
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
             $query->whereHas('user', function ($builder) use ($search) {
                 $builder
                     ->where('name', 'like', "%$search%")
@@ -339,25 +363,24 @@ class AdminApplicationController extends Controller
      */
     public function index(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'applications.view');
-
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
             'status' => 'nullable|string',
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
-        $ids = $this->manageableProjectIdList($request, 'applications.view');
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'applications.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Application::query()
-            ->whereIn('project_id', $ids)
             ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview', 'form:id,fields']);
-
-        if (! empty($validated['project_id'])) {
-            abort_unless(in_array((int) $validated['project_id'], $ids, true), 403, 'Bu projeye ait basvurulari goruntuleme yetkiniz yok.');
-            $query->where('project_id', (int) $validated['project_id']);
-        }
+        $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status'])) {
             $query->where('status', $validated['status']);
@@ -440,6 +463,7 @@ class AdminApplicationController extends Controller
 
         $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
+        $this->assertPeriodWritable($request, $application->period_id);
         $this->assertStatusAllowed($application, $validated['status']);
 
         if ($validated['status'] === 'interview_planned' && empty($validated['interview_at']) && empty($application->interview_at)) {
@@ -560,6 +584,7 @@ class AdminApplicationController extends Controller
         );
 
         abort_unless((bool) $application->project?->has_interview, 422, 'Bu proje mulakatli basvuru akisi kullanmiyor.');
+        $this->assertPeriodWritable($request, $application->period_id);
         $this->assertStatusAllowed($application, 'interview_planned');
 
         $application->update([
@@ -600,6 +625,7 @@ class AdminApplicationController extends Controller
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
 
+        $this->assertPeriodWritable($request, $application->period_id);
         $this->assertStatusAllowed($application, 'waitlisted');
 
         $application->update([
@@ -635,6 +661,7 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
+        $this->assertPeriodWritable($request, $application->period_id);
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular siralanabilir.');
 
         $application->update(['waitlist_order' => (int) $validated['waitlist_order']]);
@@ -658,6 +685,7 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
+        $this->assertPeriodWritable($request, $application->period_id);
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular davet edilebilir.');
 
         $expiresAt = $validated['expires_at'] ?? now()->addDays(3);
@@ -682,6 +710,7 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
+        $this->assertPeriodWritable($request, $application->period_id);
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular icin yenileme yapilabilir.');
 
         $expiredCount = $this->waitlistService->expireOverdueInvitations($application);

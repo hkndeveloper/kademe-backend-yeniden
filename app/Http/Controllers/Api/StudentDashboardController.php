@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Badge;
 use App\Models\Certificate;
 use App\Models\CreditLog;
+use App\Models\DigitalBohca;
 use App\Models\EurodeskProject;
 use App\Models\Internship;
 use App\Models\Mentor;
@@ -15,21 +16,28 @@ use App\Models\ProjectModule;
 use App\Models\ProjectModuleEnrollment;
 use App\Models\RewardTier;
 use App\Models\User;
+use App\Models\UserProfile;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class StudentDashboardController extends Controller
 {
+    private function shouldIncludeGraduatedParticipations($user): bool
+    {
+        return $user->role === 'alumni';
+    }
+
     private function participationQueryFor($user)
     {
         return Participant::where('user_id', $user->id)
             ->where(function ($query) use ($user) {
                 $query->where('status', 'active');
 
-                if ($user->role === 'alumni') {
+                if ($this->shouldIncludeGraduatedParticipations($user)) {
                     $query->orWhere('graduation_status', 'graduated')
                         ->orWhereNotNull('graduated_at');
                 }
@@ -89,7 +97,7 @@ class StudentDashboardController extends Controller
         $user = $request->user();
 
         $participations = $this->participationQueryFor($user)
-            ->with('project:id,name,slug,type')
+            ->with(['project:id,name,slug,type', 'period:id,name,status,start_date,end_date'])
             ->orderByDesc('created_at')
             ->get();
 
@@ -104,8 +112,15 @@ class StudentDashboardController extends Controller
                     'participation_status' => $participation->status,
                     'graduation_status' => $participation->graduation_status,
                     'graduated_at' => optional($participation->graduated_at)?->toIso8601String(),
+                    'period' => $participation->period ? [
+                        'id' => $participation->period->id,
+                        'name' => $participation->period->name,
+                        'status' => $participation->period->status,
+                        'start_date' => optional($participation->period->start_date)?->toDateString(),
+                        'end_date' => optional($participation->period->end_date)?->toDateString(),
+                    ] : null,
                 ])
-                ->unique('id')
+                ->unique(fn (array $project) => $project['id'].'-'.($project['period']['id'] ?? 'none'))
                 ->values(),
         ]);
     }
@@ -121,7 +136,7 @@ class StudentDashboardController extends Controller
                     ->orWhereIn('graduation_status', ['completed', 'graduated'])
                     ->orWhereNotNull('graduated_at');
 
-                if ($user->role === 'alumni') {
+                if ($this->shouldIncludeGraduatedParticipations($user)) {
                     $query->orWhere('graduation_status', 'graduated');
                 }
             })
@@ -162,6 +177,7 @@ class StudentDashboardController extends Controller
                 'github_url' => $user->profile?->github_url,
                 'instagram_url' => $user->profile?->instagram_url,
             ],
+            'saved_draft' => $user->profile?->digital_cv_data,
             'approved' => [
                 'title' => 'KADEME Onayli Dijital CV',
                 'generated_at' => now()->toIso8601String(),
@@ -215,6 +231,91 @@ class StudentDashboardController extends Controller
         ]);
     }
 
+    public function saveDigitalCv(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'form' => 'required|array',
+            'form.fullName' => 'nullable|string|max:255',
+            'form.email' => 'nullable|string|max:255',
+            'form.phone' => 'nullable|string|max:100',
+            'form.location' => 'nullable|string|max:255',
+            'form.summary' => 'nullable|string|max:5000',
+            'form.university' => 'nullable|string|max:255',
+            'form.department' => 'nullable|string|max:255',
+            'form.classYear' => 'nullable|string|max:100',
+            'form.linkedin' => 'nullable|string|max:500',
+            'form.github' => 'nullable|string|max:500',
+            'form.instagram' => 'nullable|string|max:500',
+            'form.skills' => 'nullable|string|max:5000',
+            'form.languages' => 'nullable|string|max:2000',
+            'form.experience' => 'nullable|array|max:50',
+            'form.education' => 'nullable|array|max:50',
+            'form.projects' => 'nullable|array|max:50',
+            'form.certificates' => 'nullable|array|max:50',
+            'form.experience.*.id' => 'nullable|string|max:120',
+            'form.experience.*.title' => 'nullable|string|max:255',
+            'form.experience.*.subtitle' => 'nullable|string|max:255',
+            'form.experience.*.date' => 'nullable|string|max:120',
+            'form.experience.*.description' => 'nullable|string|max:5000',
+            'form.education.*.id' => 'nullable|string|max:120',
+            'form.education.*.title' => 'nullable|string|max:255',
+            'form.education.*.subtitle' => 'nullable|string|max:255',
+            'form.education.*.date' => 'nullable|string|max:120',
+            'form.education.*.description' => 'nullable|string|max:5000',
+            'form.projects.*.id' => 'nullable|string|max:120',
+            'form.projects.*.title' => 'nullable|string|max:255',
+            'form.projects.*.subtitle' => 'nullable|string|max:255',
+            'form.projects.*.date' => 'nullable|string|max:120',
+            'form.projects.*.description' => 'nullable|string|max:5000',
+            'form.certificates.*.id' => 'nullable|string|max:120',
+            'form.certificates.*.title' => 'nullable|string|max:255',
+            'form.certificates.*.subtitle' => 'nullable|string|max:255',
+            'form.certificates.*.date' => 'nullable|string|max:120',
+            'form.certificates.*.description' => 'nullable|string|max:5000',
+        ]);
+
+        $profile = UserProfile::query()->updateOrCreate(
+            ['user_id' => $request->user()->id],
+            ['digital_cv_data' => [
+                'form' => $validated['form'],
+                'saved_at' => now()->toIso8601String(),
+            ]]
+        );
+
+        return response()->json([
+            'message' => 'Dijital CV taslagi kaydedildi.',
+            'saved_draft' => $profile->digital_cv_data,
+        ]);
+    }
+
+    public function digitalCvPdf(Request $request)
+    {
+        $validated = $request->validate([
+            'form' => 'required|array',
+            'approved' => 'nullable|array',
+            'projects' => 'nullable|array',
+            'badges' => 'nullable|array',
+            'certificates' => 'nullable|array',
+            'credit_history' => 'nullable|array',
+        ]);
+
+        $form = $validated['form'];
+        $fullName = trim((string) ($form['fullName'] ?? 'KADEME Dijital CV')) ?: 'KADEME Dijital CV';
+        $fileName = str($fullName)->lower()->replaceMatches('/[^a-z0-9]+/i', '-')->trim('-')->value() ?: 'kademe-dijital-cv';
+
+        $pdf = Pdf::loadView('pdf.digital-cv', [
+            'form' => $form,
+            'approved' => $validated['approved'] ?? [],
+            'projects' => $validated['projects'] ?? [],
+            'badges' => $validated['badges'] ?? [],
+            'certificates' => $validated['certificates'] ?? [],
+            'creditHistory' => $validated['credit_history'] ?? [],
+            'generatedAt' => now()->format('d.m.Y H:i'),
+        ])->setPaper('a4');
+
+        return $pdf->download($fileName.'-kademe-cv.pdf');
+    }
+
     public function projectSpecials(Request $request)
     {
         $user = $request->user();
@@ -242,6 +343,7 @@ class StudentDashboardController extends Controller
 
         $eurodeskByProject = EurodeskProject::query()
             ->whereIn('project_id', $projectIds)
+            ->with('period:id,name,status')
             ->orderByDesc('created_at')
             ->get()
             ->groupBy('project_id');
@@ -274,6 +376,17 @@ class StudentDashboardController extends Controller
             ->get()
             ->keyBy('project_module_id');
 
+        $uploadedFilesByProject = DigitalBohca::query()
+            ->whereIn('project_id', $projectIds)
+            ->where('visible_to_student', true)
+            ->where(function ($query) use ($participations) {
+                $periodIds = $participations->pluck('period_id')->filter()->unique()->values();
+                $query->whereNull('period_id')->orWhereIn('period_id', $periodIds);
+            })
+            ->latest()
+            ->get()
+            ->groupBy('project_id');
+
         return response()->json([
             'projects' => $participations->map(function (Participant $participation) use (
                 $internshipsByParticipant,
@@ -282,7 +395,8 @@ class StudentDashboardController extends Controller
                 $rewardTiersByProject,
                 $badgeCountsByProject,
                 $modulesByProject,
-                $enrollmentRows
+                $enrollmentRows,
+                $uploadedFilesByProject
             ) {
                 $project = $participation->project;
                 $moduleKeys = ProjectSpecialModuleCatalog::moduleKeys($project?->type, $project?->name, $project?->slug);
@@ -326,13 +440,31 @@ class StudentDashboardController extends Controller
                             'photo_path' => $mentor->photo_path,
                         ])->values()
                         : [],
+                    'uploaded_files' => in_array('uploaded_files', $moduleKeys, true)
+                        ? ($uploadedFilesByProject->get($project->id) ?? collect())
+                            ->filter(fn (DigitalBohca $material) => $material->period_id === null || (int) $material->period_id === (int) $participation->period_id)
+                            ->take(6)
+                            ->map(fn (DigitalBohca $material) => [
+                                'id' => $material->id,
+                                'title' => $material->title,
+                                'description' => $material->description,
+                                'file_type' => $material->file_type,
+                                'category' => $material->category,
+                                'download_url' => "/digital-bohca/{$material->id}/download",
+                                'created_at' => optional($material->created_at)?->toIso8601String(),
+                            ])
+                            ->values()
+                        : [],
                     'eurodesk_projects' => in_array('eurodesk_projects', $moduleKeys, true)
-                        ? ($eurodeskByProject->get($project->id) ?? collect())->map(fn (EurodeskProject $eurodeskProject) => [
+                        ? ($eurodeskByProject->get($project->id) ?? collect())
+                            ->filter(fn (EurodeskProject $eurodeskProject) => $eurodeskProject->period_id === null || (int) $eurodeskProject->period_id === (int) $participation->period_id)
+                            ->map(fn (EurodeskProject $eurodeskProject) => [
                             'id' => $eurodeskProject->id,
                             'title' => $eurodeskProject->title,
                             'partner_organizations' => $eurodeskProject->partner_organizations ?? [],
                             'grant_amount' => $eurodeskProject->grant_amount,
                             'grant_status' => $eurodeskProject->grant_status,
+                            'period' => $eurodeskProject->period?->only(['id', 'name', 'status']),
                             'start_date' => optional($eurodeskProject->start_date)?->toDateString(),
                             'end_date' => optional($eurodeskProject->end_date)?->toDateString(),
                         ])->values()
@@ -358,7 +490,9 @@ class StudentDashboardController extends Controller
                         ]
                         : null,
                     'kademe_modules' => in_array('participants_by_module', $moduleKeys, true)
-                        ? ($modulesByProject->get($project->id) ?? collect())->map(function (ProjectModule $module) use ($enrollmentRows) {
+                        ? ($modulesByProject->get($project->id) ?? collect())
+                            ->filter(fn (ProjectModule $module) => $module->period_id === null || (int) $module->period_id === (int) $participation->period_id)
+                            ->map(function (ProjectModule $module) use ($enrollmentRows) {
                             $enrollment = $enrollmentRows->get($module->id);
 
                             return [
@@ -406,6 +540,11 @@ class StudentDashboardController extends Controller
             ->first();
 
         abort_unless($participant !== null, 403, 'Bu projenin katilimcisi degilsiniz.');
+        abort_unless(
+            $module->period_id === null || (int) $module->period_id === (int) $participant->period_id,
+            403,
+            'Bu modul katildiginiz doneme ait degil.'
+        );
 
         if (ProjectModuleEnrollment::query()->where('project_module_id', $module->id)->where('user_id', $user->id)->exists()) {
             throw ValidationException::withMessages(['module' => 'Bu modul icin zaten kayit bulunuyor.']);
@@ -456,6 +595,7 @@ class StudentDashboardController extends Controller
         $participants = Participant::query()
             ->where('project_id', $projectId)
             ->where('status', 'active')
+            ->where('period_id', $viewerParticipant->period_id)
             ->with(['user:id,name,surname,profile_photo_path,university,department'])
             ->get();
 

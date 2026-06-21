@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use App\Models\CommunicationLog;
 use App\Models\Participant;
+use App\Models\Period;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
@@ -15,11 +17,21 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnnouncementController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
+
+    private const TARGET_UNITS = [
+        'media',
+        'operations',
+        'program',
+        'finance',
+        'official_affairs',
+    ];
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
@@ -62,6 +74,32 @@ class AnnouncementController extends Controller
             403,
             'Bu proje kapsaminda islem yapamazsiniz.'
         );
+    }
+
+    private function resolveAnnouncementPeriod(Request $request, array &$validated, string $permission, bool $guardArchiveWrite = false): ?int
+    {
+        if (empty($validated['period_id'])) {
+            return null;
+        }
+
+        $period = Period::query()
+            ->select(['id', 'project_id', 'status'])
+            ->findOrFail((int) $validated['period_id']);
+
+        if (! empty($validated['project_id']) && (int) $validated['project_id'] !== (int) $period->project_id) {
+            throw ValidationException::withMessages([
+                'period_id' => ['Secilen donem bu projeye ait degil.'],
+            ]);
+        }
+
+        $validated['project_id'] = (int) $period->project_id;
+        $this->assertProjectAnnouncementScope($request, (int) $period->project_id, $permission);
+
+        if ($guardArchiveWrite) {
+            $this->assertPeriodWritable($request, (int) $period->id);
+        }
+
+        return (int) $period->id;
     }
 
     private function participantUserIdsInManageableProjects(User $sender, string $permission): array
@@ -112,7 +150,7 @@ class AnnouncementController extends Controller
             'subject' => $log->subject,
             'content' => $log->content,
             'attachment_path' => $log->attachment_path,
-            'attachment_download_url' => $log->attachment_path ? "/announcements/communication-logs/{$log->id}/attachment" : null,
+            'attachment_download_url' => $log->attachment_path ? "/panel/announcements/communication-logs/{$log->id}/attachment" : null,
             'status' => $log->status,
             'project_id' => $log->project_id,
             'created_at' => optional($log->created_at)?->toIso8601String(),
@@ -167,6 +205,73 @@ class AnnouncementController extends Controller
     {
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
+
+    private function targetUnitsForUser(User $user, string $permission): array
+    {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
+            return self::TARGET_UNITS;
+        }
+
+        return $this->permissionResolver->targetUnitsForUser($user, self::TARGET_UNITS);
+    }
+
+    private function assertTargetUnitsAllowed(User $user, string $permission, array $targetUnits): void
+    {
+        if ($targetUnits === []) {
+            return;
+        }
+
+        $allowedUnits = $this->targetUnitsForUser($user, $permission);
+
+        foreach ($targetUnits as $targetUnit) {
+            abort_unless(
+                in_array($targetUnit, $allowedUnits, true),
+                403,
+                'Bu birim hedefi icin yetkiniz bulunmuyor.'
+            );
+        }
+    }
+
+    private function staffUserIdsInTargetUnits(array $targetUnits): array
+    {
+        if ($targetUnits === []) {
+            return [];
+        }
+
+        return User::query()
+            ->with('staffProfile:id,user_id,unit')
+            ->where('status', 'active')
+            ->whereIn('role', ['super_admin', 'coordinator', 'staff'])
+            ->get(['id', 'role'])
+            ->filter(fn (User $user) => collect($targetUnits)->contains(
+                fn (string $targetUnit) => $this->permissionResolver->matchesTargetUnit($user->staffProfile?->unit, $targetUnit)
+            ))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function applyAnnouncementRecipientScope($query, User $user)
+    {
+        return $query
+            ->where(function ($q) use ($user) {
+                $q->whereNull('target_roles')
+                    ->orWhereJsonLength('target_roles', 0)
+                    ->orWhereJsonContains('target_roles', $user->role);
+            })
+            ->where(function ($q) use ($user) {
+                $targetUnits = $this->targetUnitsForUser($user, 'announcements.view');
+
+                $q->whereNull('target_units')
+                    ->orWhereJsonLength('target_units', 0);
+
+                foreach ($targetUnits as $targetUnit) {
+                    $q->orWhereJsonContains('target_units', $targetUnit);
+                }
+            });
+    }
     /**
      * GET /staff/announcements
      * Staff kullanicisinin gorebilecegi aktif duyurulari listele.
@@ -176,12 +281,10 @@ class AnnouncementController extends Controller
         $this->abortUnlessAllowed($request, 'announcements.view');
         $user = Auth::user();
 
-        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])
-            ->where(function ($q) use ($user) {
-                $q->whereNull('target_roles')
-                    ->orWhereJsonLength('target_roles', 0)
-                    ->orWhereJsonContains('target_roles', $user->role);
-            })
+        $query = $this->applyAnnouncementRecipientScope(
+            Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname']),
+            $user
+        )
             ->where(function ($q) {
                 $q->whereNull('published_at')
                     ->orWhere('published_at', '<=', now());
@@ -205,7 +308,7 @@ class AnnouncementController extends Controller
     {
         $user = $request->user();
 
-        $projectIds = Participant::query()
+        $participations = Participant::query()
             ->where('user_id', $user->id)
             ->where(function ($query) use ($user) {
                 $query->where('status', 'active');
@@ -215,19 +318,32 @@ class AnnouncementController extends Controller
                         ->orWhereNotNull('graduated_at');
                 }
             })
+            ->get(['project_id', 'period_id']);
+
+        $projectIds = $participations
             ->pluck('project_id')
             ->filter()
             ->values();
+        $periodIds = $participations
+            ->pluck('period_id')
+            ->filter()
+            ->unique()
+            ->values();
 
-        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])
-            ->where(function ($q) use ($user) {
-                $q->whereNull('target_roles')
-                    ->orWhereJsonLength('target_roles', 0)
-                    ->orWhereJsonContains('target_roles', $user->role);
-            })
+        $query = $this->applyAnnouncementRecipientScope(
+            Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname']),
+            $user
+        )
             ->where(function ($q) use ($projectIds) {
                 $q->whereNull('project_id')
                     ->orWhereIn('project_id', $projectIds);
+            })
+            ->where(function ($q) use ($periodIds) {
+                $q->whereNull('period_id');
+
+                if ($periodIds->isNotEmpty()) {
+                    $q->orWhereIn('period_id', $periodIds);
+                }
             })
             ->where(function ($q) {
                 $q->whereNull('published_at')
@@ -253,12 +369,10 @@ class AnnouncementController extends Controller
         $this->abortUnlessAllowed($request, 'announcements.export');
         $user = Auth::user();
 
-        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])
-            ->where(function ($q) use ($user) {
-                $q->whereNull('target_roles')
-                    ->orWhereJsonLength('target_roles', 0)
-                    ->orWhereJsonContains('target_roles', $user->role);
-            })
+        $query = $this->applyAnnouncementRecipientScope(
+            Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname']),
+            $user
+        )
             ->where(function ($q) {
                 $q->whereNull('published_at')
                     ->orWhere('published_at', '<=', now());
@@ -275,12 +389,13 @@ class AnnouncementController extends Controller
 
         $announcements = $query->get();
 
-        $headings = ['ID', 'Baslik', 'Kategori', 'Proje', 'Olusturan', 'Yayin Tarihi', 'Bitis Tarihi'];
+        $headings = ['ID', 'Baslik', 'Kategori', 'Proje', 'Donem', 'Olusturan', 'Yayin Tarihi', 'Bitis Tarihi'];
         $rows = $announcements->map(fn (Announcement $announcement) => [
             $announcement->id,
             $announcement->title,
             $announcement->category ?? '-',
             $announcement->project?->name ?? '-',
+            $announcement->period?->name ?? '-',
             $announcement->creator ? trim($announcement->creator->name . ' ' . $announcement->creator->surname) : '-',
             $announcement->published_at?->format('d.m.Y H:i') ?? '-',
             $announcement->expires_at?->format('d.m.Y H:i') ?? '-',
@@ -302,15 +417,24 @@ class AnnouncementController extends Controller
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.view');
-        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])->latest();
+        $validated = $request->validate([
+            'category' => 'nullable|string|max:100',
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+        $periodId = $this->resolveAnnouncementPeriod($request, $validated, 'announcements.view');
+        $query = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->latest();
         $query = $this->scopeManageableAnnouncements($request, $query, 'announcements.view');
 
-        if ($request->filled('category')) {
-            $query->where('category', $request->category);
+        if (! empty($validated['category'])) {
+            $query->where('category', $validated['category']);
         }
-        if ($request->filled('project_id')) {
-            $this->assertProjectAnnouncementScope($request, (int) $request->project_id, 'announcements.view');
-            $query->where('project_id', (int) $request->project_id);
+        if (! empty($validated['project_id'])) {
+            $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.view');
+            $query->where('project_id', (int) $validated['project_id']);
+        }
+        if ($periodId !== null) {
+            $query->where('period_id', $periodId);
         }
 
         return response()->json(['announcements' => $query->paginate(20)]);
@@ -319,26 +443,37 @@ class AnnouncementController extends Controller
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.export');
-        $query = Announcement::with(['project:id,name', 'creator:id,name,surname'])->latest();
+        $validated = $request->validate([
+            'category' => 'nullable|string|max:100',
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+        $periodId = $this->resolveAnnouncementPeriod($request, $validated, 'announcements.export');
+        $query = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->latest();
         $query = $this->scopeManageableAnnouncements($request, $query, 'announcements.export');
 
-        if ($request->filled('category')) {
-            $query->where('category', $request->category);
+        if (! empty($validated['category'])) {
+            $query->where('category', $validated['category']);
         }
-        if ($request->filled('project_id')) {
-            $this->assertProjectAnnouncementScope($request, (int) $request->project_id, 'announcements.export');
-            $query->where('project_id', (int) $request->project_id);
+        if (! empty($validated['project_id'])) {
+            $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.export');
+            $query->where('project_id', (int) $validated['project_id']);
+        }
+        if ($periodId !== null) {
+            $query->where('period_id', $periodId);
         }
 
         $announcements = $query->get();
 
-        $headings = ['ID', 'Baslik', 'Kategori', 'Proje', 'Hedef Roller', 'Olusturan', 'Yayin Tarihi', 'Bitis Tarihi'];
+        $headings = ['ID', 'Baslik', 'Kategori', 'Proje', 'Donem', 'Hedef Roller', 'Hedef Birimler', 'Olusturan', 'Yayin Tarihi', 'Bitis Tarihi'];
         $rows = $announcements->map(fn (Announcement $announcement) => [
             $announcement->id,
             $announcement->title,
             $announcement->category ?? '-',
             $announcement->project?->name ?? '-',
+            $announcement->period?->name ?? '-',
             !empty($announcement->target_roles) ? implode(', ', $announcement->target_roles) : 'tum kullanicilar',
+            !empty($announcement->target_units) ? implode(', ', $announcement->target_units) : 'tum birimler',
             $announcement->creator ? trim($announcement->creator->name . ' ' . $announcement->creator->surname) : '-',
             $announcement->published_at?->format('d.m.Y H:i') ?? '-',
             $announcement->expires_at?->format('d.m.Y H:i') ?? '-',
@@ -366,7 +501,10 @@ class AnnouncementController extends Controller
             'category'     => 'nullable|string|max:100',
             'target_roles' => 'nullable|array',
             'target_roles.*' => 'in:super_admin,coordinator,staff,student,alumni',
+            'target_units' => 'nullable|array',
+            'target_units.*' => 'in:media,operations,program,finance,official_affairs',
             'project_id'   => 'nullable|exists:projects,id',
+            'period_id'    => 'nullable|exists:periods,id',
             'published_at' => 'nullable|date',
             'expires_at'   => 'nullable|date',
             'send_sms'     => 'boolean',
@@ -377,6 +515,15 @@ class AnnouncementController extends Controller
         if (! empty($validated['project_id'])) {
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.create');
         }
+        if (! empty($validated['send_sms'])) {
+            $this->abortUnlessAllowed($request, 'announcements.send_sms');
+        }
+        if (! empty($validated['send_email'])) {
+            $this->abortUnlessAllowed($request, 'announcements.send_email');
+        }
+
+        $periodId = $this->resolveAnnouncementPeriod($request, $validated, 'announcements.create', true);
+        $this->assertTargetUnitsAllowed($request->user(), 'announcements.create', $validated['target_units'] ?? []);
 
         $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.create');
 
@@ -385,7 +532,9 @@ class AnnouncementController extends Controller
             'content'      => $validated['content'],
             'category'     => $validated['category'] ?? null,
             'target_roles' => $validated['target_roles'] ?? [],
+            'target_units' => $validated['target_units'] ?? [],
             'project_id'   => $validated['project_id'] ?? null,
+            'period_id'    => $periodId,
             'created_by'   => Auth::id(),
             'published_at' => $validated['published_at'] ?? now(),
             'expires_at'   => $validated['expires_at'] ?? null,
@@ -416,7 +565,7 @@ class AnnouncementController extends Controller
             'message'      => (!empty($validated['send_email']) && $validated['send_email'] && $emailSent === 0)
                 ? 'Duyuru olusturuldu ancak e-posta alicisi bulunamadi veya gonderim basarisiz oldu.'
                 : 'Duyuru oluşturuldu.',
-            'announcement' => $announcement->load(['project:id,name', 'creator:id,name,surname']),
+            'announcement' => $announcement->load(['project:id,name', 'period:id,name,status', 'creator:id,name,surname']),
             'target_count' => $targetUsers->count(),
             'email_sent_to' => $emailSent,
             'sms_sent_to' => $smsSent,
@@ -428,7 +577,7 @@ class AnnouncementController extends Controller
      */
     public function show(int $id)
     {
-        $announcement = Announcement::with(['project:id,name', 'creator:id,name,surname'])->findOrFail($id);
+        $announcement = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->findOrFail($id);
         $this->abortUnlessAnnouncementAccessible(request(), $announcement, 'announcements.view');
 
         return response()->json(['announcement' => $announcement]);
@@ -447,10 +596,16 @@ class AnnouncementController extends Controller
             'content'      => 'sometimes|string',
             'category'     => 'nullable|string|max:100',
             'target_roles' => 'nullable|array',
+            'target_roles.*' => 'in:super_admin,coordinator,staff,student,alumni',
+            'target_units' => 'nullable|array',
+            'target_units.*' => 'in:media,operations,program,finance,official_affairs',
             'project_id'   => 'nullable|exists:projects,id',
+            'period_id'    => 'nullable|exists:periods,id',
             'published_at' => 'nullable|date',
             'expires_at'   => 'nullable|date',
         ]);
+
+        $this->assertPeriodWritable($request, $announcement->period_id);
 
         if (array_key_exists('project_id', $validated)) {
             $newProjectId = $validated['project_id'];
@@ -459,13 +614,23 @@ class AnnouncementController extends Controller
             } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'announcements.update')) {
                 abort(403, 'Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir.');
             }
+
+            if (! array_key_exists('period_id', $validated) && (int) ($announcement->project_id ?? 0) !== (int) ($newProjectId ?? 0)) {
+                $validated['period_id'] = null;
+            }
+        }
+        if (array_key_exists('period_id', $validated)) {
+            $this->resolveAnnouncementPeriod($request, $validated, 'announcements.update', true);
+        }
+        if (array_key_exists('target_units', $validated)) {
+            $this->assertTargetUnitsAllowed($request->user(), 'announcements.update', $validated['target_units'] ?? []);
         }
 
         $announcement->update($validated);
 
         return response()->json([
             'message'      => 'Duyuru güncellendi.',
-            'announcement' => $announcement->fresh(['project:id,name', 'creator:id,name,surname']),
+            'announcement' => $announcement->fresh(['project:id,name', 'period:id,name,status', 'creator:id,name,surname']),
         ]);
     }
 
@@ -476,6 +641,7 @@ class AnnouncementController extends Controller
     {
         $announcement = Announcement::findOrFail($id);
         $this->abortUnlessAnnouncementAccessible(request(), $announcement, 'announcements.delete');
+        $this->assertPeriodWritable(request(), $announcement->period_id);
         $announcement->delete();
 
         return response()->json(['message' => 'Duyuru silindi.']);
@@ -491,6 +657,9 @@ class AnnouncementController extends Controller
         $validated = $request->validate([
             'message'      => 'required|string|max:160',
             'target_roles' => 'nullable|array',
+            'target_roles.*' => 'in:super_admin,coordinator,staff,student,alumni',
+            'target_units' => 'nullable|array',
+            'target_units.*' => 'in:media,operations,program,finance,official_affairs',
             'project_id'   => 'nullable|exists:projects,id',
             'user_ids'     => 'nullable|array',
             'user_ids.*'   => 'exists:users,id',
@@ -499,6 +668,7 @@ class AnnouncementController extends Controller
         if (! empty($validated['project_id'])) {
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.send_sms');
         }
+        $this->assertTargetUnitsAllowed($request->user(), 'announcements.send_sms', $validated['target_units'] ?? []);
 
         $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.send_sms');
 
@@ -521,6 +691,9 @@ class AnnouncementController extends Controller
             'subject'      => 'required|string|max:255',
             'body'         => 'required|string',
             'target_roles' => 'nullable|array',
+            'target_roles.*' => 'in:super_admin,coordinator,staff,student,alumni',
+            'target_units' => 'nullable|array',
+            'target_units.*' => 'in:media,operations,program,finance,official_affairs',
             'project_id'   => 'nullable|exists:projects,id',
             'user_ids'     => 'nullable|array',
             'user_ids.*'   => 'exists:users,id',
@@ -530,6 +703,7 @@ class AnnouncementController extends Controller
         if (! empty($validated['project_id'])) {
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.send_email');
         }
+        $this->assertTargetUnitsAllowed($request->user(), 'announcements.send_email', $validated['target_units'] ?? []);
 
         $targetUsers = $this->resolveTargetUsers($request->user(), $validated, 'announcements.send_email');
         $attachmentPath = null;
@@ -714,18 +888,21 @@ class AnnouncementController extends Controller
     private function resolveTargetUsers(User $sender, array $validated, string $permission): \Illuminate\Database\Eloquent\Collection
     {
         $columns = ['id', 'name', 'surname', 'email', 'phone'];
+        $targetUnits = $validated['target_units'] ?? [];
 
         if ($this->permissionResolver->hasGlobalScope($sender, $permission)) {
             return $this->resolveTargetUsersAsSuperAdmin($validated, $columns);
         }
 
+        $this->assertTargetUnitsAllowed($sender, $permission, $targetUnits);
         $participantIds = $this->participantUserIdsInManageableProjects($sender, $permission);
+        $unitUserIds = $this->staffUserIdsInTargetUnits($targetUnits);
 
         if (! empty($validated['user_ids'])) {
             foreach ($validated['user_ids'] as $uid) {
                 $uid = (int) $uid;
                 abort_unless(
-                    in_array($uid, $participantIds, true) || $uid === (int) $sender->id,
+                    in_array($uid, $participantIds, true) || in_array($uid, $unitUserIds, true) || $uid === (int) $sender->id,
                     403,
                     'Secilen kullanicilarin bir kismi erisim kapsaminiz disinda.'
                 );
@@ -738,38 +915,93 @@ class AnnouncementController extends Controller
         }
 
         $privileged = array_intersect($validated['target_roles'] ?? [], ['super_admin', 'coordinator', 'staff']);
-        if ($privileged !== [] && empty($validated['project_id'])) {
-            abort(403, 'Bu rollere toplu mesaj icin proje secilmelidir.');
+        if ($privileged !== [] && empty($validated['project_id']) && $targetUnits === []) {
+            abort(403, 'Bu rollere toplu mesaj icin proje veya birim secilmelidir.');
         }
 
-        $query = User::query()->where('status', 'active');
+        $targetIds = collect();
 
-        if (! empty($validated['target_roles'])) {
-            $query->whereIn('role', $validated['target_roles']);
+        if ($targetUnits !== []) {
+            $unitQuery = User::query()
+                ->where('status', 'active')
+                ->whereIn('id', $unitUserIds);
+
+            if (! empty($validated['target_roles'])) {
+                $unitQuery->whereIn('role', $validated['target_roles']);
+            }
+
+            $targetIds = $targetIds->merge($unitQuery->pluck('id'));
         }
 
         if (! empty($validated['project_id'])) {
-            $query->whereHas('participations', fn ($q) =>
-                $q->where('project_id', $validated['project_id'])->where('status', 'active'));
+            $projectQuery = User::query()
+                ->where('status', 'active')
+                ->whereHas('participations', fn ($q) =>
+                    $q->where('project_id', $validated['project_id'])->where('status', 'active'));
 
-            return $query->get($columns);
+            if (! empty($validated['target_roles'])) {
+                $projectQuery->whereIn('role', $validated['target_roles']);
+            }
+
+            $targetIds = $targetIds->merge($projectQuery->pluck('id'));
+        }
+
+        if ($targetIds->isNotEmpty()) {
+            return User::query()
+                ->where('status', 'active')
+                ->whereIn('id', $targetIds->unique()->values()->all())
+                ->get($columns);
         }
 
         if ($participantIds === []) {
             return User::query()->whereRaw('0 = 1')->get($columns);
         }
 
-        $query->whereIn('id', $participantIds);
+        $query = User::query()
+            ->where('status', 'active')
+            ->whereIn('id', $participantIds);
+
+        if (! empty($validated['target_roles'])) {
+            $query->whereIn('role', $validated['target_roles']);
+        }
 
         return $query->get($columns);
     }
 
     private function resolveTargetUsersAsSuperAdmin(array $validated, array $columns): \Illuminate\Database\Eloquent\Collection
     {
+        $targetUnits = $validated['target_units'] ?? [];
         $query = User::query()->where('status', 'active');
 
         if (! empty($validated['user_ids'])) {
             return $query->whereIn('id', $validated['user_ids'])->get($columns);
+        }
+
+        if ($targetUnits !== []) {
+            $targetIds = collect($this->staffUserIdsInTargetUnits($targetUnits));
+
+            if (! empty($validated['project_id'])) {
+                $projectQuery = User::query()
+                    ->where('status', 'active')
+                    ->whereHas('participations', fn ($q) =>
+                        $q->where('project_id', $validated['project_id'])->where('status', 'active'));
+
+                if (! empty($validated['target_roles'])) {
+                    $projectQuery->whereIn('role', $validated['target_roles']);
+                }
+
+                $targetIds = $targetIds->merge($projectQuery->pluck('id'));
+            }
+
+            $unitQuery = User::query()
+                ->where('status', 'active')
+                ->whereIn('id', $targetIds->unique()->values()->all());
+
+            if (! empty($validated['target_roles'])) {
+                $unitQuery->whereIn('role', $validated['target_roles']);
+            }
+
+            return $unitQuery->get($columns);
         }
 
         if (! empty($validated['target_roles'])) {

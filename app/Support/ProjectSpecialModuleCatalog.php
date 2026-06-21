@@ -69,7 +69,8 @@ final class ProjectSpecialModuleCatalog
             'zirve_kademe'     => ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'],
             'kademe_plus'      => ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'],
             'eurodesk'         => ['digital_bohca', 'eurodesk_projects'],
-            'other', null      => null, // fallback'e bırak
+            'other'            => ['digital_bohca', 'internships', 'mentors', 'eurodesk_projects', 'reward_tiers'],
+            null               => null, // fallback'e bırak
             default            => null,
         };
     }

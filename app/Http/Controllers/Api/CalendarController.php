@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
+use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\SupportTicket;
@@ -14,12 +16,14 @@ use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
 
 class CalendarController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -29,6 +33,15 @@ class CalendarController extends Controller
     private function canAssignProgram(User $user, Program $program): bool
     {
         return $this->permissionResolver->canAccessProject($user, 'calendar.assignments.manage', $program->project_id);
+    }
+
+    private function canAccessCalendarEvent(User $user, string $permission, ?int $projectId): bool
+    {
+        if ($projectId === null) {
+            return $this->permissionResolver->hasGlobalScope($user, $permission);
+        }
+
+        return $this->permissionResolver->canAccessProject($user, $permission, $projectId);
     }
 
     private function viewableProjectIds(User $user): array
@@ -49,6 +62,15 @@ class CalendarController extends Controller
         }
 
         return $this->permissionResolver->projectIdsForPermission($user, 'calendar.assignments.manage');
+    }
+
+    private function assignableProjectIdsFor(User $user, string $permission): array
+    {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
+            return Project::query()->pluck('id')->all();
+        }
+
+        return $this->permissionResolver->projectIdsForPermission($user, $permission);
     }
 
     private function isMediaUnit(User $user): bool
@@ -97,33 +119,105 @@ class CalendarController extends Controller
             ->all();
     }
 
+    private function allowedMeetingAssignees(Collection $assignedIds, ?int $projectId): Collection
+    {
+        $users = User::query()
+            ->with(['staffProfile', 'coordinatedProjects:id', 'participations:id,user_id,project_id'])
+            ->whereIn('id', $assignedIds)
+            ->whereIn('role', ['coordinator', 'staff'])
+            ->where('status', 'active')
+            ->get();
+
+        if ($projectId === null) {
+            return $users->values();
+        }
+
+        return $users
+            ->filter(fn (User $candidate) => $this->canBeAssignedToProject($candidate, $projectId))
+            ->values();
+    }
+
+    private function mapCalendarMeeting(CalendarEvent $event, Collection $assignedUsers, int $currentUserId): array
+    {
+        $assignedIds = collect($event->assigned_users ?? [])
+            ->filter(fn ($value) => is_numeric($value))
+            ->map(fn ($value) => (int) $value)
+            ->values();
+
+        $assignmentItems = $assignedIds
+            ->map(fn (int $userId) => $assignedUsers->get($userId))
+            ->filter();
+
+        return [
+            'id' => $event->id,
+            'calendar_event_id' => $event->id,
+            'event_type' => 'meeting',
+            'title' => $event->title,
+            'description' => $event->description,
+            'location' => $event->location,
+            'status' => $event->status ?? 'scheduled',
+            'radius_meters' => null,
+            'credit_deduction' => null,
+            'application_quota' => null,
+            'start_at' => optional($event->start_at)?->toIso8601String(),
+            'end_at' => optional($event->end_at)?->toIso8601String(),
+            'project_id' => $event->project_id,
+            'project' => $event->project ? [
+                'id' => $event->project->id,
+                'name' => $event->project->name,
+            ] : null,
+            'period' => $event->period ? [
+                'id' => $event->period->id,
+                'name' => $event->period->name,
+            ] : null,
+            'calendar_event' => [
+                'google_event_id' => $event->google_event_id,
+                'assigned_user_ids' => $assignedIds->all(),
+                'assigned_users' => $this->mapAssignments($assignmentItems),
+                'assigned_count' => $assignmentItems->count(),
+                'is_assigned_to_current_user' => $assignedIds->contains($currentUserId),
+            ],
+        ];
+    }
+
     public function overview(Request $request, GoogleCalendarService $googleCalendar): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'calendar.view');
         $user = $request->user();
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
         ]);
-        $projectIds = $this->viewableProjectIds($user);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'calendar.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
+        $projectIds = $context->projectIdsForQuery();
 
-        if (empty($projectIds)) {
+        if (empty($projectIds) && ! $this->permissionResolver->hasPermission($user, 'calendar.view')) {
             return response()->json([
                 'projects' => [],
                 'programs' => [],
                 'summary' => [
                     'total_programs' => 0,
+                    'today_programs' => 0,
                     'upcoming_this_week' => 0,
                     'upcoming_this_month' => 0,
                     'open_support_count' => 0,
                     'google_synced_count' => 0,
+                    'google_pending_count' => 0,
+                    'unassigned_count' => 0,
                 ],
                 'upcoming_tasks' => [],
+                'attention_items' => [],
                 'google_calendar' => $googleCalendar->getStatus(),
             ]);
         }
 
         $projects = Project::query()
-            ->with(['periods' => fn ($query) => $query->where('status', 'active')->orderByDesc('start_date')])
+            ->with(['periods' => fn ($query) => $query->orderByDesc('start_date')])
             ->whereIn('id', $projectIds)
             ->orderBy('name')
             ->get();
@@ -134,19 +228,44 @@ class CalendarController extends Controller
                 'period:id,name',
                 'calendarEvent:id,program_id,google_event_id,assigned_users',
             ])
-            ->whereIn('project_id', $projectIds)
             ->orderBy('start_at');
-
-        if (!empty($validated['project_id'])) {
-            $programQuery->where('project_id', $validated['project_id']);
-        }
+        $this->applyProjectPeriodContext($programQuery, $context);
 
         $programCollection = $programQuery->get();
+
+        $meetingQuery = CalendarEvent::query()
+            ->with(['project:id,name', 'period:id,name'])
+            ->where('event_type', 'meeting')
+            ->orderBy('start_at');
+
+        if ($context->projectId !== null) {
+            $meetingQuery->where('project_id', $context->projectId);
+        }
+
+        if ($context->periodId !== null) {
+            $meetingQuery->where('period_id', $context->periodId);
+        }
+
+        if (! $this->permissionResolver->hasGlobalScope($user, 'calendar.view')) {
+            $meetingQuery->where(function ($query) use ($projectIds, $user) {
+                if (! empty($projectIds)) {
+                    $query->whereIn('project_id', $projectIds);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+
+                $query->orWhereJsonContains('assigned_users', (int) $user->id)
+                    ->orWhere('created_by', $user->id);
+            });
+        }
+
+        $meetingCollection = $meetingQuery->get();
 
         $assignedUserIds = $programCollection
             ->pluck('calendarEvent.assigned_users')
             ->filter()
             ->flatten()
+            ->merge($meetingCollection->pluck('assigned_users')->filter()->flatten())
             ->unique()
             ->values();
 
@@ -171,12 +290,15 @@ class CalendarController extends Controller
 
                 return [
                     'id' => $program->id,
+                    'calendar_event_id' => $program->calendarEvent?->id,
+                    'event_type' => 'program',
                     'title' => $program->title,
                     'description' => $program->description,
                     'location' => $program->location,
                     'status' => $program->status,
                     'radius_meters' => $program->radius_meters,
                     'credit_deduction' => $program->credit_deduction,
+                    'application_quota' => $program->application_quota,
                     'start_at' => optional($program->start_at)?->toIso8601String(),
                     'end_at' => optional($program->end_at)?->toIso8601String(),
                     'project_id' => $program->project_id,
@@ -199,11 +321,20 @@ class CalendarController extends Controller
             })
             ->values();
 
+        $meetings = $meetingCollection
+            ->map(fn (CalendarEvent $event) => $this->mapCalendarMeeting($event, $assignedUsers, $currentUserId))
+            ->values();
+
+        $calendarItems = $programs
+            ->concat($meetings)
+            ->sortBy(fn (array $item) => $item['start_at'] ?? '9999-12-31T23:59:59+00:00')
+            ->values();
+
         $now = now();
         $weekEnd = $now->copy()->addDays(7);
         $monthEnd = $now->copy()->addDays(30);
 
-        $upcomingTasks = $programs
+        $upcomingTasks = $calendarItems
             ->filter(function (array $program) use ($now) {
                 if (empty($program['start_at'])) {
                     return false;
@@ -214,21 +345,44 @@ class CalendarController extends Controller
             ->take(8)
             ->values();
 
+        $attentionItems = $calendarItems
+            ->filter(function (array $program) use ($now) {
+                if (empty($program['start_at'])) {
+                    return false;
+                }
+
+                $startAt = Carbon::parse($program['start_at']);
+
+                return $startAt->greaterThanOrEqualTo($now)
+                    && (
+                        empty($program['calendar_event']['assigned_count'])
+                        || (
+                            ($program['event_type'] ?? 'program') === 'program'
+                            && empty($program['calendar_event']['google_event_id'])
+                        )
+                    );
+            })
+            ->take(6)
+            ->values();
+
         $supportProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.view');
         $openSupportCount = empty($supportProjectIds)
             ? 0
             : SupportTicket::query()
-                ->whereIn('project_id', $supportProjectIds)
+            ->whereIn('project_id', $supportProjectIds)
                 ->whereIn('status', ['open', 'in_progress'])
                 ->count();
 
         $syncedCount = $programs
             ->filter(fn (array $program) => !empty($program['calendar_event']['google_event_id']))
             ->count();
+        $unassignedCount = $programs
+            ->filter(fn (array $program) => empty($program['calendar_event']['assigned_count']))
+            ->count();
 
         return response()->json([
             'projects' => $projects->map(function (Project $project) {
-                $activePeriod = $project->periods->first();
+                $activePeriod = $project->periods->firstWhere('status', 'active') ?? $project->periods->first();
 
                 return [
                     'id' => $project->id,
@@ -239,17 +393,26 @@ class CalendarController extends Controller
                     ] : null,
                 ];
             })->values(),
-            'programs' => $programs,
+            'programs' => $calendarItems,
             'summary' => [
                 'total_programs' => $programs->count(),
-                'upcoming_this_week' => $programs->filter(function (array $program) use ($now, $weekEnd) {
+                'total_meetings' => $meetings->count(),
+                'total_events' => $calendarItems->count(),
+                'today_programs' => $calendarItems->filter(function (array $program) use ($now) {
+                    if (empty($program['start_at'])) {
+                        return false;
+                    }
+
+                    return Carbon::parse($program['start_at'])->isSameDay($now);
+                })->count(),
+                'upcoming_this_week' => $calendarItems->filter(function (array $program) use ($now, $weekEnd) {
                     if (empty($program['start_at'])) {
                         return false;
                     }
 
                     return Carbon::parse($program['start_at'])->between($now, $weekEnd);
                 })->count(),
-                'upcoming_this_month' => $programs->filter(function (array $program) use ($now, $monthEnd) {
+                'upcoming_this_month' => $calendarItems->filter(function (array $program) use ($now, $monthEnd) {
                     if (empty($program['start_at'])) {
                         return false;
                     }
@@ -258,30 +421,51 @@ class CalendarController extends Controller
                 })->count(),
                 'open_support_count' => $openSupportCount,
                 'google_synced_count' => $syncedCount,
+                'google_pending_count' => max($programs->count() - $syncedCount, 0),
+                'unassigned_count' => $calendarItems->filter(fn (array $program) => empty($program['calendar_event']['assigned_count']))->count(),
             ],
             'upcoming_tasks' => $upcomingTasks,
+            'attention_items' => $attentionItems,
             'google_calendar' => $googleCalendar->getStatus(),
         ]);
     }
 
     public function assignees(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'calendar.assignments.manage');
         $validated = $request->validate([
             'project_id' => 'nullable|integer|exists:projects,id',
+            'context' => 'nullable|in:program,meeting_create,meeting_manage',
         ]);
         $user = $request->user();
         $projectId = $validated['project_id'] ?? null;
+        $context = $validated['context'] ?? 'program';
+        $permission = match ($context) {
+            'meeting_create' => 'calendar.meetings.create',
+            'meeting_manage' => 'calendar.meetings.manage',
+            default => 'calendar.assignments.manage',
+        };
+
+        $this->abortUnlessAllowed($request, $permission);
 
         if ($projectId !== null) {
             abort_unless(
-                $this->permissionResolver->canAccessProject($user, 'calendar.assignments.manage', (int) $projectId),
+                $this->permissionResolver->canAccessProject($user, $permission, (int) $projectId),
                 403,
-                'Bu proje icin gorev atama yetkiniz yok.'
+                'Bu proje icin atama yetkiniz yok.'
+            );
+        } elseif ($context !== 'program') {
+            abort_unless(
+                $this->permissionResolver->hasGlobalScope($user, $permission),
+                403,
+                'Genel toplanti icin global yetki gerekir.'
             );
         }
 
-        $assignableProjectIds = $projectId !== null ? [(int) $projectId] : $this->assignableProjectIds($user);
+        $assignableProjectIds = $projectId !== null
+            ? [(int) $projectId]
+            : ($context === 'program'
+                ? $this->assignableProjectIds($user)
+                : $this->assignableProjectIdsFor($user, $permission));
 
         $users = User::query()
             ->with(['staffProfile', 'coordinatedProjects:id', 'participations:id,user_id,project_id'])
@@ -289,6 +473,12 @@ class CalendarController extends Controller
             ->where('status', 'active')
             ->orderBy('name')
             ->get();
+
+        if ($context !== 'program' && $projectId === null) {
+            return response()->json([
+                'users' => $this->mapAssignments($users),
+            ]);
+        }
 
         $users = $users->filter(function (User $candidate) use ($assignableProjectIds) {
             foreach ($assignableProjectIds as $assignableProjectId) {
@@ -310,6 +500,7 @@ class CalendarController extends Controller
         $this->abortUnlessAllowed($request, 'calendar.assignments.manage');
         $program = Program::query()->with(['project:id,name', 'calendarEvent'])->findOrFail($programId);
         abort_unless($this->canAssignProgram($request->user(), $program), 403, 'Bu programa gorev atama yetkiniz yok.');
+        $this->assertPeriodWritable($request, $program->period_id);
 
         $validated = $request->validate([
             'assigned_user_ids' => 'array',
@@ -336,11 +527,14 @@ class CalendarController extends Controller
             ['program_id' => $program->id],
             [
                 'project_id' => $program->project_id,
+                'period_id' => $program->period_id,
+                'event_type' => 'program',
                 'title' => $program->title,
                 'description' => $program->description,
                 'location' => $program->location,
                 'start_at' => $program->start_at,
                 'end_at' => $program->end_at,
+                'status' => $program->status ?? 'scheduled',
                 'created_by' => $program->created_by ?? $request->user()->id,
                 'assigned_users' => $allowedIds->values()->all(),
             ]
@@ -359,6 +553,130 @@ class CalendarController extends Controller
                 'assigned_user_ids' => $allowedIds->values()->all(),
                 'assigned_users' => $this->mapAssignments($assignedUsers),
                 'assigned_count' => $assignedUsers->count(),
+            ],
+        ]);
+    }
+
+    public function storeMeeting(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'calendar.meetings.create');
+        $user = $request->user();
+        $validated = $request->validate([
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'location' => 'nullable|string|max:255',
+            'start_at' => 'required|date',
+            'end_at' => 'nullable|date|after:start_at',
+            'assigned_user_ids' => 'array',
+            'assigned_user_ids.*' => 'integer|exists:users,id',
+        ]);
+
+        $projectId = array_key_exists('project_id', $validated) && $validated['project_id'] !== null
+            ? (int) $validated['project_id']
+            : null;
+        $periodId = array_key_exists('period_id', $validated) && $validated['period_id'] !== null
+            ? (int) $validated['period_id']
+            : null;
+
+        if ($periodId !== null) {
+            $period = Period::query()
+                ->select(['id', 'project_id', 'status'])
+                ->findOrFail($periodId);
+
+            if ($projectId !== null && (int) $period->project_id !== $projectId) {
+                throw ValidationException::withMessages([
+                    'period_id' => ['Secilen donem bu projeye ait degil.'],
+                ]);
+            }
+
+            $projectId ??= (int) $period->project_id;
+        }
+
+        abort_unless(
+            $this->canAccessCalendarEvent($user, 'calendar.meetings.create', $projectId),
+            403,
+            'Bu kapsamda toplanti olusturma yetkiniz yok.'
+        );
+        $this->assertPeriodWritable($request, $periodId);
+
+        $assignedIds = collect($validated['assigned_user_ids'] ?? [])
+            ->map(fn ($value) => (int) $value)
+            ->unique()
+            ->values();
+        $allowedUsers = $this->allowedMeetingAssignees($assignedIds, $projectId);
+        $allowedIds = $allowedUsers->pluck('id')->values();
+
+        $event = CalendarEvent::query()->create([
+            'event_type' => 'meeting',
+            'project_id' => $projectId,
+            'period_id' => $periodId,
+            'program_id' => null,
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'location' => $validated['location'] ?? null,
+            'start_at' => Carbon::parse($validated['start_at']),
+            'end_at' => ! empty($validated['end_at']) ? Carbon::parse($validated['end_at']) : null,
+            'status' => 'scheduled',
+            'created_by' => $user->id,
+            'assigned_users' => $allowedIds->all(),
+            'metadata' => ['source' => 'panel'],
+        ])->load(['project:id,name', 'period:id,name']);
+
+        return response()->json([
+            'message' => 'Toplanti olusturuldu.',
+            'meeting' => $this->mapCalendarMeeting(
+                $event,
+                $allowedUsers->keyBy('id'),
+                (int) $user->id
+            ),
+        ], 201);
+    }
+
+    public function updateMeetingAssignments(Request $request, int $eventId): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'calendar.meetings.manage');
+        $user = $request->user();
+        $event = CalendarEvent::query()
+            ->with('project:id,name')
+            ->where('event_type', 'meeting')
+            ->findOrFail($eventId);
+
+        abort_unless(
+            $this->canAccessCalendarEvent($user, 'calendar.meetings.manage', $event->project_id),
+            403,
+            'Bu toplantinin davetlilerini yonetme yetkiniz yok.'
+        );
+        $this->assertPeriodWritable($request, $event->period_id);
+
+        $validated = $request->validate([
+            'assigned_user_ids' => 'array',
+            'assigned_user_ids.*' => 'integer|exists:users,id',
+        ]);
+
+        $assignedIds = collect($validated['assigned_user_ids'] ?? [])
+            ->map(fn ($value) => (int) $value)
+            ->unique()
+            ->values();
+        $allowedUsers = $this->allowedMeetingAssignees(
+            $assignedIds,
+            $event->project_id !== null ? (int) $event->project_id : null
+        );
+        $allowedIds = $allowedUsers->pluck('id')->values();
+
+        $event->update([
+            'assigned_users' => $allowedIds->all(),
+        ]);
+
+        return response()->json([
+            'message' => 'Toplanti davetlileri guncellendi.',
+            'meeting_id' => $event->id,
+            'calendar_event' => [
+                'google_event_id' => $event->google_event_id,
+                'assigned_user_ids' => $allowedIds->all(),
+                'assigned_users' => $this->mapAssignments($allowedUsers),
+                'assigned_count' => $allowedUsers->count(),
             ],
         ]);
     }
@@ -384,7 +702,13 @@ class CalendarController extends Controller
     public function googleSync(Request $request, GoogleCalendarService $googleCalendar): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'calendar.google.sync');
-        $result = $googleCalendar->syncAllPrograms();
+
+        try {
+            $result = $googleCalendar->syncAllPrograms();
+        } catch (\Throwable $exception) {
+            $googleCalendar->recordSyncError($exception->getMessage());
+            throw $exception;
+        }
 
         return response()->json([
             'message' => 'Google Calendar senkronizasyonu tamamlandi.',
@@ -399,6 +723,7 @@ class CalendarController extends Controller
         $user = $request->user();
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
         ]);
 
         $projectIds = $this->permissionResolver->hasGlobalScope($user, 'calendar.export')
@@ -425,6 +750,10 @@ class CalendarController extends Controller
                 'Bu proje icin takvim export yetkiniz yok.'
             );
             $query->where('project_id', (int) $validated['project_id']);
+        }
+
+        if (! empty($validated['period_id'])) {
+            $query->where('period_id', (int) $validated['period_id']);
         }
 
         $programs = $query->get();

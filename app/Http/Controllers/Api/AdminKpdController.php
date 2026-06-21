@@ -3,25 +3,32 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\KpdAppointment;
 use App\Models\KpdReport;
 use App\Models\KpdRoom;
+use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\MediaStorage;
+use App\Support\ProjectSpecialModuleCatalog;
+use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminKpdController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly NotificationService $notificationService
     ) {
     }
 
@@ -35,6 +42,8 @@ class AdminKpdController extends Controller
                     ->orWhere('name', 'like', '%Psikolojik%')
                     ->orWhere('slug', 'like', '%kpd%');
             })
+            ->get(['id', 'type', 'name', 'slug'])
+            ->filter(fn (Project $project) => in_array('kpd_appointments', ProjectSpecialModuleCatalog::forProject($project), true))
             ->pluck('id')
             ->all();
     }
@@ -87,6 +96,7 @@ class AdminKpdController extends Controller
         return User::query()
             ->whereIn('role', ['student', 'alumni'])
             ->whereHas('participations', fn ($query) => $query->whereIn('project_id', $projectIds))
+            ->with(['participations.period:id,name,status'])
             ->orderBy('name')
             ->get(['id', 'name', 'surname', 'email', 'role'])
             ->map(fn (User $user) => [
@@ -95,6 +105,17 @@ class AdminKpdController extends Controller
                 'surname' => $user->surname,
                 'email' => $user->email,
                 'role' => $user->role,
+                'periods' => $user->participations
+                    ->pluck('period')
+                    ->filter()
+                    ->unique('id')
+                    ->map(fn ($period) => [
+                        'id' => $period->id,
+                        'name' => $period->name,
+                        'status' => $period->status,
+                    ])
+                    ->values()
+                    ->all(),
             ])
             ->values();
     }
@@ -128,19 +149,114 @@ class AdminKpdController extends Controller
             ->values();
     }
 
+    private function roomSchedulePayload(array $projectIds, ?int $periodId): array
+    {
+        return KpdRoom::query()
+            ->with(['appointments' => function ($query) use ($projectIds, $periodId) {
+                $query
+                    ->with(['counselor:id,name,surname,role', 'counselee:id,name,surname,email', 'period:id,name,status'])
+                    ->where('status', '!=', 'cancelled')
+                    ->whereHas('counselee.participations', function ($inner) use ($projectIds, $periodId) {
+                        $inner->whereIn('project_id', $projectIds)
+                            ->when($periodId, fn ($periodQuery) => $periodQuery->where('period_id', $periodId));
+                    })
+                    ->when($periodId, fn ($appointmentQuery) => $appointmentQuery->where('period_id', $periodId))
+                    ->when(! $periodId, fn ($appointmentQuery) => $appointmentQuery->where('end_at', '>=', now()->subDay()))
+                    ->orderBy('start_at');
+            }])
+            ->orderBy('name')
+            ->get(['id', 'name', 'description'])
+            ->map(fn (KpdRoom $room) => [
+                'id' => $room->id,
+                'name' => $room->name,
+                'description' => $room->description,
+                'appointment_count' => $room->appointments->count(),
+                'next_appointment_at' => optional($room->appointments->first()?->start_at)?->toIso8601String(),
+                'appointments' => $room->appointments
+                    ->take(8)
+                    ->map(fn (KpdAppointment $appointment) => [
+                        'id' => $appointment->id,
+                        'status' => $appointment->status,
+                        'start_at' => optional($appointment->start_at)?->toIso8601String(),
+                        'end_at' => optional($appointment->end_at)?->toIso8601String(),
+                        'period' => $appointment->period ? [
+                            'id' => $appointment->period->id,
+                            'name' => $appointment->period->name,
+                            'status' => $appointment->period->status,
+                        ] : null,
+                        'counselor' => $appointment->counselor ? [
+                            'id' => $appointment->counselor->id,
+                            'name' => $appointment->counselor->name,
+                            'surname' => $appointment->counselor->surname,
+                            'role' => $appointment->counselor->role,
+                        ] : null,
+                        'counselee' => $appointment->counselee ? [
+                            'id' => $appointment->counselee->id,
+                            'name' => $appointment->counselee->name,
+                            'surname' => $appointment->counselee->surname,
+                        ] : null,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
     private function reportPayload(KpdReport $report): array
     {
         return [
             'id' => $report->id,
             'user_id' => $report->user_id,
+            'period_id' => $report->period_id,
             'counselor_id' => $report->counselor_id,
             'title' => $report->title,
             'file_path' => $report->file_path,
             'download_url' => $report->file_path ? "/panel/kpd/reports/{$report->id}/download" : null,
             'created_at' => optional($report->created_at)?->toIso8601String(),
             'user' => $report->relationLoaded('user') ? $report->user : null,
+            'period' => $report->relationLoaded('period') ? $report->period : null,
             'counselor' => $report->relationLoaded('counselor') ? $report->counselor : null,
         ];
+    }
+
+    private function assertPeriodMatchesUser(int $userId, ?int $periodId): void
+    {
+        if ($periodId === null) {
+            return;
+        }
+
+        abort_unless(
+            \App\Models\Participant::query()
+                ->where('user_id', $userId)
+                ->where('period_id', $periodId)
+                ->exists(),
+            422,
+            'Secilen donem bu danisana ait degil.'
+        );
+    }
+
+    private function resolveAccessibleKpdPeriodId(Request $request, string $permission, array $projectIds): ?int
+    {
+        $validated = $request->validate([
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+
+        if (empty($validated['period_id'])) {
+            return null;
+        }
+
+        $period = Period::query()
+            ->select(['id', 'project_id'])
+            ->findOrFail((int) $validated['period_id']);
+
+        if (! in_array((int) $period->project_id, $projectIds, true)) {
+            throw ValidationException::withMessages([
+                'period_id' => ["Secilen donem icin {$permission} yetkiniz yok."],
+            ]);
+        }
+
+        return (int) $period->id;
     }
 
     private function streamReport(KpdReport $report): JsonResponse|StreamedResponse
@@ -198,16 +314,21 @@ class AdminKpdController extends Controller
     public function index(Request $request)
     {
         $projectIds = $this->accessibleKpdProjectIds($request, 'kpd.appointments.view');
+        $periodId = $this->resolveAccessibleKpdPeriodId($request, 'kpd.appointments.view', $projectIds);
 
         $appointments = KpdAppointment::query()
-            ->with(['counselor:id,name,surname', 'counselee:id,name,surname', 'room'])
+            ->with(['counselor:id,name,surname', 'counselee:id,name,surname', 'period:id,name,status', 'room'])
             ->when(! $this->hasGlobalKpdAccess($request, 'kpd.appointments.view'), function ($query) use ($projectIds) {
                 $query->whereHas('counselee.participations', fn ($inner) => $inner->whereIn('project_id', $projectIds));
             })
+            ->when($periodId, fn ($query) => $query->where('period_id', $periodId))
             ->orderBy('start_at', 'desc')
             ->paginate(15);
 
-        $payload = ['appointments' => $appointments];
+        $payload = [
+            'appointments' => $appointments,
+            'room_schedule' => $this->roomSchedulePayload($projectIds, $periodId),
+        ];
 
         if ($this->permissionResolver->hasPermission($request->user(), 'kpd.appointments.manage')) {
             $payload['counselees'] = $this->scopedKpdUsers($request, 'kpd.appointments.manage');
@@ -221,12 +342,14 @@ class AdminKpdController extends Controller
     public function reports(Request $request): JsonResponse
     {
         $projectIds = $this->accessibleKpdProjectIds($request, 'kpd.reports.view');
+        $periodId = $this->resolveAccessibleKpdPeriodId($request, 'kpd.reports.view', $projectIds);
 
         $reports = KpdReport::query()
-            ->with(['user:id,name,surname,email', 'counselor:id,name,surname,email'])
+            ->with(['user:id,name,surname,email', 'period:id,name,status', 'counselor:id,name,surname,email'])
             ->when(! $this->hasGlobalKpdAccess($request, 'kpd.reports.view'), function ($query) use ($projectIds) {
                 $query->whereHas('user.participations', fn ($inner) => $inner->whereIn('project_id', $projectIds));
             })
+            ->when($periodId, fn ($query) => $query->where('period_id', $periodId))
             ->latest()
             ->paginate(20)
             ->through(fn (KpdReport $report) => $this->reportPayload($report));
@@ -240,20 +363,34 @@ class AdminKpdController extends Controller
 
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
+            'period_id' => 'nullable|exists:periods,id',
             'title' => 'required|string|max:255',
             'file' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:20480',
         ]);
 
         $this->abortUnlessUserInKpdScope($request, 'kpd.reports.create', (int) $validated['user_id']);
+        $this->assertPeriodMatchesUser((int) $validated['user_id'], isset($validated['period_id']) ? (int) $validated['period_id'] : null);
+        $this->assertPeriodWritable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
 
         $path = MediaStorage::putFile('kpd-reports', $request->file('file'));
 
         $report = KpdReport::query()->create([
             'user_id' => $validated['user_id'],
+            'period_id' => $validated['period_id'] ?? null,
             'counselor_id' => $request->user()->id,
             'title' => $validated['title'],
             'file_path' => $path,
         ])->load(['user:id,name,surname,email', 'counselor:id,name,surname,email']);
+
+        if ($report->user?->email) {
+            $this->notificationService->sendEmail(
+                [$report->user->email],
+                'KPD raporunuz yuklendi',
+                "Merhaba {$report->user?->name},\nKPD raporlarim alanina yeni bir rapor yuklendi.\nRapor: {$report->title}",
+                null,
+                $request->user()->id
+            );
+        }
 
         return response()->json([
             'message' => 'KPD raporu yuklendi.',
@@ -283,6 +420,7 @@ class AdminKpdController extends Controller
                 $query->whereHas('user.participations', fn ($inner) => $inner->whereIn('project_id', $projectIds));
             })
             ->findOrFail($id);
+        $this->assertPeriodWritable($request, $report->period_id);
         MediaStorage::delete($report->file_path);
         $report->delete();
 
@@ -299,6 +437,7 @@ class AdminKpdController extends Controller
         $validated = $request->validate([
             'counselor_id' => 'required|exists:users,id',
             'counselee_id' => 'required|exists:users,id',
+            'period_id' => 'nullable|exists:periods,id',
             'room_id' => 'required|exists:kpd_rooms,id',
             'start_at' => 'required|date',
             'end_at' => 'required|date|after:start_at',
@@ -306,6 +445,8 @@ class AdminKpdController extends Controller
         ]);
 
         $this->abortUnlessUserInKpdScope($request, 'kpd.appointments.manage', (int) $validated['counselee_id']);
+        $this->assertPeriodMatchesUser((int) $validated['counselee_id'], isset($validated['period_id']) ? (int) $validated['period_id'] : null);
+        $this->assertPeriodWritable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
 
         $counselor = User::query()
             ->whereKey($validated['counselor_id'])
@@ -333,7 +474,9 @@ class AdminKpdController extends Controller
         }
 
         $appointment = KpdAppointment::create(array_merge($validated, ['status' => 'scheduled']))
-            ->load(['counselor:id,name,surname', 'counselee:id,name,surname', 'room']);
+            ->load(['counselor:id,name,surname,email', 'counselee:id,name,surname,email', 'period:id,name,status', 'room']);
+
+        $this->notifyAppointmentCreated($appointment, $request->user()->id);
 
         return response()->json([
             'message' => 'Randevu basariyla olusturuldu.',
@@ -350,17 +493,54 @@ class AdminKpdController extends Controller
         ]);
 
         $appointment = KpdAppointment::query()
-            ->with(['counselor:id,name,surname', 'counselee:id,name,surname', 'room'])
+            ->with(['counselor:id,name,surname,email', 'counselee:id,name,surname,email', 'room'])
             ->when(! $this->hasGlobalKpdAccess($request, 'kpd.appointments.manage'), function ($query) use ($projectIds) {
                 $query->whereHas('counselee.participations', fn ($inner) => $inner->whereIn('project_id', $projectIds));
             })
             ->findOrFail($id);
+        $this->assertPeriodWritable($request, $appointment->period_id);
 
         $appointment->update(['status' => $validated['status']]);
+        $appointment->refresh()->load(['counselor:id,name,surname,email', 'counselee:id,name,surname,email', 'room']);
+
+        $this->notifyAppointmentStatusChanged($appointment, $validated['status'], $request->user()->id);
 
         return response()->json([
             'message' => 'Randevu durumu guncellendi.',
-            'appointment' => $appointment->fresh(['counselor:id,name,surname', 'counselee:id,name,surname', 'room']),
+            'appointment' => $appointment,
         ]);
+    }
+
+    private function notifyAppointmentCreated(KpdAppointment $appointment, ?int $senderId = null): void
+    {
+        $start = optional($appointment->start_at)?->format('d.m.Y H:i') ?? '-';
+        $room = $appointment->room?->name ?? '-';
+
+        $this->notificationService->sendEmail(
+            array_filter([$appointment->counselee?->email, $appointment->counselor?->email]),
+            'KPD randevusu olusturuldu',
+            "Randevu tarihi: {$start}\nOda: {$room}\nDanisman: ".trim(($appointment->counselor?->name ?? '').' '.($appointment->counselor?->surname ?? ''))."\nDanisan: ".trim(($appointment->counselee?->name ?? '').' '.($appointment->counselee?->surname ?? '')),
+            null,
+            $senderId
+        );
+    }
+
+    private function notifyAppointmentStatusChanged(KpdAppointment $appointment, string $status, ?int $senderId = null): void
+    {
+        $statusLabels = [
+            'scheduled' => 'Planlandi',
+            'completed' => 'Tamamlandi',
+            'cancelled' => 'Iptal edildi',
+            'no_show' => 'Katilim olmadi',
+        ];
+        $start = optional($appointment->start_at)?->format('d.m.Y H:i') ?? '-';
+
+        $this->notificationService->sendEmail(
+            array_filter([$appointment->counselee?->email, $appointment->counselor?->email]),
+            'KPD randevu durumu guncellendi',
+            "Randevu tarihi: {$start}\nYeni durum: ".($statusLabels[$status] ?? $status),
+            null,
+            $senderId
+        );
     }
 }

@@ -12,6 +12,7 @@ class KpdAppointment extends Model
     protected $fillable = [
         'counselor_id',
         'counselee_id',
+        'period_id',
         'room_id',
         'start_at',
         'end_at',
@@ -33,6 +34,11 @@ class KpdAppointment extends Model
     public function counselee()
     {
         return $this->belongsTo(User::class, 'counselee_id');
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function room()

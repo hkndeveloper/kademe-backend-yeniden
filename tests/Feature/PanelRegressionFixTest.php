@@ -6,10 +6,14 @@ use App\Models\Application;
 use App\Models\ApplicationForm;
 use App\Models\Attendance;
 use App\Models\Badge;
+use App\Models\BlogPost;
+use App\Models\CalendarEvent;
 use App\Models\Certificate;
 use App\Models\CreditLog;
 use App\Models\DigitalBohca;
 use App\Models\Feedback;
+use App\Models\FeedbackFormQuestion;
+use App\Models\FeedbackFormTemplate;
 use App\Models\FinancialTransaction;
 use App\Models\Internship;
 use App\Models\KpdAppointment;
@@ -18,10 +22,14 @@ use App\Models\KpdRoom;
 use App\Models\KvkkForgetRequest;
 use App\Models\Participant;
 use App\Models\Period;
+use App\Models\PersonalityTestQuestion;
+use App\Models\PersonalityTestResultRange;
+use App\Models\PersonalityTestTemplate;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\RewardTier;
 use App\Models\RolePermissionScope;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\VolunteerOpportunity;
@@ -69,6 +77,41 @@ class PanelRegressionFixTest extends TestCase
             'type' => 'other',
             'status' => 'active',
         ]);
+    }
+
+    public function test_site_config_normalizes_legacy_malformed_array_settings(): void
+    {
+        SystemSetting::query()->create([
+            'group' => 'navigation',
+            'key' => 'header_links',
+            'value' => 'legacy-string-value',
+        ]);
+        SystemSetting::query()->create([
+            'group' => 'homepage',
+            'key' => 'stats',
+            'value' => '{"label":"not-array"}',
+        ]);
+        SystemSetting::query()->create([
+            'group' => 'homepage',
+            'key' => 'featured_activity_ids',
+            'value' => '["12","bad",14]',
+        ]);
+        SystemSetting::query()->create([
+            'group' => 'homepage',
+            'key' => 'block_visibility',
+            'value' => '{"hero":false,"stats":"wrong"}',
+        ]);
+
+        $response = $this->getJson('/api/site-config')
+            ->assertOk()
+            ->assertJsonPath('settings.homepage.block_visibility.hero', false)
+            ->assertJsonPath('settings.homepage.block_visibility.stats', true);
+
+        $settings = $response->json('settings');
+
+        $this->assertIsArray(data_get($settings, 'navigation.header_links'));
+        $this->assertIsArray(data_get($settings, 'homepage.stats'));
+        $this->assertSame([12, 14], data_get($settings, 'homepage.featured_activity_ids'));
     }
 
     public function test_panel_user_detail_does_not_query_missing_attendance_status_column(): void
@@ -173,7 +216,7 @@ class PanelRegressionFixTest extends TestCase
         ]);
 
         $this->postJson('/api/panel/permissions-matrix/roles', [
-            'name' => 'Sosyal Medya Koordinatörü',
+            'name' => 'Sosyal Medya KoordinatÃƒÆ’Ã‚Â¶rÃƒÆ’Ã‚Â¼',
             'permissions' => ['announcements.view'],
         ])
             ->assertCreated()
@@ -221,6 +264,174 @@ class PanelRegressionFixTest extends TestCase
         $this->assertNotSame($otherProject->id, $project->id);
     }
 
+    public function test_manageable_projects_summary_counts_active_period_participants_without_public_visibility(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+
+        $activePeriod = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Aktif Donem',
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'status' => 'active',
+        ]);
+
+        $completedPeriod = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2025 Mezun Donem',
+            'start_date' => '2025-01-01',
+            'end_date' => '2025-12-31',
+            'status' => 'completed',
+        ]);
+
+        $hiddenActive = User::factory()->create([
+            'surname' => 'HiddenActive',
+            'role' => 'student',
+            'public_profile_visible' => false,
+        ]);
+        $publicActive = User::factory()->create([
+            'surname' => 'PublicActive',
+            'role' => 'student',
+            'public_profile_visible' => true,
+        ]);
+        $oldActive = User::factory()->create([
+            'surname' => 'OldActive',
+            'role' => 'student',
+            'public_profile_visible' => false,
+        ]);
+        $hiddenAlumni = User::factory()->create([
+            'surname' => 'HiddenAlumni',
+            'role' => 'alumni',
+            'status' => 'alumni',
+            'public_alumni_visible' => false,
+        ]);
+
+        foreach ([$hiddenActive, $publicActive] as $user) {
+            Participant::query()->create([
+                'user_id' => $user->id,
+                'project_id' => $project->id,
+                'period_id' => $activePeriod->id,
+                'status' => 'active',
+                'credit' => 100,
+            ]);
+        }
+
+        Participant::query()->create([
+            'user_id' => $oldActive->id,
+            'project_id' => $project->id,
+            'period_id' => $completedPeriod->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+
+        Participant::query()->create([
+            'user_id' => $hiddenAlumni->id,
+            'project_id' => $project->id,
+            'period_id' => $completedPeriod->id,
+            'status' => 'graduated',
+            'graduation_status' => 'graduated',
+            'graduated_at' => now(),
+            'credit' => 100,
+        ]);
+
+        $this->getJson('/api/panel/projects/manageable')
+            ->assertOk()
+            ->assertJsonPath('projects.0.participant_summary.total', 4)
+            ->assertJsonPath('projects.0.participant_summary.active', 2)
+            ->assertJsonPath('projects.0.participant_summary.active_all_periods', 3)
+            ->assertJsonPath('projects.0.participant_summary.graduates', 1)
+            ->assertJsonCount(1, 'projects.0.active_students')
+            ->assertJsonCount(0, 'projects.0.alumni');
+    }
+    public function test_scoped_content_blog_permissions_are_limited_to_owned_projects(): void
+    {
+        $project = $this->project();
+        $otherProject = Project::query()->create([
+            'name' => 'Other Content Project',
+            'slug' => 'other-content-project',
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $coordinator = User::factory()->create([
+            'surname' => 'ContentScope',
+            'role' => 'coordinator',
+            'email' => 'content-scope@test.local',
+        ]);
+        $project->coordinators()->attach($coordinator->id);
+
+        $role = Role::findOrCreate('coordinator', 'web');
+        foreach (['content.view', 'content.blog.create', 'content.blog.update', 'content.blog.delete', 'content.blog.export'] as $permissionName) {
+            $permission = Permission::findOrCreate($permissionName, 'web');
+            $role->givePermissionTo($permission);
+            RolePermissionScope::query()->updateOrCreate(
+                ['role_name' => 'coordinator', 'permission_name' => $permissionName],
+                ['scope_type' => 'own_projects', 'scope_payload' => []]
+            );
+        }
+        $coordinator->assignRole($role);
+
+        $ownBlog = BlogPost::query()->create([
+            'project_id' => $project->id,
+            'author_id' => $coordinator->id,
+            'title' => 'Own Scoped Blog',
+            'slug' => 'own-scoped-blog',
+            'content' => 'Own content',
+            'status' => 'draft',
+        ]);
+        $otherBlog = BlogPost::query()->create([
+            'project_id' => $otherProject->id,
+            'author_id' => $coordinator->id,
+            'title' => 'Other Scoped Blog',
+            'slug' => 'other-scoped-blog',
+            'content' => 'Other content',
+            'status' => 'draft',
+        ]);
+        $globalBlog = BlogPost::query()->create([
+            'author_id' => $coordinator->id,
+            'title' => 'Global Blog',
+            'slug' => 'global-blog',
+            'content' => 'Global content',
+            'status' => 'draft',
+        ]);
+
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson('/api/panel/content')
+            ->assertOk()
+            ->assertJsonPath('content_scope.global', false)
+            ->assertJsonPath('blogs.0.id', $ownBlog->id)
+            ->assertJsonMissing(['id' => $otherBlog->id])
+            ->assertJsonMissing(['id' => $globalBlog->id]);
+
+        $createResponse = $this->postJson('/api/panel/content/blogs', [
+            'project_id' => $project->id,
+            'title' => 'New Scoped Blog',
+            'slug' => 'new-scoped-blog',
+            'content' => 'New content',
+            'status' => 'draft',
+        ])->assertCreated();
+        $this->assertSame($project->id, $createResponse->json('blog.project_id'));
+
+        $this->postJson('/api/panel/content/blogs', [
+            'title' => 'Global Not Allowed',
+            'slug' => 'global-not-allowed',
+            'content' => 'No global content',
+            'status' => 'draft',
+        ])->assertStatus(422);
+
+        $this->putJson("/api/panel/content/blogs/{$otherBlog->id}", [
+            'project_id' => $otherProject->id,
+            'title' => 'Other Edit Denied',
+            'slug' => 'other-scoped-blog',
+            'content' => 'Denied',
+            'status' => 'draft',
+        ])->assertForbidden();
+
+        $this->deleteJson("/api/panel/content/blogs/{$globalBlog->id}")
+            ->assertStatus(422);
+    }
+
     public function test_financial_invoice_download_streams_file_by_default_and_supports_explicit_direct_url(): void
     {
         $admin = $this->actingSuperAdmin();
@@ -266,11 +477,16 @@ class PanelRegressionFixTest extends TestCase
 
         FinancialTransaction::query()->create([
             'project_id' => $project->id,
+            'spending_unit' => 'Program Birimi',
             'type' => 'expense',
             'category' => 'food',
             'payee_name' => 'Catering Firma',
             'amount' => 1000,
             'status' => 'approved',
+            'invoice_no' => 'INV-100',
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'bank_transfer',
+            'accounting_code' => '770.01',
             'submitted_by' => $admin->id,
             'submitted_at' => now(),
         ]);
@@ -307,6 +523,10 @@ class PanelRegressionFixTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'transactions.data')
             ->assertJsonPath('total_amount', 1000)
+            ->assertJsonPath('transactions.data.0.spending_unit', 'Program Birimi')
+            ->assertJsonPath('transactions.data.0.invoice_no', 'INV-100')
+            ->assertJsonPath('transactions.data.0.payment_method', 'bank_transfer')
+            ->assertJsonPath('transactions.data.0.accounting_code', '770.01')
             ->assertJsonPath('category_stats.0.category', 'food')
             ->assertJsonPath('status_stats.0.status', 'approved')
             ->assertJsonPath('status_stats.0.count', 1);
@@ -607,6 +827,41 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('credit_risk.participants.0.student', 'Risk Student')
             ->assertJsonPath('credit_risk.participants.0.credit', 70)
             ->assertJsonPath('credit_risk.participants.0.threshold', 75);
+
+        $this->get("/api/panel/dashboard/credit-risk/export?format=csv&project_id={$project->id}&period_id={$period->id}")
+            ->assertOk();
+    }
+
+    public function test_dashboard_stats_reports_current_user_assigned_calendar_tasks(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'title' => 'Assigned Dashboard Task',
+            'description' => 'Dashboard assignment summary',
+            'location' => 'KADEME',
+            'start_at' => now()->addDays(2),
+            'end_at' => now()->addDays(2)->addHour(),
+            'status' => 'scheduled',
+            'created_by' => $admin->id,
+        ]);
+
+        CalendarEvent::query()->create([
+            'project_id' => $project->id,
+            'program_id' => $program->id,
+            'title' => $program->title,
+            'location' => $program->location,
+            'start_at' => $program->start_at,
+            'end_at' => $program->end_at,
+            'assigned_users' => [$admin->id],
+            'created_by' => $admin->id,
+        ]);
+
+        $this->getJson('/api/panel/dashboard/stats')
+            ->assertOk()
+            ->assertJsonPath('assigned_tasks.0.title', 'Assigned Dashboard Task')
+            ->assertJsonPath('assigned_tasks.0.project.name', 'Regression Project');
     }
 
     public function test_application_can_target_program_and_auto_reject_by_dynamic_rule(): void
@@ -1216,23 +1471,22 @@ class PanelRegressionFixTest extends TestCase
             'is_valid' => true,
             'manual_note' => 'Mazeret kabul edildi.',
         ])->assertOk();
-        $this->assertSame(100, $participant->fresh()->credit);
-        $this->assertSame(0, (int) CreditLog::query()
+        $this->assertSame(90, $participant->fresh()->credit);
+        $this->assertSame(-10, (int) CreditLog::query()
             ->where('participant_id', $participant->id)
             ->where('program_id', $program->id)
             ->sum('amount'));
-        $this->assertSame(1, CreditLog::query()
+        $this->assertSame(0, CreditLog::query()
             ->where('participant_id', $participant->id)
             ->where('program_id', $program->id)
             ->where('type', 'restore')
-            ->where('amount', 10)
             ->count());
 
         $this->putJson("/api/panel/programs/{$program->id}/attendances/{$participant->id}", [
             'is_valid' => true,
         ])->assertOk();
-        $this->assertSame(100, $participant->fresh()->credit);
-        $this->assertSame(2, CreditLog::query()
+        $this->assertSame(90, $participant->fresh()->credit);
+        $this->assertSame(1, CreditLog::query()
             ->where('participant_id', $participant->id)
             ->where('program_id', $program->id)
             ->count());
@@ -1246,13 +1500,11 @@ class PanelRegressionFixTest extends TestCase
             ->where('participant_id', $participant->id)
             ->where('program_id', $program->id)
             ->sum('amount'));
-        $this->assertDatabaseHas('credit_logs', [
-            'participant_id' => $participant->id,
-            'program_id' => $program->id,
-            'type' => 'manual_adjust',
-            'amount' => -10,
-            'created_by' => $admin->id,
-        ]);
+        $this->assertSame(1, CreditLog::query()
+            ->where('participant_id', $participant->id)
+            ->where('program_id', $program->id)
+            ->where('type', 'deduction')
+            ->count());
 
         Sanctum::actingAs($student);
         $this->getJson('/api/programs')
@@ -1396,6 +1648,62 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame(1, CreditLog::query()->where('program_id', $program->id)->where('type', 'restore')->count());
     }
 
+    public function test_absent_student_cannot_submit_feedback_or_restore_credit(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Yoklama',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Absent Feedback Program',
+            'start_at' => now()->subHours(2),
+            'end_at' => now()->subHour(),
+            'status' => 'active',
+            'credit_deduction' => 10,
+        ]);
+        $student = User::factory()->create(['surname' => 'AbsentFeedback', 'role' => 'student', 'kvkk_consent_at' => now()]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+
+        $this->postJson("/api/panel/programs/{$program->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('deducted_participant_count', 1);
+
+        Sanctum::actingAs($student);
+        $this->getJson('/api/feedbacks')
+            ->assertOk()
+            ->assertJsonCount(0, 'programs');
+
+        $this->postJson('/api/feedbacks', [
+            'program_id' => $program->id,
+            'responses' => [
+                'content_quality' => 5,
+                'speaker_quality' => 5,
+                'organization_quality' => 5,
+                'comment' => 'Sonradan doldurmayi denedi.',
+            ],
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'Sadece gecerli yoklamasi alinmis oturumlar icin degerlendirme gonderebilirsin.');
+
+        $this->assertSame(90, $participant->fresh()->credit);
+        $this->assertSame(0, Feedback::query()->where('program_id', $program->id)->count());
+        $this->assertSame(0, CreditLog::query()->where('program_id', $program->id)->where('type', 'restore')->count());
+    }
+
     public function test_qr_attendance_requires_previous_completed_program_feedback(): void
     {
         $project = $this->project();
@@ -1478,6 +1786,288 @@ class PanelRegressionFixTest extends TestCase
         ]);
     }
 
+    public function test_panel_qr_generation_persists_selected_rotation_window(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => Period::query()->create([
+                'project_id' => $project->id,
+                'name' => '2026 QR Rotation',
+                'start_date' => now()->subDay()->toDateString(),
+                'end_date' => now()->addMonth()->toDateString(),
+                'status' => 'active',
+            ])->id,
+            'title' => 'QR Rotation Program',
+            'start_at' => now()->subMinutes(10),
+            'end_at' => now()->addHour(),
+            'status' => 'scheduled',
+        ]);
+
+        $this->postJson("/api/panel/programs/{$program->id}/generate-qr", [
+            'rotation_seconds' => 45,
+        ])
+            ->assertOk()
+            ->assertJsonPath('refresh_in_seconds', 45)
+            ->assertJsonStructure(['qr_token', 'expires_at', 'refresh_in_seconds']);
+
+        $program->refresh();
+        $this->assertSame('active', $program->status);
+        $this->assertSame(45, (int) $program->qr_rotation_seconds);
+        $this->assertNotNull($program->qr_token);
+        $this->assertStringStartsWith('prg_'.$program->id.'_', $program->qr_token);
+        $this->assertGreaterThan(30, strlen($program->qr_token));
+        $this->assertNotNull($program->qr_expires_at);
+    }
+
+    public function test_panel_qr_generation_requires_program_attendance_window(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 QR Window',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Gelecek QR Programi',
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addHour(),
+            'status' => 'scheduled',
+        ]);
+
+        $this->postJson("/api/panel/programs/{$program->id}/generate-qr", [
+            'rotation_seconds' => 45,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'QR yoklama sadece program saat araliginda baslatilabilir.');
+
+        $program->refresh();
+        $this->assertSame('scheduled', $program->status);
+        $this->assertNull($program->qr_token);
+        $this->assertNull($program->qr_expires_at);
+    }
+
+    public function test_qr_attendance_rejects_valid_token_outside_program_window(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 QR Scan Window',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'role' => 'student',
+            'surname' => 'QrWindow',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Saat Disi QR Programi',
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addHour(),
+            'status' => 'active',
+            'qr_token' => 'future-window-token',
+            'qr_expires_at' => now()->addMinute(),
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/attendances/qr', [
+            'qr_token' => 'future-window-token',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'QR yoklama sadece program saat araliginda kullanilabilir.');
+
+        $this->assertDatabaseMissing('attendances', [
+            'program_id' => $program->id,
+            'user_id' => $student->id,
+        ]);
+    }
+
+    public function test_alumni_with_graduated_participation_can_use_qr_attendance(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Alumni QR',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $alumni = User::factory()->create([
+            'role' => 'alumni',
+            'surname' => 'QrAlumni',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('alumni', 'web');
+        $alumni->assignRole('alumni');
+        Participant::query()->create([
+            'user_id' => $alumni->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'graduated',
+            'graduation_status' => 'graduated',
+            'graduated_at' => now()->subWeek(),
+            'credit' => 90,
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Mezun Bulusmasi',
+            'start_at' => now()->subMinutes(10),
+            'end_at' => now()->addHour(),
+            'status' => 'active',
+            'credit_deduction' => 10,
+            'target_audience' => ['alumni'],
+            'qr_token' => 'alumni-qr-token',
+            'qr_expires_at' => now()->addMinute(),
+        ]);
+
+        Sanctum::actingAs($alumni);
+
+        $this->postJson('/api/attendances/qr', [
+            'qr_token' => 'alumni-qr-token',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('attendances', [
+            'program_id' => $program->id,
+            'user_id' => $alumni->id,
+            'method' => 'qr',
+            'is_valid' => true,
+        ]);
+    }
+
+    public function test_program_target_audience_controls_student_and_alumni_visibility(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Audience',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create(['surname' => 'AudienceStudent', 'role' => 'student', 'kvkk_consent_at' => now()]);
+        $alumni = User::factory()->create(['surname' => 'AudienceAlumni', 'role' => 'alumni', 'kvkk_consent_at' => now()]);
+        Role::findOrCreate('student', 'web');
+        Role::findOrCreate('alumni', 'web');
+        $student->assignRole('student');
+        $alumni->assignRole('alumni');
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 90,
+        ]);
+        Participant::query()->create([
+            'user_id' => $alumni->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'graduated',
+            'graduation_status' => 'graduated',
+            'graduated_at' => now()->subWeek(),
+            'credit' => 90,
+        ]);
+        $alumniOnly = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Mezunlara Ozel Program',
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addHour(),
+            'status' => 'scheduled',
+            'radius_meters' => 150,
+            'target_audience' => ['alumni'],
+        ]);
+
+        Sanctum::actingAs($student);
+        $this->getJson('/api/programs')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $alumniOnly->id]);
+
+        Sanctum::actingAs($alumni);
+        $this->getJson('/api/programs')
+            ->assertOk()
+            ->assertJsonPath('programs.0.id', $alumniOnly->id)
+            ->assertJsonPath('programs.0.target_audience.0', 'alumni')
+            ->assertJsonPath('programs.0.radius_meters', 150);
+    }
+
+    public function test_alumni_feedback_does_not_create_credit_deduction_or_restore(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Alumni Credit',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $alumni = User::factory()->create(['surname' => 'CreditAlumni', 'role' => 'alumni', 'kvkk_consent_at' => now()]);
+        Role::findOrCreate('alumni', 'web');
+        $alumni->assignRole('alumni');
+        $participant = Participant::query()->create([
+            'user_id' => $alumni->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'graduated',
+            'graduation_status' => 'graduated',
+            'graduated_at' => now()->subWeek(),
+            'credit' => 88,
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Mezun Anket Programi',
+            'start_at' => now()->subDay(),
+            'end_at' => now()->subDay()->addHour(),
+            'status' => 'completed',
+            'credit_deduction' => 10,
+            'target_audience' => ['alumni'],
+        ]);
+        Attendance::query()->create([
+            'program_id' => $program->id,
+            'user_id' => $alumni->id,
+            'method' => 'qr',
+            'is_valid' => true,
+        ]);
+
+        Sanctum::actingAs($alumni);
+
+        $this->postJson('/api/feedbacks', [
+            'program_id' => $program->id,
+            'responses' => [
+                'content_quality' => 5,
+                'speaker_quality' => 5,
+                'organization_quality' => 5,
+                'comment' => 'Mezun olarak katildim.',
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('message', 'Degerlendirmen alindi. Mezun etkinliklerinde kredi islemi uygulanmaz.');
+
+        $this->assertSame(88, $participant->fresh()->credit);
+        $this->assertSame(0, CreditLog::query()->where('program_id', $program->id)->count());
+        $this->assertSame(1, Feedback::query()->where('program_id', $program->id)->count());
+    }
+
     public function test_panel_applications_expose_dynamic_form_files_with_protected_download_url(): void
     {
         $this->actingSuperAdmin();
@@ -1513,7 +2103,7 @@ class PanelRegressionFixTest extends TestCase
             'application_form_id' => $form->id,
             'status' => 'pending',
             'form_data' => [
-                'motivation' => 'Katılmak istiyorum.',
+                'motivation' => 'KatÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±lmak istiyorum.',
                 'cv_file' => [
                     'path' => 'application-files/sample.pdf',
                     'original_name' => 'cv.pdf',
@@ -1636,6 +2226,84 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('application_form.fields.0.id', 'fall_question');
     }
 
+    public function test_application_form_builder_can_manage_program_specific_forms(): void
+    {
+        $this->actingSuperAdmin();
+
+        $project = $this->project();
+        $fall = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Guz',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $spring = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Bahar',
+            'start_date' => now()->addMonths(2)->toDateString(),
+            'end_date' => now()->addMonths(3)->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $fall->id,
+            'title' => 'Guz Atolyesi',
+            'start_at' => now()->addWeek(),
+            'end_at' => now()->addWeek()->addHours(2),
+            'status' => 'scheduled',
+        ]);
+        $springProgram = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $spring->id,
+            'title' => 'Bahar Atolyesi',
+            'start_at' => now()->addMonths(2),
+            'end_at' => now()->addMonths(2)->addHours(2),
+            'status' => 'scheduled',
+        ]);
+
+        ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $fall->id,
+            'fields' => [
+                ['id' => 'period_question', 'type' => 'text', 'label' => 'Donem sorusu', 'required' => true],
+            ],
+            'is_active' => true,
+        ]);
+
+        $this->putJson('/api/panel/projects/'.$project->id.'/application-form', [
+            'period_id' => $fall->id,
+            'program_id' => $program->id,
+            'fields' => [
+                ['id' => 'program_question', 'type' => 'text', 'label' => 'Program sorusu', 'required' => true],
+            ],
+            'require_consent' => false,
+            'is_active' => true,
+        ])->assertOk()
+            ->assertJsonPath('application_form.program_id', $program->id)
+            ->assertJsonPath('application_form.period_id', $fall->id);
+
+        $this->getJson('/api/panel/projects/'.$project->id.'/application-form?period_id='.$fall->id)
+            ->assertOk()
+            ->assertJsonPath('application_form.program_id', null)
+            ->assertJsonPath('application_form.fields.0.id', 'period_question');
+
+        $this->getJson('/api/panel/projects/'.$project->id.'/application-form?period_id='.$fall->id.'&program_id='.$program->id)
+            ->assertOk()
+            ->assertJsonPath('application_form.program_id', $program->id)
+            ->assertJsonPath('application_form.fields.0.id', 'program_question')
+            ->assertJsonCount(2, 'programs');
+
+        $this->putJson('/api/panel/projects/'.$project->id.'/application-form', [
+            'period_id' => $fall->id,
+            'program_id' => $springProgram->id,
+            'fields' => [
+                ['id' => 'invalid_question', 'type' => 'text', 'label' => 'Hatali soru', 'required' => true],
+            ],
+            'is_active' => true,
+        ])->assertStatus(422);
+    }
+
     public function test_public_project_detail_uses_active_period_application_form(): void
     {
         $project = $this->project();
@@ -1703,7 +2371,7 @@ class PanelRegressionFixTest extends TestCase
         $payload = [
             'project_id' => $project->id,
             'form_data' => [
-                'motivation' => 'Katılmak istiyorum.',
+                'motivation' => 'KatÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±lmak istiyorum.',
             ],
             'applicant' => [
                 'name' => 'Public',
@@ -2044,6 +2712,13 @@ class PanelRegressionFixTest extends TestCase
             'end_date' => now()->addMonth()->toDateString(),
             'status' => 'active',
         ]);
+        $completedPeriod = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2025 Alumni Archive',
+            'start_date' => now()->subMonths(8)->toDateString(),
+            'end_date' => now()->subMonths(6)->toDateString(),
+            'status' => 'completed',
+        ]);
         $activeStudent = User::factory()->create(['surname' => 'Active', 'role' => 'student']);
         $graduateStudent = User::factory()->create(['surname' => 'Graduate', 'role' => 'alumni']);
         Participant::query()->create([
@@ -2056,7 +2731,7 @@ class PanelRegressionFixTest extends TestCase
         Participant::query()->create([
             'user_id' => $graduateStudent->id,
             'project_id' => $project->id,
-            'period_id' => $period->id,
+            'period_id' => $completedPeriod->id,
             'status' => 'passive',
             'graduation_status' => 'graduated',
             'graduated_at' => now(),
@@ -2085,6 +2760,11 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonCount(1, 'participants')
             ->assertJsonPath('participants.0.graduation_status', 'graduated')
             ->assertJsonPath('summary.graduates', 1);
+
+        $this->getJson('/api/panel/participants?project_id='.$project->id.'&period_id='.$completedPeriod->id)
+            ->assertOk()
+            ->assertJsonCount(1, 'participants')
+            ->assertJsonPath('participants.0.period.id', $completedPeriod->id);
     }
 
     public function test_panel_participant_list_omits_heavy_cv_payload_and_cv_detail_loads_on_demand(): void
@@ -2163,11 +2843,17 @@ class PanelRegressionFixTest extends TestCase
             'expertise' => 'Diplomasi',
         ])->assertCreated();
 
-        $this->postJson("/api/panel/projects/{$project->id}/special-modules/eurodesk-projects", [
+        $eurodeskProjectId = $this->postJson("/api/panel/projects/{$project->id}/special-modules/eurodesk-projects", [
             'title' => 'Genclik Hibesi',
             'partner_organizations' => ['Ortak Kurum'],
             'grant_amount' => 1000,
             'grant_status' => 'approved',
+        ])->assertCreated()->json('eurodesk_project.id');
+
+        $this->postJson("/api/panel/projects/{$project->id}/special-modules/eurodesk-projects/{$eurodeskProjectId}/partnerships", [
+            'organization_name' => 'Ortak Kurum',
+            'country' => 'Turkiye',
+            'contact_info' => 'Genclik ofisi',
         ])->assertCreated();
 
         $rewardTierId = $this->postJson("/api/panel/projects/{$project->id}/special-modules/reward-tiers", [
@@ -2177,20 +2863,36 @@ class PanelRegressionFixTest extends TestCase
             'reward_description' => 'Hediye Seti',
         ])->assertCreated()->json('reward_tier.id');
 
-        $this->postJson("/api/panel/projects/{$project->id}/special-modules/reward-awards", [
+        $rewardAwardId = $this->postJson("/api/panel/projects/{$project->id}/special-modules/reward-awards", [
             'participant_id' => $participant->id,
             'reward_tier_id' => $rewardTierId,
             'reward_name' => 'Hediye Seti',
             'status' => 'given',
-        ])->assertCreated();
+        ])->assertCreated()
+            ->assertJsonPath('reward_award.reward_name', 'Hediye Seti')
+            ->json('reward_award.id');
+
+        $this->patchJson("/api/panel/projects/{$project->id}/special-modules/reward-awards/{$rewardAwardId}/deliver")
+            ->assertOk()
+            ->assertJsonPath('award.status', 'delivered')
+            ->assertJsonPath('award.deliverer', 'Panel Admin');
 
         $this->getJson("/api/panel/projects/{$project->id}/special-modules")
             ->assertOk()
             ->assertJsonCount(1, 'internships')
             ->assertJsonCount(1, 'mentors')
             ->assertJsonCount(1, 'eurodesk_projects')
+            ->assertJsonPath('eurodesk_summary.total_projects', 1)
+            ->assertJsonPath('eurodesk_summary.approved_projects', 1)
+            ->assertJsonPath('eurodesk_summary.approved_grant_amount', 1000)
+            ->assertJsonPath('eurodesk_summary.partnership_count', 1)
+            ->assertJsonPath('eurodesk_summary.countries.0', 'Turkiye')
             ->assertJsonCount(1, 'reward_tiers')
-            ->assertJsonCount(1, 'reward_awards');
+            ->assertJsonCount(1, 'reward_awards')
+            ->assertJsonPath('reward_awards.0.status', 'delivered')
+            ->assertJsonPath('reward_awards.0.deliverer', 'Panel Admin')
+            ->assertJsonPath('reward_awards.0.tier.id', $rewardTierId)
+            ->assertJsonStructure(['reward_awards' => [['delivered_at']]]);
     }
 
     public function test_panel_project_special_modules_accept_manage_scope_without_view_scope(): void
@@ -2226,6 +2928,64 @@ class PanelRegressionFixTest extends TestCase
 
         $this->assertTrue($specialModulesResponse['access']['projects.mentors.manage'] ?? false);
         $this->assertFalse($specialModulesResponse['access']['projects.mentors.view'] ?? true);
+    }
+
+    public function test_public_project_students_require_visibility_flags_and_panel_scope_can_update_them(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Public',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'name' => 'Public',
+            'surname' => 'Student',
+            'role' => 'student',
+            'status' => 'active',
+            'university' => 'Test University',
+            'department' => 'Test Department',
+            'profile_photo_path' => 'profiles/public-student.jpg',
+        ]);
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+
+        $this->getJson("/api/projects/{$project->slug}")
+            ->assertOk()
+            ->assertJsonCount(0, 'project.active_students');
+
+        $this->patchJson("/api/panel/participants/{$participant->id}/public-visibility", [
+            'public_profile_visible' => true,
+            'public_photo_visible' => false,
+            'public_alumni_visible' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('participant.user.public_profile_visible', true)
+            ->assertJsonPath('participant.user.public_photo_visible', false);
+
+        $this->getJson("/api/projects/{$project->slug}")
+            ->assertOk()
+            ->assertJsonCount(1, 'project.active_students')
+            ->assertJsonPath('project.active_students.0.name', 'Public Student')
+            ->assertJsonPath('project.active_students.0.image', null);
+
+        $this->patchJson("/api/panel/participants/{$participant->id}/public-visibility", [
+            'public_photo_visible' => true,
+        ])->assertOk();
+
+        $this->getJson("/api/projects/{$project->slug}")
+            ->assertOk()
+            ->assertJsonPath('project.active_students.0.image', fn ($value) => is_string($value) && $value !== '');
+
+        $this->assertSame($admin->id, auth()->id());
     }
 
     public function test_student_dashboard_summary_filters_badges_by_kademe_plus_and_returns_monthly_titles(): void
@@ -2612,8 +3372,8 @@ class PanelRegressionFixTest extends TestCase
             'project_id' => $project->id,
             'period_id' => $period->id,
             'title' => 'Yeni Oturum',
-            'start_at' => now()->addHour(),
-            'end_at' => now()->addHours(2),
+            'start_at' => now()->subMinute(),
+            'end_at' => now()->addHour(),
             'credit_deduction' => 10,
             'radius_meters' => 100,
             'status' => 'active',
@@ -2631,6 +3391,551 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('requires_feedback', true)
             ->assertJsonPath('program_id', $previousProgram->id)
             ->assertJsonPath('redirect_to', '/student/evaluate');
+    }
+
+    public function test_student_feedback_uses_program_dynamic_template_and_restores_credit(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Dinamik Form',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'surname' => 'DynamicFeedback',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'credit' => 90,
+            'status' => 'active',
+        ]);
+        $template = FeedbackFormTemplate::query()->create([
+            'project_id' => $project->id,
+            'name' => 'Dinamik Degerlendirme',
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+        FeedbackFormQuestion::query()->create([
+            'feedback_form_template_id' => $template->id,
+            'question_key' => 'session_value',
+            'label' => 'Oturum sana ne kadar deger katti?',
+            'type' => 'rating',
+            'min_value' => 1,
+            'max_value' => 7,
+            'is_required' => true,
+            'sort_order' => 1,
+        ]);
+        FeedbackFormQuestion::query()->create([
+            'feedback_form_template_id' => $template->id,
+            'question_key' => 'open_note',
+            'label' => 'Kisa not',
+            'type' => 'text',
+            'is_required' => false,
+            'sort_order' => 2,
+        ]);
+        FeedbackFormQuestion::query()->create([
+            'feedback_form_template_id' => $template->id,
+            'question_key' => 'format_choice',
+            'label' => 'Oturum formati uygun muydu?',
+            'type' => 'choice',
+            'options' => ['Evet', 'Kismen', 'Hayir'],
+            'is_required' => true,
+            'sort_order' => 3,
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'feedback_form_template_id' => $template->id,
+            'title' => 'Dinamik Form Oturumu',
+            'start_at' => now()->subDay(),
+            'end_at' => now()->subDay()->addHour(),
+            'credit_deduction' => 10,
+            'status' => 'completed',
+        ]);
+        Attendance::query()->create([
+            'program_id' => $program->id,
+            'user_id' => $student->id,
+            'method' => 'qr',
+            'is_valid' => true,
+        ]);
+        CreditLog::query()->create([
+            'participant_id' => $participant->id,
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'program_id' => $program->id,
+            'amount' => -10,
+            'type' => 'deduction',
+            'reason' => 'Etkinlik tamamlandi, degerlendirme bekleniyor',
+            'created_by' => $student->id,
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/feedbacks')
+            ->assertOk()
+            ->assertJsonPath('programs.0.questions.0.id', 'session_value')
+            ->assertJsonPath('programs.0.questions.0.max', 7)
+            ->assertJsonPath('programs.0.questions.2.type', 'choice')
+            ->assertJsonPath('programs.0.questions.2.options.1', 'Kismen');
+
+        $this->postJson('/api/feedbacks', [
+            'program_id' => $program->id,
+            'responses' => [
+                'session_value' => 6,
+                'open_note' => 'Faydaliydi',
+                'format_choice' => 'Kismen',
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('current_credit', 100);
+
+        $this->assertDatabaseHas('feedbacks', [
+            'program_id' => $program->id,
+        ]);
+        $this->assertSame(100, (int) $participant->fresh()->credit);
+    }
+
+    public function test_panel_can_create_feedback_template_and_assign_it_to_program(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Panel Form',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $templateId = $this->postJson('/api/panel/feedback-form-templates', [
+            'project_id' => $project->id,
+            'name' => 'Panelden Acilan Form',
+            'description' => 'Regression form sablonu',
+            'is_default' => true,
+            'questions' => [
+                [
+                    'question_key' => 'panel_rating',
+                    'label' => 'Panel rating',
+                    'type' => 'rating',
+                    'min_value' => 1,
+                    'max_value' => 5,
+                    'is_required' => true,
+                ],
+                [
+                    'question_key' => 'panel_comment',
+                    'label' => 'Panel yorum',
+                    'type' => 'text',
+                    'is_required' => false,
+                ],
+                [
+                    'question_key' => 'panel_choice',
+                    'label' => 'Panel secim',
+                    'type' => 'choice',
+                    'options' => ['Evet', 'Hayir'],
+                    'is_required' => true,
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('template.questions.0.question_key', 'panel_rating')
+            ->assertJsonPath('template.questions.2.options.0', 'Evet')
+            ->json('template.id');
+
+        $this->postJson('/api/panel/programs', [
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Sablonlu Program',
+            'description' => null,
+            'location' => 'Test salonu',
+            'latitude' => null,
+            'longitude' => null,
+            'radius_meters' => 100,
+            'start_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
+            'end_at' => now()->addDay()->setTime(11, 0)->toIso8601String(),
+            'credit_deduction' => 10,
+            'application_quota' => null,
+            'feedback_form_template_id' => $templateId,
+            'is_public' => true,
+            'is_featured' => false,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('program.feedback_form_template_id', $templateId);
+
+        $this->assertDatabaseHas('programs', [
+            'title' => 'Sablonlu Program',
+            'feedback_form_template_id' => $templateId,
+        ]);
+    }
+
+    public function test_panel_feedback_summary_aggregates_numeric_choice_and_text_answers(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Ozet Anket',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $template = FeedbackFormTemplate::query()->create([
+            'project_id' => $project->id,
+            'name' => 'Ozet Form',
+            'is_active' => true,
+        ]);
+        FeedbackFormQuestion::query()->create([
+            'feedback_form_template_id' => $template->id,
+            'question_key' => 'session_value',
+            'label' => 'Oturum puani',
+            'type' => 'rating',
+            'min_value' => 1,
+            'max_value' => 7,
+            'is_required' => true,
+            'sort_order' => 1,
+        ]);
+        FeedbackFormQuestion::query()->create([
+            'feedback_form_template_id' => $template->id,
+            'question_key' => 'format_choice',
+            'label' => 'Format',
+            'type' => 'choice',
+            'options' => ['Evet', 'Kismen', 'Hayir'],
+            'is_required' => true,
+            'sort_order' => 2,
+        ]);
+        FeedbackFormQuestion::query()->create([
+            'feedback_form_template_id' => $template->id,
+            'question_key' => 'comment',
+            'label' => 'Yorum',
+            'type' => 'text',
+            'is_required' => false,
+            'sort_order' => 3,
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'feedback_form_template_id' => $template->id,
+            'title' => 'Ozet Program',
+            'start_at' => now()->subDay(),
+            'end_at' => now()->subDay()->addHour(),
+            'status' => 'completed',
+            'credit_deduction' => 10,
+        ]);
+
+        Feedback::query()->create([
+            'program_id' => $program->id,
+            'anonymous_token' => 'summary-token-1',
+            'responses' => [
+                'session_value' => 6,
+                'format_choice' => 'Evet',
+                'comment' => 'Cok iyiydi.',
+            ],
+            'submitted_at' => now(),
+        ]);
+        Feedback::query()->create([
+            'program_id' => $program->id,
+            'anonymous_token' => 'summary-token-2',
+            'responses' => [
+                'session_value' => 4,
+                'format_choice' => 'Kismen',
+                'comment' => '',
+            ],
+            'submitted_at' => now()->subMinute(),
+        ]);
+
+        $response = $this->getJson('/api/panel/programs/feedback-summary?project_id='.$project->id.'&period_id='.$period->id)
+            ->assertOk()
+            ->assertJsonPath('summary.program_count', 1)
+            ->assertJsonPath('summary.total_feedback', 2)
+            ->assertJsonPath('summary.with_comment', 1)
+            ->assertJsonPath('question_stats.session_value.type', 'rating')
+            ->assertJsonPath('question_stats.session_value.average', 5)
+            ->assertJsonPath('question_stats.format_choice.type', 'choice')
+            ->assertJsonPath('question_stats.format_choice.distribution.Evet', 1)
+            ->assertJsonPath('question_stats.format_choice.distribution.Kismen', 1)
+            ->assertJsonPath('project_breakdown.0.name', $project->name)
+            ->assertJsonPath('project_breakdown.0.feedback_count', 2)
+            ->assertJsonPath('period_breakdown.0.name', $period->name)
+            ->assertJsonPath('period_breakdown.0.feedback_count', 2)
+            ->assertJsonPath('recent_comments.0.comment', 'Cok iyiydi.');
+
+        $this->assertSame('Ozet Program', $response->json('programs.0.title'));
+
+        $this->getJson('/api/panel/programs/feedback-summary/export?project_id='.$project->id.'&period_id='.$period->id)
+            ->assertOk();
+
+        Feedback::query()->create([
+            'program_id' => $program->id,
+            'anonymous_token' => 'summary-token-3',
+            'responses' => [
+                'session_value' => 'sayisal olmayan not',
+                'format_choice' => 'Hayir',
+                'comment' => 'Puan yerine metin geldi.',
+            ],
+            'submitted_at' => now()->subMinutes(2),
+        ]);
+
+        $statsResponse = $this->getJson("/api/panel/programs/{$program->id}/feedback-stats")
+            ->assertOk()
+            ->assertJsonPath('summary.total_feedback', 3)
+            ->assertJsonPath('summary.rating_question_count', 1)
+            ->assertJsonPath('summary.choice_question_count', 1)
+            ->assertJsonPath('summary.text_question_count', 1)
+            ->assertJsonPath('summary.text_response_count', 2)
+            ->assertJsonPath('summary.anonymous', true)
+            ->assertJsonPath('summary.identity_redacted', true)
+            ->assertJsonPath('question_stats.session_value.count', 2)
+            ->assertJsonPath('question_stats.session_value.average', 5)
+            ->assertJsonPath('question_stats.format_choice.distribution.Hayir', 1)
+            ->assertJsonPath('text_responses.0.question', 'Yorum')
+            ->assertJsonPath('text_responses.0.answer', 'Cok iyiydi.');
+
+        $this->assertNotEmpty($statsResponse->json('text_responses.0.anonymous_report_id'));
+
+        $this->get('/api/panel/programs/'.$program->id.'/feedback-stats/export?format=csv')
+            ->assertOk();
+    }
+
+    public function test_student_personality_test_uses_active_dynamic_template(): void
+    {
+        $student = User::factory()->create([
+            'surname' => 'Personality',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $template = PersonalityTestTemplate::query()->create([
+            'name' => 'Dinamik Kisilik Analizi',
+            'description' => 'Regression test sablonu',
+            'is_active' => true,
+        ]);
+        PersonalityTestQuestion::query()->create([
+            'personality_test_template_id' => $template->id,
+            'question_key' => 'strategic_focus',
+            'category' => 'strategy',
+            'text' => 'Stratejik hedefleri parcalara ayiririm.',
+            'sort_order' => 1,
+        ]);
+        PersonalityTestQuestion::query()->create([
+            'personality_test_template_id' => $template->id,
+            'question_key' => 'team_energy',
+            'category' => 'teamwork',
+            'text' => 'Ekip motivasyonunu yuksek tutmaya calisirim.',
+            'sort_order' => 2,
+        ]);
+        PersonalityTestResultRange::query()->create([
+            'personality_test_template_id' => $template->id,
+            'category' => 'strategy',
+            'summary' => 'Strateji odagin one cikiyor.',
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/user/personality-test')
+            ->assertOk()
+            ->assertJsonPath('template_id', $template->id)
+            ->assertJsonPath('questions.0.id', 'strategic_focus');
+
+        $this->postJson('/api/user/personality-test', [
+            'answers' => [
+                'strategic_focus' => 5,
+                'team_energy' => 3,
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('result.template_id', $template->id)
+            ->assertJsonPath('result.top_category', 'strategy')
+            ->assertJsonPath('result.summary', 'Strateji odagin one cikiyor.');
+
+        $profileData = $student->fresh()->profile?->personality_test_data;
+        $this->assertSame($template->id, $profileData['template_id'] ?? null);
+        $this->assertSame(5, $profileData['answers']['strategic_focus'] ?? null);
+    }
+
+    public function test_panel_can_manage_and_activate_personality_test_template(): void
+    {
+        $this->actingSuperAdmin();
+
+        $firstId = $this->postJson('/api/panel/personality-test-templates', [
+            'name' => 'Panel Kisilik Analizi',
+            'description' => 'Panelden yonetilen test',
+            'is_active' => false,
+            'questions' => [
+                [
+                    'question_key' => 'planning',
+                    'category' => 'execution',
+                    'text' => 'Planlari takip ederim.',
+                    'sort_order' => 1,
+                ],
+            ],
+            'result_ranges' => [
+                [
+                    'category' => 'execution',
+                    'summary' => 'Uygulama disiplinin one cikiyor.',
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('template.name', 'Panel Kisilik Analizi')
+            ->json('template.id');
+
+        $activeId = $this->postJson('/api/panel/personality-test-templates', [
+            'name' => 'Aktif Panel Kisilik Analizi',
+            'description' => null,
+            'is_active' => true,
+            'questions' => [
+                [
+                    'question_key' => 'empathy_focus',
+                    'category' => 'social',
+                    'text' => 'Gorusmelerde karsi tarafi dikkatle dinlerim.',
+                    'sort_order' => 1,
+                ],
+            ],
+            'result_ranges' => [
+                [
+                    'category' => 'social',
+                    'summary' => 'Iletisim tarafin guclu gorunuyor.',
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('template.is_active', true)
+            ->json('template.id');
+
+        $this->assertDatabaseHas('personality_test_templates', [
+            'id' => $firstId,
+            'is_active' => false,
+        ]);
+
+        $this->putJson("/api/panel/personality-test-templates/{$firstId}", [
+            'name' => 'Panel Kisilik Analizi Guncel',
+            'description' => 'Guncellenen test',
+            'is_active' => false,
+            'questions' => [
+                [
+                    'question_key' => 'planning',
+                    'category' => 'execution',
+                    'text' => 'Planlari takip ederim.',
+                    'sort_order' => 1,
+                ],
+                [
+                    'question_key' => 'focus',
+                    'category' => 'execution',
+                    'text' => 'Uzun sure odakli calisabilirim.',
+                    'sort_order' => 2,
+                ],
+            ],
+            'result_ranges' => [
+                [
+                    'category' => 'execution',
+                    'summary' => 'Uygulama disiplinin one cikiyor.',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonCount(2, 'template.questions');
+
+        $this->postJson("/api/panel/personality-test-templates/{$firstId}/activate")
+            ->assertOk()
+            ->assertJsonPath('template.is_active', true);
+
+        $this->assertDatabaseHas('personality_test_templates', [
+            'id' => $activeId,
+            'is_active' => false,
+        ]);
+
+        $student = User::factory()->create([
+            'surname' => 'Template',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/user/personality-test')
+            ->assertOk()
+            ->assertJsonPath('template_id', $firstId)
+            ->assertJsonPath('questions.1.id', 'focus');
+    }
+
+    public function test_student_digital_cv_draft_is_persisted_for_panel_cv_view(): void
+    {
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => 'CV Donemi',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $student = User::factory()->create([
+            'name' => 'Digital',
+            'surname' => 'Cv',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+
+        $participant = Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+            'graduation_status' => null,
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->putJson('/api/dashboard/digital-cv', [
+            'form' => [
+                'fullName' => 'Digital Cv',
+                'email' => 'digital-cv@test.local',
+                'summary' => 'Panelde gorunmesi gereken kalici CV ozeti.',
+                'skills' => 'Liderlik, Analiz',
+                'experience' => [
+                    [
+                        'id' => 'exp-1',
+                        'title' => 'Gonullu',
+                        'subtitle' => 'KADEME',
+                        'date' => '2026',
+                        'description' => 'Etkinlik operasyon destegi.',
+                    ],
+                ],
+                'education' => [],
+                'projects' => [],
+                'certificates' => [],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('saved_draft.form.summary', 'Panelde gorunmesi gereken kalici CV ozeti.');
+
+        $this->assertDatabaseHas('user_profiles', [
+            'user_id' => $student->id,
+        ]);
+
+        $this->actingSuperAdmin();
+
+        $this->getJson("/api/panel/participants/{$participant->id}/cv")
+            ->assertOk()
+            ->assertJsonPath('participant.user.cv.digital_cv_data.form.skills', 'Liderlik, Analiz');
     }
 
     public function test_kpd_panel_reports_respect_project_scope_for_coordinators(): void
@@ -2836,6 +4141,7 @@ class PanelRegressionFixTest extends TestCase
         $this->postJson('/api/panel/kpd/appointments', [
             'counselor_id' => $coordinator->id,
             'counselee_id' => $student->id,
+            'period_id' => $period->id,
             'room_id' => $room->id,
             'start_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
             'end_at' => now()->addDay()->setTime(11, 0)->toIso8601String(),
@@ -2848,9 +4154,17 @@ class PanelRegressionFixTest extends TestCase
         $this->assertDatabaseHas('kpd_appointments', [
             'counselor_id' => $coordinator->id,
             'counselee_id' => $student->id,
+            'period_id' => $period->id,
             'room_id' => $room->id,
             'status' => 'scheduled',
         ]);
+
+        $this->getJson('/api/panel/kpd/appointments?period_id='.$period->id)
+            ->assertOk()
+            ->assertJsonPath('room_schedule.0.id', $room->id)
+            ->assertJsonPath('room_schedule.0.appointment_count', 1)
+            ->assertJsonPath('room_schedule.0.appointments.0.counselee.id', $student->id)
+            ->assertJsonPath('room_schedule.0.appointments.0.period.id', $period->id);
     }
 
     public function test_kpd_panel_updates_appointment_status_with_project_scope(): void
@@ -2992,3 +4306,4 @@ class PanelRegressionFixTest extends TestCase
         $this->assertStringContainsString('@anon.local', (string) $updatedStudent->email);
     }
 }
+

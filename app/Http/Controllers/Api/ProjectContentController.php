@@ -11,9 +11,11 @@ use App\Models\Assignment;
 use App\Models\Certificate;
 use App\Models\DigitalBohca;
 use App\Models\Participant;
+use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
 use App\Support\AdminExportResponder;
+use App\Support\ProjectSpecialModuleCatalog;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,9 +45,10 @@ class ProjectContentController extends Controller
             'Projelere erisim yetkiniz yok.'
         );
 
-        $query = Project::query()->with(['periods' => function ($builder) {
-            $builder->where('status', 'active');
-        }, 'participants.user']);
+        $query = Project::query()->with([
+            'periods' => fn ($builder) => $builder->orderByDesc('start_date'),
+            'participants.user',
+        ]);
 
         if (! $this->permissionResolver->hasGlobalScope($user, $targetPermission)) {
             $ids = $this->permissionResolver->projectIdsForPermission($user, $targetPermission);
@@ -77,9 +80,10 @@ class ProjectContentController extends Controller
         $this->abortUnlessAllowedForProject($request, 'projects.export');
         $user = $request->user();
 
-        $query = Project::query()->with(['periods' => function ($builder) {
-            $builder->where('status', 'active');
-        }, 'participants.user']);
+        $query = Project::query()->with([
+            'periods' => fn ($builder) => $builder->orderByDesc('start_date'),
+            'participants.user',
+        ]);
 
         if (! $this->permissionResolver->hasGlobalScope($user, 'projects.export')) {
             $ids = $this->permissionResolver->projectIdsForPermission($user, 'projects.export');
@@ -94,7 +98,7 @@ class ProjectContentController extends Controller
             $project->slug,
             $project->type,
             $project->status,
-            optional($project->periods->first())->name ?? '-',
+            optional($project->periods->firstWhere('status', 'active'))->name ?? '-',
             $project->participants->where('status', 'active')->count(),
             $project->participants->where('graduation_status', 'graduated')->count(),
             $project->application_open ? 'evet' : 'hayir',
@@ -144,6 +148,18 @@ class ProjectContentController extends Controller
     {
         $project = Project::with(['periods' => fn ($query) => $query->latest('start_date')])->findOrFail($id);
         $user = $request->user();
+        $validated = $request->validate([
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+
+        if (! empty($validated['period_id']) && ! $project->periods->contains('id', $validated['period_id'])) {
+            abort(422, 'Secilen donem bu projeye ait degil.');
+        }
+
+        $activePeriod = $project->periods->firstWhere('status', 'active');
+        $selectedPeriodId = array_key_exists('period_id', $validated)
+            ? ($validated['period_id'] ?: null)
+            : ($activePeriod?->id);
 
         $permissions = [
             'projects.view',
@@ -175,6 +191,7 @@ class ProjectContentController extends Controller
         foreach ($permissions as $permission) {
             $access[$permission] = $this->permissionResolver->canAccessProject($user, $permission, $project->id);
         }
+        $access = $this->filterModuleAccessByProjectType($project, $access);
 
         abort_unless(in_array(true, $access, true), 403, 'Bu proje icin yetkiniz bulunmuyor.');
         $request->attributes->set('audit.permission_checked', 'projects.modules.view');
@@ -192,8 +209,13 @@ class ProjectContentController extends Controller
                 'quota' => $project->quota,
                 'application_open' => (bool) $project->application_open,
                 'active_period' => optional($project->periods->firstWhere('status', 'active'))?->only(['id', 'name', 'status']),
+                'selected_period' => optional($project->periods->firstWhere('id', $selectedPeriodId))?->only(['id', 'name', 'status', 'start_date', 'end_date']),
+                'periods' => $project->periods
+                    ->map(fn (Period $period) => $period->only(['id', 'name', 'status', 'start_date', 'end_date']))
+                    ->values(),
             ],
             'access' => $access,
+            'applicable_modules' => ProjectSpecialModuleCatalog::forProject($project),
             'summary' => [],
             'previews' => [],
         ];
@@ -201,6 +223,7 @@ class ProjectContentController extends Controller
         if ($access['projects.participants.view'] || $access['projects.alumni.view'] || $access['projects.student_cv.view']) {
             $participants = Participant::query()
                 ->where('project_id', $project->id)
+                ->when($selectedPeriodId, fn ($query) => $query->where('period_id', $selectedPeriodId))
                 ->with(['user:id,name,surname,email,university,department,profile_photo_path', 'user.profile:id,user_id,digital_cv_data,linkedin_url,github_url'])
                 ->latest()
                 ->get();
@@ -244,6 +267,7 @@ class ProjectContentController extends Controller
         if ($access['programs.view'] || $access['projects.attendance.view'] || $access['programs.attendance.view']) {
             $programs = Program::query()
                 ->where('project_id', $project->id)
+                ->when($selectedPeriodId, fn ($query) => $query->where('period_id', $selectedPeriodId))
                 ->withCount([
                     'attendances',
                     'attendances as valid_attendances_count' => fn ($query) => $query->where('is_valid', true),
@@ -276,30 +300,37 @@ class ProjectContentController extends Controller
         }
 
         if ($access['applications.view']) {
+            $applicationQuery = Application::where('project_id', $project->id)
+                ->when($selectedPeriodId, fn ($query) => $query->where('period_id', $selectedPeriodId));
             $payload['summary']['applications'] = [
-                'total' => Application::where('project_id', $project->id)->count(),
-                'pending' => Application::where('project_id', $project->id)->where('status', 'pending')->count(),
-                'approved' => Application::where('project_id', $project->id)->where('status', 'accepted')->count(),
-                'rejected' => Application::where('project_id', $project->id)->where('status', 'rejected')->count(),
-                'waitlisted' => Application::where('project_id', $project->id)->where('status', 'waitlisted')->count(),
+                'total' => (clone $applicationQuery)->count(),
+                'pending' => (clone $applicationQuery)->where('status', 'pending')->count(),
+                'approved' => (clone $applicationQuery)->where('status', 'accepted')->count(),
+                'rejected' => (clone $applicationQuery)->where('status', 'rejected')->count(),
+                'waitlisted' => (clone $applicationQuery)->where('status', 'waitlisted')->count(),
             ];
         }
 
         if ($access['digital_bohca.view']) {
+            $bohcaQuery = DigitalBohca::where('project_id', $project->id)
+                ->when($selectedPeriodId, fn ($query) => $query->where(function ($builder) use ($selectedPeriodId) {
+                    $builder->whereNull('period_id')->orWhere('period_id', $selectedPeriodId);
+                }));
             $payload['summary']['digital_bohca'] = [
-                'total' => DigitalBohca::where('project_id', $project->id)->count(),
-                'visible_to_student' => DigitalBohca::where('project_id', $project->id)->where('visible_to_student', true)->count(),
+                'total' => (clone $bohcaQuery)->count(),
+                'visible_to_student' => (clone $bohcaQuery)->where('visible_to_student', true)->count(),
             ];
         }
 
         if ($access['assignments.view']) {
-            $assignmentQuery = Assignment::where('project_id', $project->id);
+            $assignmentQuery = Assignment::where('project_id', $project->id)
+                ->when($selectedPeriodId, fn ($query) => $query->where('period_id', $selectedPeriodId));
             $payload['summary']['assignments'] = [
                 'total' => (clone $assignmentQuery)->count(),
                 'open' => (clone $assignmentQuery)->where(function ($query) {
                     $query->whereNull('due_date')->orWhere('due_date', '>=', now());
                 })->count(),
-                'submissions' => Assignment::where('project_id', $project->id)
+                'submissions' => (clone $assignmentQuery)
                     ->withCount('submissions')
                     ->get()
                     ->sum('submissions_count'),
@@ -307,9 +338,11 @@ class ProjectContentController extends Controller
         }
 
         if ($access['certificates.view']) {
+            $certificateQuery = Certificate::where('project_id', $project->id)
+                ->when($selectedPeriodId, fn ($query) => $query->where('period_id', $selectedPeriodId));
             $payload['summary']['certificates'] = [
-                'total' => Certificate::where('project_id', $project->id)->count(),
-                'issued_this_month' => Certificate::where('project_id', $project->id)
+                'total' => (clone $certificateQuery)->count(),
+                'issued_this_month' => (clone $certificateQuery)
                     ->whereBetween('issued_at', [now()->startOfMonth(), now()->endOfMonth()])
                     ->count(),
             ];
@@ -343,6 +376,71 @@ class ProjectContentController extends Controller
         ];
     }
 
+    /**
+     * @param  array<string, bool>  $access
+     * @return array<string, bool>
+     */
+    private function filterModuleAccessByProjectType(Project $project, array $access): array
+    {
+        $modules = ProjectSpecialModuleCatalog::forProject($project);
+        $families = [
+            'projects.internships.' => ['internships'],
+            'projects.mentors.' => ['mentors'],
+            'projects.eurodesk.' => ['eurodesk_projects'],
+            'projects.rewards.' => ['reward_tiers', 'participants_by_module', 'badges'],
+        ];
+
+        foreach ($families as $prefix => $requiredModules) {
+            $supported = collect($requiredModules)->contains(fn (string $key) => in_array($key, $modules, true));
+            foreach (array_keys($access) as $permission) {
+                if (str_starts_with($permission, $prefix) && ! $supported) {
+                    $access[$permission] = false;
+                }
+            }
+        }
+
+        return $access;
+    }
+
+    private function normalizeGalleryItems(array $items): array
+    {
+        return collect($items)
+            ->map(function ($item) {
+                if (is_string($item)) {
+                    $path = trim($item);
+
+                    return $path === '' ? null : ['path' => $path];
+                }
+
+                if (! is_array($item)) {
+                    return null;
+                }
+
+                $path = trim((string) ($item['path'] ?? $item['url'] ?? ''));
+                if ($path === '') {
+                    return null;
+                }
+
+                $normalized = ['path' => $path];
+
+                foreach (['caption', 'year'] as $field) {
+                    $value = trim((string) ($item[$field] ?? ''));
+                    if ($value !== '') {
+                        $normalized[$field] = $value;
+                    }
+                }
+
+                if (isset($item['period_id']) && is_numeric($item['period_id'])) {
+                    $normalized['period_id'] = (int) $item['period_id'];
+                }
+
+                return $normalized;
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     public function update(Request $request, int $id): JsonResponse
     {
         $project = Project::findOrFail($id);
@@ -361,12 +459,27 @@ class ProjectContentController extends Controller
             'description' => 'nullable|string',
             'cover_image_path' => 'nullable|string|max:2048',
             'gallery_paths' => 'nullable|array',
-            'gallery_paths.*' => 'nullable|string|max:2048',
+            'gallery_paths.*' => 'nullable',
+            'gallery_paths.*.path' => 'nullable|string|max:2048',
+            'gallery_paths.*.url' => 'nullable|string|max:2048',
+            'gallery_paths.*.caption' => 'nullable|string|max:255',
+            'gallery_paths.*.year' => 'nullable|string|max:32',
+            'gallery_paths.*.period_id' => 'nullable|integer|exists:periods,id',
             'application_open' => 'required|boolean',
             'next_application_date' => 'nullable|date',
             'has_interview' => 'required|boolean',
             'quota' => 'nullable|integer|min:0',
         ]);
+        $galleryItems = $this->normalizeGalleryItems($validated['gallery_paths'] ?? []);
+        $galleryPeriodIds = collect($galleryItems)->pluck('period_id')->filter()->unique()->values()->all();
+        if ($galleryPeriodIds !== []) {
+            $validPeriodCount = Period::query()
+                ->where('project_id', $project->id)
+                ->whereIn('id', $galleryPeriodIds)
+                ->count();
+
+            abort_unless($validPeriodCount === count($galleryPeriodIds), 422, 'Galeri donemi bu projeye ait olmalidir.');
+        }
 
         $project->update([
             'name' => $validated['name'],
@@ -375,7 +488,7 @@ class ProjectContentController extends Controller
             'short_description' => $validated['short_description'] ?? null,
             'description' => $validated['description'] ?? null,
             'cover_image_path' => $validated['cover_image_path'] ?? null,
-            'gallery_paths' => collect($validated['gallery_paths'] ?? [])->filter()->values()->all(),
+            'gallery_paths' => $galleryItems,
             'application_open' => $validated['application_open'],
             'next_application_date' => $validated['next_application_date'] ?? null,
             'has_interview' => $validated['has_interview'],
@@ -410,14 +523,33 @@ class ProjectContentController extends Controller
 
         $validated = $request->validate([
             'period_id' => 'nullable|integer|exists:periods,id',
+            'program_id' => 'nullable|integer|exists:programs,id',
         ]);
 
         if (! empty($validated['period_id']) && ! $project->periods->contains('id', $validated['period_id'])) {
             abort(422, 'Secilen donem bu projeye ait degil.');
         }
 
+        $program = null;
+
+        if (! empty($validated['program_id'])) {
+            $program = Program::query()
+                ->where('project_id', $project->id)
+                ->findOrFail($validated['program_id']);
+
+            if (! empty($validated['period_id']) && (int) $program->period_id !== (int) $validated['period_id']) {
+                abort(422, 'Secilen program bu doneme ait degil.');
+            }
+        }
+
         $applicationFormQuery = ApplicationForm::where('project_id', $project->id)
             ->where('is_active', true);
+
+        if ($program) {
+            $applicationFormQuery->where('program_id', $program->id);
+        } else {
+            $applicationFormQuery->whereNull('program_id');
+        }
 
         if ($request->has('period_id')) {
             $applicationFormQuery->where('period_id', $validated['period_id'] ?? null);
@@ -434,6 +566,10 @@ class ProjectContentController extends Controller
                 'slug' => $project->slug,
             ],
             'periods' => $project->periods()->orderByDesc('start_date')->get(),
+            'programs' => Program::query()
+                ->where('project_id', $project->id)
+                ->orderByDesc('start_at')
+                ->get(['id', 'project_id', 'period_id', 'title', 'start_at', 'status']),
             'application_form' => $applicationForm,
         ]);
     }
@@ -445,6 +581,7 @@ class ProjectContentController extends Controller
 
         $validated = $request->validate([
             'period_id' => 'nullable|exists:periods,id',
+            'program_id' => 'nullable|exists:programs,id',
             'fields' => 'required|array|min:1',
             'fields.*.id' => 'required|string|max:100',
             'fields.*.type' => 'required|in:text,longtext,select,radio,checkbox,file',
@@ -466,19 +603,31 @@ class ProjectContentController extends Controller
             abort(422, 'Secilen donem bu projeye ait degil.');
         }
 
+        $program = null;
+
+        if (! empty($validated['program_id'])) {
+            $program = Program::query()
+                ->where('project_id', $project->id)
+                ->findOrFail($validated['program_id']);
+
+            if (! empty($validated['period_id']) && (int) $program->period_id !== (int) $validated['period_id']) {
+                abort(422, 'Secilen program bu doneme ait degil.');
+            }
+
+            $validated['period_id'] = $program->period_id;
+        }
+
         ApplicationForm::query()
             ->where('project_id', $project->id)
-            ->when(
-                array_key_exists('period_id', $validated),
-                fn ($query) => $query->where('period_id', $validated['period_id']),
-                fn ($query) => $query->whereNull('period_id')
-            )
+            ->where('period_id', $validated['period_id'] ?? null)
+            ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
             ->update(['is_active' => false]);
 
         $form = ApplicationForm::updateOrCreate(
             [
                 'project_id' => $project->id,
                 'period_id' => $validated['period_id'] ?? null,
+                'program_id' => $program?->id,
             ],
             [
                 'fields' => array_map(function (array $field) {

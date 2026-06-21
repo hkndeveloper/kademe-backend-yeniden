@@ -33,6 +33,13 @@ class VolunteerOpportunityResource extends JsonResource
                     'type' => $this->project?->type,
                 ];
             }),
+            'period' => $this->whenLoaded('period', function () {
+                return [
+                    'id' => $this->period?->id,
+                    'name' => $this->period?->name,
+                    'status' => $this->period?->status,
+                ];
+            }),
             'my_application' => $application ? [
                 'id' => $application->id,
                 'status' => $application->status,

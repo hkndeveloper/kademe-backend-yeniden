@@ -17,7 +17,9 @@ class Announcement extends Model
         'content',
         'category',
         'target_roles',
+        'target_units',
         'project_id',
+        'period_id',
         'created_by',
         'published_at',
         'expires_at',
@@ -25,6 +27,7 @@ class Announcement extends Model
 
     protected $casts = [
         'target_roles' => 'array',
+        'target_units' => 'array',
         'published_at' => 'datetime',
         'expires_at' => 'datetime',
     ];
@@ -32,6 +35,11 @@ class Announcement extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function creator()
@@ -46,5 +54,3 @@ class Announcement extends Model
             ->dontLogEmptyChanges();
     }
 }
-
-

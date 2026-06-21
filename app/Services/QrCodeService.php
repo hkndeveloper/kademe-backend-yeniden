@@ -10,17 +10,18 @@ class QrCodeService
     /**
      * Etkinlik için yeni bir QR kod üretir ve veritabanına işler
      */
-    public function generateForProgram(Program $program): array
+    public function generateForProgram(Program $program, ?int $rotationSeconds = null): array
     {
-        $qrToken = 'prg_' . $program->id . '_' . Str::random(12);
-        
-        $rotationSeconds = $program->qr_rotation_seconds ?? 30;
+        $qrToken = 'prg_' . $program->id . '_' . Str::random(40);
+
+        $rotationSeconds = $this->normalizeRotationSeconds($rotationSeconds ?? $program->qr_rotation_seconds);
         $expiresAt = now()->addSeconds($rotationSeconds);
 
         $program->update([
             'status' => 'active',
             'qr_token' => $qrToken,
-            'qr_expires_at' => $expiresAt
+            'qr_expires_at' => $expiresAt,
+            'qr_rotation_seconds' => $rotationSeconds,
         ]);
 
         return [
@@ -28,6 +29,11 @@ class QrCodeService
             'expires_at' => $expiresAt,
             'refresh_in_seconds' => $rotationSeconds
         ];
+    }
+
+    private function normalizeRotationSeconds(?int $rotationSeconds): int
+    {
+        return min(max((int) ($rotationSeconds ?: 30), 10), 120);
     }
 
     /**

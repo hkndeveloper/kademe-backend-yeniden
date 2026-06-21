@@ -12,12 +12,17 @@ use Illuminate\Http\Request;
 
 class ProgramController extends Controller
 {
+    private function shouldIncludeGraduatedParticipations($user): bool
+    {
+        return $user->role === 'alumni';
+    }
+
     private function participationScope($query, $user)
     {
         return $query->where(function ($builder) use ($user) {
             $builder->where('status', 'active');
 
-            if ($user->role === 'alumni') {
+            if ($this->shouldIncludeGraduatedParticipations($user)) {
                 $builder->orWhere('graduation_status', 'graduated')
                     ->orWhereNotNull('graduated_at');
             }
@@ -30,7 +35,6 @@ class ProgramController extends Controller
     public function myPrograms(Request $request)
     {
         $user = $request->user();
-        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Program takvimi yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $participations = $this->participationScope(Participant::where('user_id', $user->id), $user)
             ->with(['project:id,name,slug,type', 'period:id,name'])
@@ -48,6 +52,17 @@ class ProgramController extends Controller
             ->whereIn('project_id', $projectIds)
             ->whereIn('period_id', $periodIds)
             ->whereIn('status', ['scheduled', 'active', 'completed'])
+            ->where(function ($query) use ($user) {
+                if ($user->role === 'alumni') {
+                    $query->where('status', 'completed')
+                        ->orWhereJsonContains('target_audience', 'alumni');
+
+                    return;
+                }
+
+                $query->whereNull('target_audience')
+                    ->orWhereJsonContains('target_audience', 'student');
+            })
             ->orderByDesc('start_at')
             ->get();
 
@@ -98,6 +113,8 @@ class ProgramController extends Controller
                     'end_at' => optional($program->end_at)?->toIso8601String(),
                     'status' => $program->status,
                     'credit_deduction' => $program->credit_deduction,
+                    'radius_meters' => $program->radius_meters,
+                    'target_audience' => $program->targetAudience(),
                     'project' => $program->project ? [
                         'id' => $program->project->id,
                         'name' => $program->project->name,
@@ -140,7 +157,6 @@ class ProgramController extends Controller
     {
         $program = Program::with(['project'])->findOrFail($id);
         $user = $request->user();
-        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Program takvimi yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $canView = $this->participationScope(
             Participant::query()
@@ -149,6 +165,12 @@ class ProgramController extends Controller
                 ->where('period_id', $program->period_id),
             $user
         )->exists();
+
+        abort_unless(
+            $program->isTargetedTo($user->role) || ($user->role === 'alumni' && $program->status === 'completed'),
+            403,
+            'Bu etkinligi goruntuleme yetkiniz bulunmuyor.'
+        );
 
         abort_unless($canView, 403, 'Bu etkinligi goruntuleme yetkiniz bulunmuyor.');
 

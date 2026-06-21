@@ -11,6 +11,7 @@ class KpdReport extends Model
 
     protected $fillable = [
         'user_id',
+        'period_id',
         'counselor_id',
         'title',
         'file_path',
@@ -19,6 +20,11 @@ class KpdReport extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function counselor()

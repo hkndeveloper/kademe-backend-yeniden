@@ -24,7 +24,6 @@ class AttendanceController extends Controller
         ]);
 
         $user = $request->user();
-        abort_unless($user->role === 'student', 403, 'QR yoklama yalnizca ogrenci paneli icin kullanilabilir.');
         $tokenInput = trim((string) $validated['qr_token']);
         $qrToken = $this->extractQrToken($tokenInput);
 
@@ -40,11 +39,15 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'Bu QR kodun suresi dolmus. Lutfen ekrandaki yeni kodu okutun.'], 400);
         }
 
-        $participant = Participant::where('user_id', $user->id)
-            ->where('project_id', $program->project_id)
-            ->where('period_id', $program->period_id)
-            ->where('status', 'active')
-            ->first();
+        if (! $program->isAttendanceWindowOpen()) {
+            return response()->json(['message' => 'QR yoklama sadece program saat araliginda kullanilabilir.'], 422);
+        }
+
+        if (! $program->isTargetedTo($user->role)) {
+            return response()->json(['message' => 'Bu program panel turunuz icin acik degil.'], 403);
+        }
+
+        $participant = $this->participantForProgram($user, $program);
 
         if (! $participant) {
             return response()->json(['message' => 'Bu programa katilma yetkiniz bulunmuyor.'], 403);
@@ -57,7 +60,7 @@ class AttendanceController extends Controller
                 'requires_feedback' => true,
                 'program_id' => $pendingFeedbackProgram->id,
                 'program_title' => $pendingFeedbackProgram->title,
-                'redirect_to' => '/student/evaluate',
+                'redirect_to' => $user->role === 'alumni' ? '/alumni/evaluate' : '/student/evaluate',
             ], 423);
         }
 
@@ -190,5 +193,26 @@ class AttendanceController extends Controller
         }
 
         return null;
+    }
+
+    private function participantForProgram($user, Program $program): ?Participant
+    {
+        return Participant::query()
+            ->where('user_id', $user->id)
+            ->where('project_id', $program->project_id)
+            ->when(
+                $program->period_id,
+                fn ($query) => $query->where('period_id', $program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->first();
     }
 }

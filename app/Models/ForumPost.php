@@ -12,6 +12,7 @@ class ForumPost extends Model
 
     protected $fillable = [
         'project_id',
+        'period_id',
         'user_id',
         'title',
         'content',
@@ -25,6 +26,11 @@ class ForumPost extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function author()

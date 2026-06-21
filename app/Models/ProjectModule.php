@@ -10,6 +10,7 @@ class ProjectModule extends Model
 {
     protected $fillable = [
         'project_id',
+        'period_id',
         'title',
         'description',
         'sort_order',
@@ -40,6 +41,11 @@ class ProjectModule extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period(): BelongsTo
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function enrollments(): HasMany

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Certificate;
 use App\Models\Participant;
@@ -10,6 +11,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
+use App\Support\CertificatePdfGenerator;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +22,7 @@ use Spatie\Permission\Models\Role;
 class CoordinatorParticipantController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -77,12 +80,19 @@ class CoordinatorParticipantController extends Controller
         $this->abortUnlessAnyPermission($request, $viewPermissions);
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
             'status' => 'nullable|string|max:50',
             'graduation_status' => 'nullable|string|max:50',
             'search' => 'nullable|string|max:255',
         ]);
         $coordinator = $request->user();
-        $manageableProjectIds = $this->projectIdsForAnyPermission($request, $viewPermissions);
+        $context = $this->resolveProjectPeriodContextForAnyPermission(
+            $request,
+            $viewPermissions,
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
+        $manageableProjectIds = $context->projectIdsForQuery();
         $canViewParticipants = $this->permissionResolver->hasPermission($coordinator, 'projects.participants.view');
         $canViewAlumni = $this->permissionResolver->hasPermission($coordinator, 'projects.alumni.view');
         $canViewCv = $this->permissionResolver->hasPermission($coordinator, 'projects.student_cv.view');
@@ -101,16 +111,8 @@ class CoordinatorParticipantController extends Controller
             'period:id,name',
             'user:id,name,surname,email,phone,university,department,class_year,hometown,profile_photo_path,status',
             'user.profile:id,user_id,linkedin_url,github_url',
-        ])->whereIn('project_id', $manageableProjectIds);
-
-        if (! empty($validated['project_id'])) {
-            abort_unless(
-                $this->canAccessProjectWithAnyPermission($request, $viewPermissions, (int) $validated['project_id']),
-                403,
-                'Bu proje icin yetkiniz bulunmuyor.'
-            );
-            $query->where('project_id', (int) $validated['project_id']);
-        }
+        ]);
+        $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status']) && in_array($validated['status'], ['graduated', 'completed'], true)) {
             $validated['graduation_status'] = $validated['status'];
@@ -206,6 +208,9 @@ class CoordinatorParticipantController extends Controller
                         'hometown' => $user?->hometown,
                         'status' => $user?->status,
                         'profile_photo' => $this->mediaUrl($user?->profile_photo_path),
+                        'public_profile_visible' => (bool) ($user?->public_profile_visible ?? false),
+                        'public_photo_visible' => (bool) ($user?->public_photo_visible ?? false),
+                        'public_alumni_visible' => (bool) ($user?->public_alumni_visible ?? false),
                         'cv' => $cvAllowed ? [
                             'has_digital_cv' => (bool) $user?->profile,
                             'linkedin_url' => $user?->profile?->linkedin_url,
@@ -214,6 +219,57 @@ class CoordinatorParticipantController extends Controller
                     ],
                 ];
             })->values(),
+        ]);
+    }
+
+    public function updatePublicVisibility(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'projects.participants.manage');
+
+        $participant = Participant::with(['user:id,public_profile_visible,public_photo_visible,public_alumni_visible', 'project:id,name'])
+            ->findOrFail($id);
+
+        $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+
+        $validated = $request->validate([
+            'public_profile_visible' => 'sometimes|boolean',
+            'public_photo_visible' => 'sometimes|boolean',
+            'public_alumni_visible' => 'sometimes|boolean',
+        ]);
+
+        $publicProfileVisible = array_key_exists('public_profile_visible', $validated)
+            ? (bool) $validated['public_profile_visible']
+            : (bool) ($participant->user?->public_profile_visible ?? false);
+
+        $updates = [
+            'public_profile_visible' => $publicProfileVisible,
+            'public_photo_visible' => $publicProfileVisible && (bool) ($validated['public_photo_visible'] ?? $participant->user?->public_photo_visible ?? false),
+            'public_alumni_visible' => (bool) ($validated['public_alumni_visible'] ?? $participant->user?->public_alumni_visible ?? false),
+        ];
+
+        $participant->user?->update($updates);
+
+        $request->attributes->set('audit.event', 'participants.public_visibility.updated');
+        $request->attributes->set('audit.description', 'participants.public_visibility.updated');
+        $request->attributes->set('audit.properties', [
+            'participant_id' => $participant->id,
+            'project_id' => $participant->project_id,
+            'public_visibility' => $updates,
+        ]);
+
+        return response()->json([
+            'message' => 'Public gorunurluk ayarlari guncellendi.',
+            'participant' => [
+                'id' => $participant->id,
+                'user' => $participant->user?->fresh([
+                    'profile:id,user_id,linkedin_url,github_url',
+                ])?->only([
+                    'id',
+                    'public_profile_visible',
+                    'public_photo_visible',
+                    'public_alumni_visible',
+                ]),
+            ],
         ]);
     }
 
@@ -255,24 +311,26 @@ class CoordinatorParticipantController extends Controller
         $this->abortUnlessAllowed($request, 'projects.participants.view');
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
             'status' => 'nullable|string|max:50',
             'graduation_status' => 'nullable|string|max:50',
             'search' => 'nullable|string|max:255',
             'format' => 'nullable|string|max:20',
         ]);
         $coordinator = $request->user();
-        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.participants.view');
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'projects.participants.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Participant::with([
             'project:id,name',
             'period:id,name',
             'user:id,name,surname,email,phone,university,department,class_year,hometown',
-        ])->whereIn('project_id', $manageableProjectIds);
-
-        if (! empty($validated['project_id'])) {
-            $this->abortUnlessProjectAllowed($request, 'projects.participants.view', (int) $validated['project_id']);
-            $query->where('project_id', (int) $validated['project_id']);
-        }
+        ]);
+        $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status']) && in_array($validated['status'], ['graduated', 'completed'], true)) {
             $validated['graduation_status'] = $validated['status'];
@@ -366,10 +424,10 @@ class CoordinatorParticipantController extends Controller
                 [
                     'user_id' => $participant->user_id,
                     'project_id' => $participant->project_id,
+                    'period_id' => $participant->period_id,
                     'type' => $certificateType,
                 ],
                 [
-                    'period_id' => $participant->period_id,
                     'verification_code' => $this->uniqueCertificateCode(),
                     'issued_at' => now(),
                     'created_by' => $actor->id,
@@ -400,7 +458,13 @@ class CoordinatorParticipantController extends Controller
             $certificate->update($updates);
         }
 
-        return $certificate->fresh();
+        $certificate = $certificate->fresh(['user:id,name,surname', 'project:id,name', 'period:id,name']);
+
+        if (empty($certificate->certificate_path) || ! MediaStorage::exists($certificate->certificate_path)) {
+            $certificate = CertificatePdfGenerator::generate($certificate);
+        }
+
+        return $certificate;
     }
 
     public function updateGraduationStatus(Request $request, int $id): JsonResponse
@@ -408,6 +472,7 @@ class CoordinatorParticipantController extends Controller
         $this->abortUnlessAllowed($request, 'projects.participants.manage');
         $participant = Participant::with(['user', 'project:id,name', 'period:id,name'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+        $this->assertPeriodWritable($request, $participant->period_id);
         $before = [
             'status' => $participant->status,
             'graduation_status' => $participant->graduation_status,
@@ -495,6 +560,7 @@ class CoordinatorParticipantController extends Controller
         foreach ($ids as $participantId) {
             $participant = $participants->get($participantId);
             try {
+                $this->assertPeriodWritable($request, $participant->period_id);
                 $payload = DB::transaction(function () use ($participant, $validated, $actor) {
                     return $this->applyGraduationTransition(
                         $participant,

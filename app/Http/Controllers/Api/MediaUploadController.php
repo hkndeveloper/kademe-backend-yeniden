@@ -41,6 +41,8 @@ class MediaUploadController extends Controller
             'projects.mentors.manage',
             'projects.eurodesk.manage',
             'projects.rewards.manage',
+            'programs.update',
+            'programs.media.upload',
         ] as $permission) {
             if ($this->permissionResolver->projectIdsForPermission($user, $permission) !== []) {
                 return true;

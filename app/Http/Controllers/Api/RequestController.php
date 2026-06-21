@@ -3,21 +3,26 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RequestResource;
+use App\Models\Period;
 use App\Models\Project;
 use App\Models\Request as WorkflowRequest;
+use App\Models\SystemNotification;
 use App\Models\User;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RequestController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -49,13 +54,80 @@ class RequestController extends Controller
         'general',
     ];
 
+    private const TARGET_UNIT_ALIASES = [
+        'media' => ['media', 'medya', 'icerik', 'content', 'tasarim', 'tasarım'],
+        'operations' => ['operations', 'operasyon', 'lojistik', 'logistics'],
+        'program' => ['program', 'proje', 'project', 'egitim', 'eğitim'],
+        'finance' => ['finance', 'finans', 'mali', 'muhasebe'],
+        'official_affairs' => ['official_affairs', 'official affairs', 'resmi', 'evrak', 'idari'],
+        'general' => ['general', 'genel'],
+    ];
+
     private function canAccessRequestProject(User $user, string $permission, ?int $projectId): bool
     {
         if ($projectId === null) {
-            return $this->permissionResolver->hasPermission($user, $permission);
+            return $this->permissionResolver->hasGlobalScope($user, $permission);
         }
 
         return $this->permissionResolver->canAccessProject($user, $permission, $projectId);
+    }
+
+    private function resolveWorkflowRequestPeriod(Request $request, array &$validated, string $permission): ?int
+    {
+        if (empty($validated['period_id'])) {
+            return null;
+        }
+
+        $period = Period::query()->select(['id', 'project_id', 'status'])->findOrFail((int) $validated['period_id']);
+        if (! empty($validated['project_id']) && (int) $validated['project_id'] !== (int) $period->project_id) {
+            throw ValidationException::withMessages([
+                'period_id' => ['Secilen donem bu projeye ait degil.'],
+            ]);
+        }
+
+        $validated['project_id'] = (int) $period->project_id;
+        $this->resolveProjectPeriodContext($request, $permission, (int) $period->project_id, (int) $period->id);
+
+        return (int) $period->id;
+    }
+
+    private function normalizedUnitText(?string $unit): ?string
+    {
+        if ($unit === null || trim($unit) === '') {
+            return null;
+        }
+
+        $normalized = mb_strtolower(trim($unit));
+        $normalized = str_replace(['ı', 'ğ', 'ü', 'ş', 'ö', 'ç'], ['i', 'g', 'u', 's', 'o', 'c'], $normalized);
+        $normalized = preg_replace('/[^a-z0-9_ ]+/', ' ', $normalized) ?: $normalized;
+
+        return preg_replace('/\s+/', ' ', trim($normalized)) ?: null;
+    }
+
+    private function matchesTargetUnit(?string $staffUnit, ?string $targetUnit): bool
+    {
+        $staffUnit = $this->normalizedUnitText($staffUnit);
+        $targetUnit = $this->normalizedUnitText($targetUnit);
+
+        if (! $staffUnit || ! $targetUnit) {
+            return false;
+        }
+
+        $aliases = self::TARGET_UNIT_ALIASES[$targetUnit] ?? [$targetUnit];
+
+        foreach ($aliases as $alias) {
+            $normalizedAlias = $this->normalizedUnitText($alias);
+            if ($normalizedAlias && str_contains($staffUnit, $normalizedAlias)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canAccessRequestUnit(User $user, string $permission, WorkflowRequest $workflowRequest): bool
+    {
+        return $this->permissionResolver->canAccessTargetUnit($user, $permission, $workflowRequest->target_unit);
     }
 
     private function canManageRequest(User $user, WorkflowRequest $workflowRequest, string $permission): bool
@@ -68,7 +140,86 @@ class RequestController extends Controller
             return true;
         }
 
+        if ($this->canAccessRequestUnit($user, $permission, $workflowRequest)) {
+            return true;
+        }
+
         return $this->canAccessRequestProject($user, $permission, $workflowRequest->project_id);
+    }
+
+    private function requestVisibilityFilter($builder, User $user, string $permission): void
+    {
+        $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, $permission);
+
+        $builder->where('requester_id', $user->id)
+            ->orWhere('target_user_id', $user->id);
+
+        if (! empty($manageableProjectIds)) {
+            $builder->orWhereIn('project_id', $manageableProjectIds);
+        }
+
+        $targetUnits = $this->permissionResolver->targetUnitsForUser($user, self::TARGET_UNITS);
+        if (! empty($targetUnits)) {
+            $builder->orWhereIn('target_unit', $targetUnits);
+        }
+    }
+
+    private function usersForRequestNotification(WorkflowRequest $workflowRequest): array
+    {
+        $users = User::query()
+            ->with('staffProfile')
+            ->whereIn('role', ['super_admin', 'coordinator', 'staff'])
+            ->where('status', 'active')
+            ->get(['id', 'name', 'surname', 'role'])
+            ->filter(function (User $user) use ($workflowRequest) {
+                if ($workflowRequest->target_user_id === $user->id) {
+                    return true;
+                }
+
+                if (! $this->permissionResolver->hasPermission($user, 'requests.view')) {
+                    return false;
+                }
+
+                if ($this->permissionResolver->hasGlobalScope($user, 'requests.view')) {
+                    return true;
+                }
+
+                return $this->permissionResolver->canAccessTargetUnit($user, 'requests.view', $workflowRequest->target_unit);
+            })
+            ->pluck('id')
+            ->push($workflowRequest->target_user_id)
+            ->filter(fn ($id) => $id !== null && (int) $id !== (int) $workflowRequest->requester_id)
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        return $users->all();
+    }
+
+    private function notifyRequestTargets(WorkflowRequest $workflowRequest): void
+    {
+        $workflowRequest->loadMissing('requester:id,name,surname', 'project:id,name');
+        $requesterName = trim(($workflowRequest->requester?->name ?? '').' '.($workflowRequest->requester?->surname ?? ''));
+        $projectName = $workflowRequest->project?->name;
+        $body = trim(implode("\n", array_filter([
+            $requesterName ? "Talep sahibi: {$requesterName}" : null,
+            $projectName ? "Proje: {$projectName}" : null,
+            "Tip: {$workflowRequest->type}",
+            $workflowRequest->target_unit ? "Hedef birim: {$workflowRequest->target_unit}" : null,
+            mb_substr($workflowRequest->description, 0, 240),
+        ])));
+
+        foreach ($this->usersForRequestNotification($workflowRequest) as $userId) {
+            SystemNotification::notify(
+                $userId,
+                'request.created',
+                'Yeni talep oluşturuldu',
+                $body,
+                '/panel/requests',
+                WorkflowRequest::class,
+                $workflowRequest->id
+            );
+        }
     }
 
     private function streamResponseFile(WorkflowRequest $workflowRequest): JsonResponse|StreamedResponse
@@ -105,46 +256,59 @@ class RequestController extends Controller
     {
         $this->abortUnlessAllowed($request, 'requests.view');
         $user = $request->user();
+        $validated = $request->validate([
+            'status' => 'nullable|string|in:'.implode(',', self::STATUS_OPTIONS),
+            'type' => 'nullable|string|in:'.implode(',', self::REQUEST_TYPES),
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+        $periodId = $this->resolveWorkflowRequestPeriod($request, $validated, 'requests.view');
 
         $query = WorkflowRequest::query()
             ->with([
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
+                'period:id,name,status,start_date,end_date',
             ])
             ->orderByDesc('created_at');
 
         if (! $this->permissionResolver->hasGlobalScope($user, 'requests.view')) {
-            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.view');
-
-            $query->where(function ($builder) use ($manageableProjectIds, $user) {
-                $builder->where('requester_id', $user->id)
-                    ->orWhere('target_user_id', $user->id);
-
-                if (! empty($manageableProjectIds)) {
-                    $builder->orWhereIn('project_id', $manageableProjectIds);
-                }
+            $query->where(function ($builder) use ($user) {
+                $this->requestVisibilityFilter($builder, $user, 'requests.view');
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status')->toString());
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('type')) {
-            $query->where('type', $request->string('type')->toString());
+        if (! empty($validated['type'])) {
+            $query->where('type', $validated['type']);
         }
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', (int) $request->input('project_id'));
+        if (! empty($validated['project_id'])) {
+            $query->where('project_id', (int) $validated['project_id']);
+        }
+
+        if ($periodId !== null) {
+            $query->where('period_id', $periodId);
         }
 
         $requests = $query->get();
 
-        $projectScopeIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.create');
+        $projectScopeIds = collect([
+            ...$this->permissionResolver->projectIdsForPermission($user, 'requests.view'),
+            ...$this->permissionResolver->projectIdsForPermission($user, 'requests.create'),
+        ])->map(fn ($id) => (int) $id)->unique()->values()->all();
         $projects = Project::query()
+            ->with(['periods' => fn ($query) => $query->orderByDesc('start_date')])
             ->where('status', 'active')
-            ->when(! $this->permissionResolver->hasGlobalScope($user, 'requests.create'), fn ($q) => $q->whereIn('id', $projectScopeIds))
+            ->when(
+                ! $this->permissionResolver->hasGlobalScope($user, 'requests.view')
+                    && ! $this->permissionResolver->hasGlobalScope($user, 'requests.create'),
+                fn ($q) => $q->whereIn('id', $projectScopeIds === [] ? [-1] : $projectScopeIds)
+            )
             ->orderBy('name')
             ->get(['id', 'name', 'slug', 'type'])
             ->map(fn (Project $project) => [
@@ -152,6 +316,8 @@ class RequestController extends Controller
                 'name' => $project->name,
                 'slug' => $project->slug,
                 'type' => $project->type,
+                'active_period' => optional($project->periods->firstWhere('status', 'active'))?->only(['id', 'name', 'status', 'start_date', 'end_date']),
+                'periods' => $project->periods->map->only(['id', 'name', 'status', 'start_date', 'end_date'])->values(),
             ])
             ->values();
 
@@ -196,43 +362,48 @@ class RequestController extends Controller
     {
         $this->abortUnlessAllowed($request, 'requests.export');
         $user = $request->user();
+        $validated = $request->validate([
+            'status' => 'nullable|string|in:'.implode(',', self::STATUS_OPTIONS),
+            'type' => 'nullable|string|in:'.implode(',', self::REQUEST_TYPES),
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+        $periodId = $this->resolveWorkflowRequestPeriod($request, $validated, 'requests.export');
 
         $query = WorkflowRequest::query()
             ->with([
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
+                'period:id,name,status',
             ])
             ->orderByDesc('created_at');
 
         if (! $this->permissionResolver->hasGlobalScope($user, 'requests.export')) {
-            $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'requests.export');
-
-            $query->where(function ($builder) use ($manageableProjectIds, $user) {
-                $builder->where('requester_id', $user->id)
-                    ->orWhere('target_user_id', $user->id);
-
-                if (! empty($manageableProjectIds)) {
-                    $builder->orWhereIn('project_id', $manageableProjectIds);
-                }
+            $query->where(function ($builder) use ($user) {
+                $this->requestVisibilityFilter($builder, $user, 'requests.export');
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status')->toString());
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('type')) {
-            $query->where('type', $request->string('type')->toString());
+        if (! empty($validated['type'])) {
+            $query->where('type', $validated['type']);
         }
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', (int) $request->input('project_id'));
+        if (! empty($validated['project_id'])) {
+            $query->where('project_id', (int) $validated['project_id']);
+        }
+
+        if ($periodId !== null) {
+            $query->where('period_id', $periodId);
         }
 
         $requests = $query->get();
 
-        $headings = ['ID', 'Tip', 'Hedef Birim', 'Durum', 'Talep Sahibi', 'Hedef Kisi', 'Proje', 'Aciklama', 'Olusturma Tarihi'];
+        $headings = ['ID', 'Tip', 'Hedef Birim', 'Durum', 'Talep Sahibi', 'Hedef Kisi', 'Proje', 'Donem', 'Aciklama', 'Olusturma Tarihi'];
         $rows = $requests->map(fn (WorkflowRequest $workflowRequest) => [
             $workflowRequest->id,
             $workflowRequest->type,
@@ -241,6 +412,7 @@ class RequestController extends Controller
             $workflowRequest->requester ? trim($workflowRequest->requester->name.' '.$workflowRequest->requester->surname) : '-',
             $workflowRequest->targetUser ? trim($workflowRequest->targetUser->name.' '.$workflowRequest->targetUser->surname) : '-',
             $workflowRequest->project?->name ?? '-',
+            $workflowRequest->period?->name ?? '-',
             $workflowRequest->description,
             $workflowRequest->created_at?->format('d.m.Y H:i') ?? '-',
         ])->all();
@@ -263,7 +435,9 @@ class RequestController extends Controller
             'target_user_id' => 'nullable|exists:users,id',
             'description' => 'required|string|min:10|max:3000',
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
         ]);
+        $periodId = $this->resolveWorkflowRequestPeriod($request, $validated, 'requests.create');
 
         if (empty($validated['target_unit']) && empty($validated['target_user_id'])) {
             return response()->json([
@@ -308,11 +482,15 @@ class RequestController extends Controller
             'description' => $validated['description'],
             'status' => 'pending',
             'project_id' => $validated['project_id'] ?? null,
+            'period_id' => $periodId,
         ])->load([
             'requester:id,name,surname,role',
             'targetUser:id,name,surname,role',
             'project:id,name,slug,type',
+            'period:id,name,status,start_date,end_date',
         ]);
+
+        $this->notifyRequestTargets($workflowRequest);
 
         return response()->json([
             'message' => 'Talep basariyla olusturuldu.',
@@ -332,6 +510,7 @@ class RequestController extends Controller
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
+                'period:id,name,status,start_date,end_date',
             ])
             ->findOrFail($id);
 
@@ -363,6 +542,7 @@ class RequestController extends Controller
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
+                'period:id,name,status,start_date,end_date',
             ])),
         ]);
     }
@@ -379,6 +559,7 @@ class RequestController extends Controller
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
+                'period:id,name,status,start_date,end_date',
             ])
             ->findOrFail($id);
 
@@ -420,6 +601,7 @@ class RequestController extends Controller
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
+                'period:id,name,status,start_date,end_date',
             ])),
         ]);
     }

@@ -34,6 +34,15 @@ class PublicProgramResource extends JsonResource
                     'name' => $this->period->name,
                 ] : null;
             }),
+            'photos' => $this->whenLoaded('photos', function () {
+                return $this->photos->map(fn ($photo) => [
+                    'id' => $photo->id,
+                    'url' => $photo->url,
+                    'caption' => $photo->caption,
+                    'sort_order' => $photo->sort_order,
+                ]);
+            }),
+            'is_featured' => (bool) $this->is_featured,
         ];
     }
 }

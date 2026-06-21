@@ -28,7 +28,10 @@ class RotateQrTokenJob implements ShouldQueue
     public function handle(QrCodeService $qrService): void
     {
         // Statüsü 'active' olan tüm programları bul
-        $activePrograms = Program::where('status', 'active')->get();
+        $activePrograms = Program::where('status', 'active')
+            ->where('start_at', '<=', now())
+            ->where('end_at', '>=', now())
+            ->get();
 
         foreach ($activePrograms as $program) {
             // Eğer qr kodu yoksa veya süresi 5 saniyeden az kaldıysa yenisini üret

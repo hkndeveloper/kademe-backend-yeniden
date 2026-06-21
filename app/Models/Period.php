@@ -38,4 +38,14 @@ class Period extends Model
     {
         return $this->hasMany(Program::class);
     }
+
+    public function archives()
+    {
+        return $this->hasMany(PeriodArchive::class);
+    }
+
+    public function latestArchive()
+    {
+        return $this->hasOne(PeriodArchive::class)->latestOfMany();
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\VolunteerOpportunityResource;
 use App\Models\VolunteerApplication;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 class VolunteerController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
@@ -31,6 +33,7 @@ class VolunteerController extends Controller
         $opportunities = VolunteerOpportunity::query()
             ->with([
                 'project:id,name,slug,type',
+                'period:id,name,status',
                 'applications' => fn ($query) => $query
                     ->where('user_id', $user->id)
                     ->select([
@@ -91,6 +94,7 @@ class VolunteerController extends Controller
             ->with('project:id,name,slug,type')
             ->where('status', 'open')
             ->findOrFail($id);
+        $this->assertPeriodWritable($request, $opportunity->period_id);
 
         $existingApplication = VolunteerApplication::query()
             ->where('volunteer_opportunity_id', $opportunity->id)
@@ -164,27 +168,28 @@ class VolunteerController extends Controller
 
     public function panelIndex(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'volunteer.view');
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
             'status' => 'nullable|string|max:50',
         ]);
 
-        $projectIds = $this->permissionResolver->projectIdsForPermission($request->user(), 'volunteer.view');
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'volunteer.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
         $query = VolunteerOpportunity::query()
             ->with([
                 'project:id,name',
+                'period:id,name,status',
                 'creator:id,name,surname',
                 'applications.user:id,name,surname,email,phone',
             ])
             ->withCount('applications')
-            ->whereIn('project_id', $projectIds)
             ->orderByDesc('created_at');
-
-        if (! empty($validated['project_id'])) {
-            $this->abortUnlessProjectAllowed($request, 'volunteer.view', (int) $validated['project_id']);
-            $query->where('project_id', (int) $validated['project_id']);
-        }
+        $this->applyProjectPeriodContext($query, $context, includeNullPeriodRows: true);
 
         if (! empty($validated['status'])) {
             $query->where('status', $validated['status']);
@@ -200,6 +205,7 @@ class VolunteerController extends Controller
         $this->abortUnlessAllowed($request, 'volunteer.manage');
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:4000',
             'location' => 'nullable|string|max:255',
@@ -210,6 +216,18 @@ class VolunteerController extends Controller
         ]);
 
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $validated['project_id']);
+
+        if (! empty($validated['period_id'])) {
+            abort_unless(
+                \App\Models\Period::query()
+                    ->whereKey((int) $validated['period_id'])
+                    ->where('project_id', (int) $validated['project_id'])
+                    ->exists(),
+                422,
+                'Secilen donem bu projeye ait degil.'
+            );
+            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+        }
 
         $opportunity = VolunteerOpportunity::query()->create([
             ...$validated,
@@ -224,33 +242,33 @@ class VolunteerController extends Controller
 
     public function panelExport(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'volunteer.view');
-        $user = $request->user();
-        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'volunteer.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'status' => 'nullable|string|max:50',
+            'format' => 'nullable|string|max:20',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'volunteer.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = VolunteerOpportunity::query()
-            ->with(['project:id,name', 'creator:id,name,surname', 'applications.user:id,name,surname,email'])
+            ->with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname', 'applications.user:id,name,surname,email'])
             ->withCount('applications')
             ->orderByDesc('created_at');
+        $this->applyProjectPeriodContext($query, $context, includeNullPeriodRows: true);
 
-        if (! $this->permissionResolver->hasGlobalScope($user, 'volunteer.view')) {
-            $query->whereIn('project_id', $projectIds);
-        }
-
-        if ($request->filled('project_id')) {
-            $projectId = $request->integer('project_id');
-            $this->abortUnlessProjectAllowed($request, 'volunteer.view', $projectId);
-            $query->where('project_id', $projectId);
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status')->toString());
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
         $opportunities = $query->get();
 
         $headings = [
-            'Ilan ID', 'Ilan Basligi', 'Proje', 'Durum', 'Kontenjan', 'Baslangic', 'Bitis',
+            'Ilan ID', 'Ilan Basligi', 'Proje', 'Donem', 'Durum', 'Kontenjan', 'Baslangic', 'Bitis',
             'Basvuru Sayisi', 'Olusturan', 'Olusturma Tarihi', 'Basvuranlar',
         ];
         $rows = $opportunities->map(function (VolunteerOpportunity $opportunity) {
@@ -262,6 +280,7 @@ class VolunteerController extends Controller
                 $opportunity->id,
                 $opportunity->title,
                 $opportunity->project?->name ?? '-',
+                $opportunity->period?->name ?? '-',
                 $opportunity->status,
                 $opportunity->quota ?? '-',
                 $opportunity->start_at?->format('d.m.Y H:i') ?? '-',
@@ -291,10 +310,11 @@ class VolunteerController extends Controller
         ]);
 
         $application = VolunteerApplication::query()
-            ->with('opportunity:id,project_id,title')
+            ->with('opportunity:id,project_id,period_id,title')
             ->findOrFail($id);
 
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $application->opportunity->project_id);
+        $this->assertPeriodWritable($request, $application->opportunity->period_id);
 
         $application->update($validated);
 
@@ -326,6 +346,7 @@ class VolunteerController extends Controller
         $this->abortUnlessAllowed($request, 'volunteer.manage');
         $opportunity = VolunteerOpportunity::query()->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $opportunity->project_id);
+        $this->assertPeriodWritable($request, $opportunity->period_id);
         $opportunity->delete();
 
         return response()->json(['message' => 'Gonullu ilani silindi.']);

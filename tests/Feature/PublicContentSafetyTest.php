@@ -139,6 +139,7 @@ class PublicContentSafetyTest extends TestCase
             'phone' => '5551112233',
             'university' => 'Test Uni',
             'department' => 'Bilgisayar',
+            'public_profile_visible' => true,
         ]);
 
         Participant::query()->create([
@@ -149,16 +150,103 @@ class PublicContentSafetyTest extends TestCase
             'enrolled_at' => now()->startOfYear(),
         ]);
 
+        $alumni = User::factory()->create([
+            'name' => 'Ayse',
+            'surname' => 'Mezun',
+            'email' => 'ayse.mezun@test.local',
+            'phone' => '5554443322',
+            'university' => 'Mezun Uni',
+            'department' => 'Sosyoloji',
+            'public_alumni_visible' => true,
+        ]);
+
+        Participant::query()->create([
+            'user_id' => $alumni->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'graduated',
+            'graduation_status' => 'graduated',
+            'graduated_at' => now()->setYear(2025),
+            'graduation_note' => 'Sivil toplum uzmani',
+        ]);
+
         $response = $this->getJson('/api/projects/'.$project->slug);
         $response->assertOk();
         $response->assertJsonPath('project.active_students.0.name', 'Ali Veli');
         $response->assertJsonPath('project.active_students.0.university', 'Test Uni');
         $response->assertJsonPath('project.active_students.0.department', 'Bilgisayar');
+        $response->assertJsonPath('project.active_students.0.period.name', '2026');
+        $response->assertJsonPath('project.active_students.0.period_name', '2026');
+        $response->assertJsonPath('project.active_student_groups.0.year', '2026');
         $response->assertJsonPath('project.active_student_groups.0.students.0.name', 'Ali Veli');
+        $response->assertJsonPath('project.alumni_groups.0.year', '2025');
+        $response->assertJsonPath('project.alumni_groups.0.students.0.name', 'Ayse Mezun');
+        $response->assertJsonPath('project.alumni_groups.0.students.0.period_name', '2026');
+        $response->assertJsonPath('project.alumni_groups.0.students.0.job', 'Sivil toplum uzmani');
         $response->assertJsonMissingPath('project.active_students.0.email');
         $response->assertJsonMissingPath('project.active_students.0.phone');
         $response->assertJsonMissingPath('project.active_student_groups.0.students.0.email');
         $response->assertJsonMissingPath('project.active_student_groups.0.students.0.phone');
+        $response->assertJsonMissingPath('project.alumni_groups.0.students.0.email');
+        $response->assertJsonMissingPath('project.alumni_groups.0.students.0.phone');
+    }
+
+    public function test_public_homepage_endpoint_returns_aggregated_safe_payload(): void
+    {
+        $category = BlogCategory::query()->create([
+            'name' => 'Duyuru',
+            'slug' => 'duyuru',
+        ]);
+        $author = User::factory()->create([
+            'surname' => 'HomepageAuthor',
+            'role' => 'staff',
+        ]);
+
+        BlogPost::query()->create([
+            'title' => 'Homepage Blog',
+            'slug' => 'homepage-blog',
+            'content' => 'Blog icerigi',
+            'excerpt' => 'Blog ozeti',
+            'author_id' => $author->id,
+            'category_id' => $category->id,
+            'status' => 'published',
+            'published_at' => now()->subDay(),
+        ]);
+
+        $project = Project::query()->create([
+            'name' => 'Homepage Proje',
+            'slug' => 'homepage-proje',
+            'type' => 'kademe_plus',
+            'status' => 'active',
+            'application_open' => true,
+        ]);
+
+        Program::query()->create([
+            'project_id' => $project->id,
+            'title' => 'Homepage Etkinlik',
+            'location' => 'Istanbul',
+            'latitude' => 40.12,
+            'longitude' => 29.12,
+            'radius_meters' => 100,
+            'credit_deduction' => 10,
+            'qr_token' => 'SECRET_HOMEPAGE_QR',
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDays(2),
+            'status' => 'scheduled',
+            'is_public' => true,
+        ]);
+
+        $response = $this->getJson('/api/homepage');
+
+        $response->assertOk();
+        $response->assertJsonPath('settings.general.site_name', 'KADEME');
+        $response->assertJsonPath('projects.0.name', 'Homepage Proje');
+        $response->assertJsonPath('blogs.0.title', 'Homepage Blog');
+        $response->assertJsonPath('programs.0.title', 'Homepage Etkinlik');
+        $response->assertJsonMissingPath('programs.0.qr_token');
+        $response->assertJsonMissingPath('programs.0.latitude');
+        $response->assertJsonMissingPath('programs.0.longitude');
+        $response->assertJsonMissingPath('settings.google_calendar');
     }
 
     public function test_public_project_detail_exposes_safe_calendar_months(): void

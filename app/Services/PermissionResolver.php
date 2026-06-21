@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\RolePermissionScope;
 use App\Models\User;
+use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -12,6 +13,15 @@ use Illuminate\Support\Str;
 
 class PermissionResolver
 {
+    private const TARGET_UNIT_ALIASES = [
+        'media' => ['media', 'medya', 'icerik', 'content', 'tasarim', 'design'],
+        'operations' => ['operations', 'operasyon', 'lojistik', 'logistics'],
+        'program' => ['program', 'proje', 'project', 'egitim', 'education'],
+        'finance' => ['finance', 'finans', 'mali', 'muhasebe'],
+        'official_affairs' => ['official_affairs', 'official affairs', 'resmi', 'evrak', 'idari'],
+        'general' => ['general', 'genel'],
+    ];
+
     public function hasPermission(User $user, string $permissionName): bool
     {
         $resolved = $this->resolve($user);
@@ -79,6 +89,52 @@ class PermissionResolver
             'none' => false,
             default => $this->denyUnitScopeWithOptionalLog($permissionName, $scopeType, $unit),
         };
+    }
+
+    public function matchesTargetUnit(?string $staffUnit, ?string $targetUnit): bool
+    {
+        $staffUnit = $this->normalizeUnit($staffUnit);
+        $targetUnit = $this->normalizeUnit($targetUnit);
+
+        if (! $staffUnit || ! $targetUnit) {
+            return false;
+        }
+
+        $aliases = self::TARGET_UNIT_ALIASES[$targetUnit] ?? [$targetUnit];
+
+        foreach ($aliases as $alias) {
+            $normalizedAlias = $this->normalizeUnit($alias);
+            if ($normalizedAlias && str_contains($staffUnit, $normalizedAlias)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function canAccessTargetUnit(User $user, string $permissionName, ?string $targetUnit): bool
+    {
+        if (! $this->hasPermission($user, $permissionName)) {
+            return false;
+        }
+
+        if ($this->hasGlobalScope($user, $permissionName)) {
+            return true;
+        }
+
+        return $this->matchesTargetUnit($user->staffProfile?->unit, $targetUnit);
+    }
+
+    /**
+     * @param list<string> $candidateTargetUnits
+     * @return list<string>
+     */
+    public function targetUnitsForUser(User $user, array $candidateTargetUnits): array
+    {
+        return collect($candidateTargetUnits)
+            ->filter(fn (string $targetUnit) => $this->matchesTargetUnit($user->staffProfile?->unit, $targetUnit))
+            ->values()
+            ->all();
     }
 
     public function resolve(User $user): array
@@ -151,9 +207,57 @@ class PermissionResolver
             'scopes' => $this->resolveScopes($user, $effectivePermissions, $overrides),
             'contexts' => [
                 'manageable_project_ids' => $this->manageableProjectIds($user),
+                'project_ids_by_special_module' => $this->projectIdsBySpecialModule(),
+                'user_special_modules' => $this->userSpecialModules($user),
                 'manageable_unit' => $user->staffProfile?->unit,
             ],
         ];
+    }
+
+    /**
+     * @return array<string, list<int>>
+     */
+    private function projectIdsBySpecialModule(): array
+    {
+        return Project::query()
+            ->get(['id', 'type', 'name', 'slug'])
+            ->reduce(function (array $carry, Project $project) {
+                foreach (ProjectSpecialModuleCatalog::forProject($project) as $moduleKey) {
+                    $carry[$moduleKey] ??= [];
+                    $carry[$moduleKey][] = (int) $project->id;
+                }
+
+                return $carry;
+            }, []);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function userSpecialModules(User $user): array
+    {
+        if (! in_array($user->role, ['student', 'alumni'], true)) {
+            return [];
+        }
+
+        return $user->participations()
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->with('project:id,type,name,slug')
+            ->get()
+            ->flatMap(fn ($participation) => $participation->project
+                ? ProjectSpecialModuleCatalog::forProject($participation->project)
+                : []
+            )
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function expandLegacyPermissions(array $permissionNames): Collection
@@ -306,6 +410,8 @@ class PermissionResolver
                 'support.',
                 'requests.',
                 'announcements.',
+                'content.view',
+                'content.blog.',
                 'certificates.',
                 'digital_bohca.',
                 'assignments.',
@@ -327,6 +433,13 @@ class PermissionResolver
 
         if ($user->role === 'staff') {
             if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'certificates.', 'digital_bohca.', 'assignments.', 'kpd.'])) {
+                return [
+                    'scope_type' => 'assigned_projects',
+                    'scope_payload' => ['project_ids' => $manageableProjectIds],
+                ];
+            }
+
+            if ($this->matchesAny($permissionName, ['content.view', 'content.blog.'])) {
                 return [
                     'scope_type' => 'assigned_projects',
                     'scope_payload' => ['project_ids' => $manageableProjectIds],
@@ -542,6 +655,13 @@ class PermissionResolver
     private function normalizeUnit(mixed $unit): ?string
     {
         $normalized = mb_strtolower(trim((string) $unit));
+        $normalized = str_replace(
+            ['ı', 'ğ', 'ü', 'ş', 'ö', 'ç', 'İ', 'Ğ', 'Ü', 'Ş', 'Ö', 'Ç'],
+            ['i', 'g', 'u', 's', 'o', 'c', 'i', 'g', 'u', 's', 'o', 'c'],
+            $normalized
+        );
+        $normalized = preg_replace('/[^a-z0-9_ ]+/', ' ', $normalized) ?: $normalized;
+        $normalized = preg_replace('/\s+/', ' ', trim($normalized)) ?: '';
 
         return $normalized === '' ? null : $normalized;
     }

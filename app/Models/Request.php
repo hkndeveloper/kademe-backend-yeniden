@@ -18,6 +18,7 @@ class Request extends Model
         'status',
         'response_file_path',
         'project_id',
+        'period_id',
     ];
 
     public function requester()
@@ -33,5 +34,10 @@ class Request extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 }

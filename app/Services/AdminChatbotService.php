@@ -26,14 +26,39 @@ class AdminChatbotService
     }
 
     private const HELP_TEXT = <<<'TXT'
-Şu an desteklenen örnek sorular:
-• Bir proje adı veya kodu geçirerek (ör. Diplomasi360, KADEME+, Pergel): "aktif öğrenci sayısı", "katılımcı listesi", "özet"
-• "Tüm projeler özet" veya "genel özet" — yönetebildiğiniz projelerdeki toplam katılımcı sayıları
-• "Başvuru" + proje — bekleyen / onaylanan başvuru sayıları (yaklaşık)
-• "Mali özet" + proje(ler) — harcama/ödeme toplamları (örn: "diplomasi360 ve pergel mali özet son 30 gün")
-• Tarih filtresi: "son 7 gün", "son 30 gün", "bu ay", "YYYY-MM-DD - YYYY-MM-DD"
+Veri asistani kural tabanlidir: mesajinizda yonetebildiginiz bir proje adi/slug/turu gecmeli (Diplomasi360, KADEME+, Pergel, Eurodesk, KPD, Zirve vb.).
 
-Çıktı: Tablo görünürse CSV olarak indirebilirsiniz. Tam doğal dil anlama yoktur; anahtar kelimeler ve proje eşleşmesi kullanılır.
+Katilimci:
+• "… ozet" / "… aktif sayi" / "… katilimci sayilari" — durum ve mezuniyet kirilimi tablosu
+• "… katilimci listesi" / "liste" / "csv" / "ilk 100" — tablo + CSV (ust sinir 500)
+• Durum filtresi: aktif, pasif, mezun (kayit), basarisiz, yedek / bekleme listesi
+• Mezuniyet filtresi: tamamladi, mezuniyet tamamlandi, tamamlayamadi, kisa program
+
+Donem:
+• "… donem dagilimi" / "donem bazinda sayilar" — donem ve kayit durumuna gore adetler
+
+Basvuru:
+• "… basvuru ozeti" — durumlara gore sayim (tarih araligi opsiyonel)
+• "… basvuru listesi" — son basvurular tablosu + CSV
+
+Mali (financial.view + proje erisimi):
+• "… mali ozet" / "harcama" / "odeme" / "butce" — pending/approved/paid/rejected toplamlari
+• Birden fazla proje: "diplomasi360 ve pergel mali ozet son 30 gun"
+
+Kredi (katilimci goruntuleme yetkisi):
+• "… kredi ozeti" / "ortalama kredi" / "dusuk kredi" — ortalama, min, max, dusuk kredi sayisi
+
+Karsilastirma:
+• Iki veya daha cok proje adi + "karsilastir" / "vs" / " ve " + ozet — aktif/toplam katilimci ve basvuru sayilari
+
+Tarih (basvurular ve mali islemler icin):
+• son 7 gun, son 30 gun, son 90 gun, bu hafta, bu ay, gecen ay, bugun, dun
+• 2026-01-01 - 2026-01-31
+
+Genel:
+• "Tum projeler ozet" / "genel ozet" — erisim kapsaminizdaki tum aktif projeler
+
+Cikti tablolari CSV ile indirilebilir. Tam dogal dil yoktur; anahtar kelime + proje eslesmesi kullanilir.
 TXT;
 
     public function handle(User $user, string $message): array
@@ -54,13 +79,17 @@ TXT;
 
         $matched = $this->matchProjects($normalized, $projects);
         $wantsList = $this->wantsParticipantList($normalized);
-        $wantsApplications = str_contains($normalized, 'basvuru') || str_contains($normalized, 'başvuru');
+        $wantsApplications = str_contains($normalized, 'basvuru') || str_contains($normalized, 'application');
+        $wantsApplicationList = $wantsApplications && $wantsList;
         $wantsFinancial = $this->wantsFinancialSummary($normalized);
         $limit = $this->extractLimit($normalized);
         $applicationStatusFilter = $this->extractApplicationStatusFilter($normalized);
         $participantStatusFilter = $this->extractParticipantStatusFilter($normalized);
+        $graduationStatusFilter = $this->extractGraduationStatusFilter($normalized);
         [$fromDate, $toDate, $dateLabel] = $this->extractDateRange($normalized);
         $wantsComparison = $this->wantsProjectComparison($normalized);
+        $wantsPeriodBreakdown = $this->wantsPeriodBreakdownIntent($normalized);
+        $wantsCreditSummary = $this->wantsCreditSummaryIntent($normalized);
         $wantsSummaryAll = (str_contains($normalized, 'tum') || str_contains($normalized, 'tüm') || str_contains($normalized, 'genel'))
             && (str_contains($normalized, 'ozet') || str_contains($normalized, 'özet') || str_contains($normalized, 'toplam'));
 
@@ -91,6 +120,22 @@ TXT;
             return $this->buildFinancialSummary($user, $selectedProjects, $fromDate, $toDate, $dateLabel);
         }
 
+        if ($wantsApplicationList) {
+            if (! $this->permissionResolver->canAccessProject($user, 'applications.view', $project->id)) {
+                return $this->permissionDeniedResponse('applications.view');
+            }
+
+            return $this->buildApplicationList(
+                $user,
+                $project,
+                $applicationStatusFilter,
+                $fromDate,
+                $toDate,
+                $dateLabel,
+                $limit,
+            );
+        }
+
         if ($wantsApplications) {
             if (! $this->permissionResolver->canAccessProject($user, 'applications.view', $project->id)) {
                 return $this->permissionDeniedResponse('applications.view');
@@ -99,19 +144,41 @@ TXT;
             return $this->buildApplicationStats($user, $project, $applicationStatusFilter, $fromDate, $toDate, $dateLabel);
         }
 
+        if ($wantsPeriodBreakdown) {
+            if (! $this->permissionResolver->canAccessProject($user, 'projects.participants.view', $project->id)) {
+                return $this->permissionDeniedResponse('projects.participants.view');
+            }
+
+            return $this->buildParticipantPeriodBreakdown($user, $project, $participantStatusFilter);
+        }
+
+        if ($wantsCreditSummary) {
+            if (! $this->permissionResolver->canAccessProject($user, 'projects.participants.view', $project->id)) {
+                return $this->permissionDeniedResponse('projects.participants.view');
+            }
+
+            return $this->buildCreditSummary($user, $project, $participantStatusFilter);
+        }
+
         if ($wantsList) {
             if (! $this->permissionResolver->canAccessProject($user, 'projects.participants.view', $project->id)) {
                 return $this->permissionDeniedResponse('projects.participants.view');
             }
 
-            return $this->buildParticipantList($user, $project, $participantStatusFilter, $limit);
+            return $this->buildParticipantList(
+                $user,
+                $project,
+                $participantStatusFilter,
+                $graduationStatusFilter,
+                $limit,
+            );
         }
 
         if ($wantsComparison && $selectedProjects->count() > 1) {
             return $this->buildProjectComparisonSummary($user, $selectedProjects, $fromDate, $toDate, $dateLabel);
         }
 
-        return $this->buildParticipantStats($user, $project, $participantStatusFilter);
+        return $this->buildParticipantStats($user, $project, $participantStatusFilter, $graduationStatusFilter);
     }
 
     private function manageableProjects(User $user): Collection
@@ -166,6 +233,10 @@ TXT;
             || str_contains($n, 'help')
             || str_contains($n, 'ne yap')
             || str_contains($n, 'neler')
+            || str_contains($n, 'komut')
+            || str_contains($n, 'ornek')
+            || str_contains($n, 'ornekler')
+            || str_contains($n, 'nasil')
             || $n === '?';
     }
 
@@ -176,7 +247,12 @@ TXT;
             || str_contains($n, 'bilgi')
             || str_contains($n, 'kimler')
             || str_contains($n, 'detay')
-            || str_contains($n, 'tablo');
+            || str_contains($n, 'tablo')
+            || str_contains($n, 'excel')
+            || str_contains($n, 'csv')
+            || str_contains($n, 'satir')
+            || str_contains($n, 'isimleri')
+            || str_contains($n, 'adlari');
     }
 
     private function wantsProjectComparison(string $normalized): bool
@@ -195,7 +271,11 @@ TXT;
             || str_contains($normalized, 'odeme')
             || str_contains($normalized, 'ödeme')
             || str_contains($normalized, 'gider')
-            || str_contains($normalized, 'tutar');
+            || str_contains($normalized, 'tutar')
+            || str_contains($normalized, 'butce')
+            || str_contains($normalized, 'bütce')
+            || str_contains($normalized, 'masraf')
+            || str_contains($normalized, 'gelir');
     }
 
     private function extractLimit(string $normalized): int
@@ -214,7 +294,7 @@ TXT;
     private function extractApplicationStatusFilter(string $normalized): ?string
     {
         $map = [
-            'pending' => ['pending', 'beklemede'],
+            'pending' => ['pending', 'beklemede', 'bekleyen'],
             'accepted' => ['accepted', 'kabul', 'kabul edildi'],
             'rejected' => ['rejected', 'red', 'reddedildi'],
             'waitlisted' => ['waitlisted', 'yedek', 'yedek listede'],
@@ -238,9 +318,10 @@ TXT;
     {
         $map = [
             'active' => ['active', 'aktif'],
-            'inactive' => ['inactive', 'pasif'],
-            'pending' => ['pending', 'beklemede'],
-            'completed' => ['completed', 'tamamlandi', 'tamamlandı'],
+            'passive' => ['passive', 'pasif', 'inactive', 'inaktif'],
+            'graduated' => ['graduated', 'mezun kayit', 'kayit mezun'],
+            'failed' => ['failed', 'basarisiz', 'olumsuz', 'basarisizlik'],
+            'waitlist' => ['waitlist', 'yedek', 'bekleme listesi', 'bekleme'],
         ];
 
         foreach ($map as $status => $keywords) {
@@ -254,6 +335,60 @@ TXT;
         return null;
     }
 
+    private function extractGraduationStatusFilter(string $normalized): ?string
+    {
+        $map = [
+            'completed' => ['completed', 'tamamladi', 'tamamlandi', 'kisa program', 'kisaprogram', 'programi tamamladi'],
+            'graduated' => ['graduation_status', 'mezuniyet tamamlandi', 'diploma alan', 'mezuniyet durumu'],
+            'not_completed' => ['not_completed', 'tamamlayamadi', 'tamamlayamadı', 'yarida kaldi', 'yarıda kaldı'],
+        ];
+
+        foreach ($map as $status => $keywords) {
+            foreach ($keywords as $keyword) {
+                if (str_contains($normalized, $this->normalize($keyword))) {
+                    return $status;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function wantsPeriodBreakdownIntent(string $normalized): bool
+    {
+        if (! str_contains($normalized, 'donem')) {
+            return false;
+        }
+
+        return str_contains($normalized, 'dagilim')
+            || str_contains($normalized, 'kirilim')
+            || str_contains($normalized, 'bazinda')
+            || str_contains($normalized, 'sayilari')
+            || str_contains($normalized, 'sayisi')
+            || str_contains($normalized, 'tablo')
+            || str_contains($normalized, 'istatistik')
+            || str_contains($normalized, 'rapor');
+    }
+
+    private function wantsCreditSummaryIntent(string $normalized): bool
+    {
+        if (! str_contains($normalized, 'kredi') && ! str_contains($normalized, 'puantaj')) {
+            return false;
+        }
+
+        return str_contains($normalized, 'ozet')
+            || str_contains($normalized, 'ortalama')
+            || str_contains($normalized, 'dagilim')
+            || str_contains($normalized, 'kirilim')
+            || str_contains($normalized, 'istatistik')
+            || str_contains($normalized, 'durum')
+            || str_contains($normalized, 'tablo')
+            || str_contains($normalized, 'minimum')
+            || str_contains($normalized, 'maksimum')
+            || str_contains($normalized, 'en dusuk')
+            || str_contains($normalized, 'dusuk');
+    }
+
     /**
      * @return array{0: Carbon|null, 1: Carbon|null, 2: string|null}
      */
@@ -261,6 +396,32 @@ TXT;
     {
         if (str_contains($normalized, 'bu ay')) {
             return [now()->startOfMonth(), now()->endOfMonth(), 'bu ay'];
+        }
+
+        if (str_contains($normalized, 'bu hafta')) {
+            return [now()->startOfWeek(), now()->endOfWeek(), 'bu hafta'];
+        }
+
+        if (str_contains($normalized, 'gecen ay')) {
+            $ref = now()->subMonth();
+
+            return [$ref->copy()->startOfMonth(), $ref->copy()->endOfMonth(), 'gecen ay'];
+        }
+
+        if (str_contains($normalized, 'bugun')) {
+            return [now()->startOfDay(), now()->endOfDay(), 'bugun'];
+        }
+
+        if (str_contains($normalized, 'dun')) {
+            return [
+                now()->subDay()->startOfDay(),
+                now()->subDay()->endOfDay(),
+                'dun',
+            ];
+        }
+
+        if (preg_match('/son\s+90\s+gun/u', $normalized) === 1 || str_contains($normalized, 'son 90')) {
+            return [now()->subDays(90)->startOfDay(), now()->endOfDay(), 'son 90 gun'];
         }
 
         $matches = [];
@@ -349,33 +510,75 @@ TXT;
         return $map[$type] ?? [];
     }
 
-    private function buildParticipantStats(User $user, Project $project, ?string $statusFilter = null): array
-    {
+    private function buildParticipantStats(
+        User $user,
+        Project $project,
+        ?string $statusFilter = null,
+        ?string $graduationStatusFilter = null,
+    ): array {
         $base = Participant::query()->where('project_id', $project->id);
         if ($statusFilter !== null) {
             $base->where('status', $statusFilter);
         }
+        if ($graduationStatusFilter !== null) {
+            $base->where('graduation_status', $graduationStatusFilter);
+        }
 
         $total = (clone $base)->count();
-        $active = (clone $base)->where('status', 'active')->count();
-        $graduated = (clone $base)->where('graduation_status', 'graduated')->count();
+
+        $byStatus = (clone $base)
+            ->selectRaw('status, count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status');
+
+        $byGraduationRows = (clone $base)
+            ->selectRaw('graduation_status, count(*) as c')
+            ->groupBy('graduation_status')
+            ->get();
+
+        $active = (int) ($byStatus['active'] ?? 0);
+        $graduationMarked = 0;
+        foreach ($byGraduationRows as $row) {
+            if ($row->graduation_status === 'graduated') {
+                $graduationMarked = (int) $row->c;
+                break;
+            }
+        }
+
+        $filterNote = [];
+        if ($statusFilter !== null) {
+            $filterNote[] = "kayit durumu: {$statusFilter}";
+        }
+        if ($graduationStatusFilter !== null) {
+            $filterNote[] = "mezuniyet: {$graduationStatusFilter}";
+        }
+        $suffix = $filterNote !== [] ? ' (' . implode(', ', $filterNote) . ')' : '';
 
         $reply = sprintf(
-            "**%s** katılımcı özeti%s:\n- Toplam kayıt: %d\n- Aktif: %d\n- Mezun (işaretli): %d\n\nListe için: \"… katılımcı listesi\" yazın.",
+            "**%s** katilim ozeti%s:\n- Toplam kayit: %d\n- Aktif (kayit durumu): %d\n- Mezuniyet alani \"graduated\" sayisi: %d\n\nDetay tabloda kayit ve mezuniyet kirilimi var. Liste icin: \"… katilimci listesi\".",
             $project->name,
-            $statusFilter ? " (durum filtresi: {$statusFilter})" : '',
+            $suffix,
             $total,
             $active,
-            $graduated,
+            $graduationMarked,
         );
 
+        $tableRows = [
+            ['Toplam kayit', (string) $total],
+            ['Aktif', (string) $active],
+        ];
+        foreach (['active', 'passive', 'graduated', 'failed', 'waitlist'] as $st) {
+            $c = (int) ($byStatus[$st] ?? 0);
+            $tableRows[] = ["Kayit: {$st}", (string) $c];
+        }
+        foreach ($byGraduationRows as $row) {
+            $label = $row->graduation_status === null ? '(bos)' : (string) $row->graduation_status;
+            $tableRows[] = ["Mezuniyet: {$label}", (string) $row->c];
+        }
+
         $table = [
-            'columns' => ['Durum', 'Adet'],
-            'rows' => [
-                ['Toplam', (string) $total],
-                ['Aktif', (string) $active],
-                ['Mezun', (string) $graduated],
-            ],
+            'columns' => ['Olcum', 'Adet'],
+            'rows' => $tableRows,
         ];
 
         $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'ozet_' . $project->slug);
@@ -383,8 +586,13 @@ TXT;
         return $this->response($reply, 'participant_stats', $table, null, $token);
     }
 
-    private function buildParticipantList(User $user, Project $project, ?string $statusFilter = null, int $limit = self::EXPORT_ROW_CAP): array
-    {
+    private function buildParticipantList(
+        User $user,
+        Project $project,
+        ?string $statusFilter = null,
+        ?string $graduationStatusFilter = null,
+        int $limit = self::EXPORT_ROW_CAP,
+    ): array {
         $query = Participant::query()
             ->where('project_id', $project->id)
             ->with(['user:id,name,surname,email,phone,university,department', 'period:id,name'])
@@ -393,6 +601,9 @@ TXT;
 
         if ($statusFilter !== null) {
             $query->where('status', $statusFilter);
+        }
+        if ($graduationStatusFilter !== null) {
+            $query->where('graduation_status', $graduationStatusFilter);
         }
 
         $rows = $query->get();
@@ -407,27 +618,178 @@ TXT;
                 $u?->university ?? '-',
                 $u?->department ?? '-',
                 (string) $p->status,
+                $p->graduation_status !== null ? (string) $p->graduation_status : '-',
                 (string) ($p->credit ?? 0),
                 $p->period?->name ?? '-',
             ];
         }
 
         $table = [
-            'columns' => ['Ad Soyad', 'E-posta', 'Telefon', 'Üniversite', 'Bölüm', 'Durum', 'Kredi', 'Dönem'],
+            'columns' => ['Ad Soyad', 'E-posta', 'Telefon', 'Üniversite', 'Bölüm', 'Kayit durumu', 'Mezuniyet', 'Kredi', 'Dönem'],
             'rows' => $tableRows,
         ];
 
+        $bits = [];
+        if ($statusFilter !== null) {
+            $bits[] = "kayit: {$statusFilter}";
+        }
+        if ($graduationStatusFilter !== null) {
+            $bits[] = "mezuniyet: {$graduationStatusFilter}";
+        }
+        $filterSuffix = $bits !== [] ? ' (' . implode(', ', $bits) . ')' : '';
+
         $reply = sprintf(
-            "**%s** — en güncel %d katılım kaydı listelendi (üst sınır %d)%s. CSV indirmek için düğmeyi kullanın.",
+            "**%s** — en guncel %d katilim kaydi listelendi (ust sinir %d)%s. CSV indirmek icin dugmeyi kullanin.",
             $project->name,
             count($tableRows),
             $limit,
-            $statusFilter ? ", durum: {$statusFilter}" : '',
+            $filterSuffix,
         );
 
         $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'katilimcilar_' . $project->slug);
 
         return $this->response($reply, 'participant_list', $table, null, $token);
+    }
+
+    private function buildParticipantPeriodBreakdown(User $user, Project $project, ?string $statusFilter = null): array
+    {
+        $query = Participant::query()
+            ->where('participants.project_id', $project->id)
+            ->join('periods', 'periods.id', '=', 'participants.period_id')
+            ->selectRaw('periods.name as period_name, participants.status, count(*) as c')
+            ->groupBy('periods.name', 'participants.status')
+            ->orderBy('periods.name');
+
+        if ($statusFilter !== null) {
+            $query->where('participants.status', $statusFilter);
+        }
+
+        $tableRows = [];
+        foreach ($query->get() as $row) {
+            $tableRows[] = [
+                (string) $row->period_name,
+                (string) $row->status,
+                (string) $row->c,
+            ];
+        }
+
+        $table = [
+            'columns' => ['Donem', 'Kayit durumu', 'Adet'],
+            'rows' => $tableRows,
+        ];
+
+        $reply = sprintf(
+            "**%s** donem bazinda katilim dagilimi hazirlandi%s.",
+            $project->name,
+            $statusFilter ? " (yalnizca kayit durumu: {$statusFilter})" : '',
+        );
+
+        $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'donem_dagilim_' . $project->slug);
+
+        return $this->response($reply, 'participant_period_breakdown', $table, null, $token);
+    }
+
+    private function buildCreditSummary(User $user, Project $project, ?string $statusFilter = null): array
+    {
+        $base = Participant::query()->where('project_id', $project->id);
+        if ($statusFilter !== null) {
+            $base->where('status', $statusFilter);
+        }
+
+        $count = (clone $base)->count();
+        $avg = $count > 0 ? round((float) ((clone $base)->avg('credit')), 2) : 0.0;
+        $min = (int) ((clone $base)->min('credit') ?? 0);
+        $max = (int) ((clone $base)->max('credit') ?? 0);
+        $threshold = 50;
+        $low = (clone $base)->where('credit', '<', $threshold)->count();
+
+        $reply = sprintf(
+            "**%s** kredi ozeti%s:\n- Kayit sayisi: %d\n- Ortalama kredi: %s\n- Min / max: %d / %d\n- %d alti kredi kaydi: %d",
+            $project->name,
+            $statusFilter ? " (kayit durumu: {$statusFilter})" : '',
+            $count,
+            number_format($avg, 2, ',', '.'),
+            $min,
+            $max,
+            $threshold,
+            $low,
+        );
+
+        $table = [
+            'columns' => ['Metrik', 'Deger'],
+            'rows' => [
+                ['Kayit sayisi', (string) $count],
+                ['Ortalama kredi', number_format($avg, 2, ',', '.')],
+                ['Minimum', (string) $min],
+                ['Maksimum', (string) $max],
+                ["Kredi < {$threshold}", (string) $low],
+            ],
+        ];
+
+        $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'kredi_ozet_' . $project->slug);
+
+        return $this->response($reply, 'credit_summary', $table, null, $token);
+    }
+
+    private function buildApplicationList(
+        User $user,
+        Project $project,
+        ?string $statusFilter = null,
+        ?Carbon $fromDate = null,
+        ?Carbon $toDate = null,
+        ?string $dateLabel = null,
+        int $limit = self::EXPORT_ROW_CAP,
+    ): array {
+        $query = Application::query()
+            ->where('project_id', $project->id)
+            ->with(['user:id,name,surname,email,phone', 'period:id,name'])
+            ->orderByDesc('created_at')
+            ->limit($limit);
+
+        if ($statusFilter !== null) {
+            $query->where('status', $statusFilter);
+        }
+        if ($fromDate !== null && $toDate !== null) {
+            $query->whereBetween('created_at', [$fromDate, $toDate]);
+        }
+
+        $tableRows = [];
+        foreach ($query->get() as $app) {
+            $u = $app->user;
+            $tableRows[] = [
+                $u ? trim(($u->name ?? '') . ' ' . ($u->surname ?? '')) : '-',
+                $u?->email ?? '-',
+                (string) $app->status,
+                $app->created_at?->format('Y-m-d H:i') ?? '-',
+                $app->period?->name ?? '-',
+            ];
+        }
+
+        $table = [
+            'columns' => ['Ad Soyad', 'E-posta', 'Durum', 'Olusturma', 'Donem'],
+            'rows' => $tableRows,
+        ];
+
+        $meta = [];
+        if ($statusFilter !== null) {
+            $meta[] = "durum: {$statusFilter}";
+        }
+        if ($dateLabel !== null) {
+            $meta[] = "tarih: {$dateLabel}";
+        }
+        $suffix = $meta !== [] ? ' (' . implode(', ', $meta) . ')' : '';
+
+        $reply = sprintf(
+            "**%s** basvuru listesi — son %d kayit (ust sinir %d)%s.",
+            $project->name,
+            count($tableRows),
+            $limit,
+            $suffix,
+        );
+
+        $token = $this->storeExportPayload($user, $table['columns'], $table['rows'], 'basvurular_liste_' . $project->slug);
+
+        return $this->response($reply, 'application_list', $table, null, $token);
     }
 
     private function buildApplicationStats(

@@ -14,6 +14,7 @@ class FinancialTransaction extends Model
 
     protected $fillable = [
         'project_id',
+        'spending_unit',
         'period_id',
         'type',
         'category',
@@ -21,16 +22,21 @@ class FinancialTransaction extends Model
         'amount',
         'status',
         'invoice_path',
+        'invoice_no',
         'submitted_by',
         'approved_by',
         'submitted_at',
         'approved_at',
+        'payment_date',
+        'payment_method',
+        'accounting_code',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'submitted_at' => 'datetime',
         'approved_at' => 'datetime',
+        'payment_date' => 'date',
     ];
 
     public function project()
@@ -60,5 +66,4 @@ class FinancialTransaction extends Model
             ->dontLogEmptyChanges();
     }
 }
-
 

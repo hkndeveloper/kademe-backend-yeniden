@@ -82,6 +82,8 @@ class PermissionMatrixController extends Controller
             'permission_groups' => $groupedPermissions,
             'granular_matrix_groups' => $granularMatrixGroups,
             'granular_permission_groups' => config('permission_catalog.granular_permissions', []),
+            'permission_domains' => $this->permissionDomains(),
+            'role_permission_compatibility' => $this->rolePermissionCompatibility($roles),
             'role_permission_scopes' => $this->groupedRolePermissionScopes(),
             'role_scope_storage_ready' => Schema::hasTable('role_permission_scopes'),
             'supported_scope_options' => $this->supportedScopeOptions(),
@@ -134,6 +136,7 @@ class PermissionMatrixController extends Controller
 
                 $allowed = collect($row['permissions'] ?? [])
                     ->filter(fn (string $name) => in_array($name, $granularCatalog, true))
+                    ->filter(fn (string $name) => $this->permissionAllowedForRole($role->name, $name))
                     ->values()
                     ->all();
 
@@ -298,6 +301,11 @@ class PermissionMatrixController extends Controller
 
         foreach ($validated['overrides'] as $override) {
             abort_unless(in_array($override['permission_name'], $allowedPermissions, true), 422, 'Gecersiz permission secildi.');
+            abort_unless(
+                $this->permissionAllowedForRole($user->role, $override['permission_name']),
+                422,
+                'Bu kullanici tipi icin bu permission atanamaz.'
+            );
             $scopeType = $override['scope_type'] ?? null;
             if (is_string($scopeType) && $scopeType !== '') {
                 abort_unless(
@@ -389,7 +397,7 @@ class PermissionMatrixController extends Controller
         ]);
 
         if (! empty($validated['permissions'])) {
-            $role->syncPermissions($this->validGranularPermissions($validated['permissions']));
+            $role->syncPermissions($this->validGranularPermissionsForRole($role->name, $validated['permissions']));
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -420,7 +428,7 @@ class PermissionMatrixController extends Controller
             'scopes.*.scope_payload' => 'nullable|array',
         ]);
 
-        $role->syncPermissions($this->validGranularPermissions($validated['permissions'] ?? []));
+        $role->syncPermissions($this->validGranularPermissionsForRole($role->name, $validated['permissions'] ?? []));
         if (array_key_exists('scopes', $validated)) {
             $this->syncGranularScopes([[
                 'role' => $role->name,
@@ -471,9 +479,22 @@ class PermissionMatrixController extends Controller
         ]);
 
         $roleNames = collect($validated['roles'])->unique()->values()->all();
+        $primaryRole = $validated['primary_role'] ?? $roleNames[0];
+        $containsParticipantRole = collect($roleNames)
+            ->contains(fn (string $roleName) => $this->isParticipantRole($roleName))
+            || $this->isParticipantRole((string) $primaryRole);
+
+        if ($this->isParticipantRole($user->role) || $containsParticipantRole) {
+            abort_unless(
+                count($roleNames) === 1
+                    && $this->isParticipantRole($roleNames[0])
+                    && $primaryRole === $roleNames[0],
+                422,
+                'Ogrenci/mezun rolleri baska rollerle birlestirilemez.'
+            );
+        }
         $user->syncRoles($roleNames);
 
-        $primaryRole = $validated['primary_role'] ?? $roleNames[0];
         if (in_array($primaryRole, $roleNames, true)) {
             try {
                 $user->forceFill(['role' => $primaryRole])->save();
@@ -683,6 +704,70 @@ class PermissionMatrixController extends Controller
             ->all();
     }
 
+    private function validGranularPermissionsForRole(string $roleName, array $permissions): array
+    {
+        return collect($this->validGranularPermissions($permissions))
+            ->filter(fn (string $name) => $this->permissionAllowedForRole($roleName, $name))
+            ->values()
+            ->all();
+    }
+
+    private function isParticipantRole(string $roleName): bool
+    {
+        return in_array($roleName, ['student', 'alumni'], true);
+    }
+
+    private function isParticipantPermission(string $permissionName): bool
+    {
+        return $this->permissionStartsWith($permissionName, ['participant.', 'alumni.']);
+    }
+
+    private function permissionAllowedForRole(string $roleName, string $permissionName): bool
+    {
+        if ($roleName === 'super_admin') {
+            return true;
+        }
+
+        if ($this->isParticipantRole($roleName)) {
+            return $this->isParticipantPermission($permissionName);
+        }
+
+        return ! $this->isParticipantPermission($permissionName);
+    }
+
+    private function permissionDomains(): array
+    {
+        return collect(config('permission_catalog.granular_permissions', []))
+            ->mapWithKeys(fn (array $permissions, string $group) => [
+                $group => [
+                    'domain' => collect($permissions)->every(fn (string $permission) => $this->isParticipantPermission($permission))
+                        ? 'participant'
+                        : 'authority',
+                    'permissions' => collect($permissions)
+                        ->mapWithKeys(fn (string $permission) => [
+                            $permission => $this->isParticipantPermission($permission) ? 'participant' : 'authority',
+                        ])
+                        ->all(),
+                ],
+            ])
+            ->all();
+    }
+
+    private function rolePermissionCompatibility($roles): array
+    {
+        $permissions = $this->allGranularPermissionNames();
+
+        return $roles
+            ->mapWithKeys(fn (Role $role) => [
+                $role->name => collect($permissions)
+                    ->mapWithKeys(fn (string $permission) => [
+                        $permission => $this->permissionAllowedForRole($role->name, $permission),
+                    ])
+                    ->all(),
+            ])
+            ->all();
+    }
+
     /**
      * @return array<int, string>
      */
@@ -774,6 +859,7 @@ class PermissionMatrixController extends Controller
             ->mapWithKeys(fn (Role $role) => [
                 $role->name => collect($this->granularEffectiveForRole($role))
                     ->filter(fn (string $name) => in_array($name, $granularCatalog, true))
+                    ->filter(fn (string $name) => $this->permissionAllowedForRole($role->name, $name))
                     ->values()
                     ->all(),
             ])
@@ -796,6 +882,9 @@ class PermissionMatrixController extends Controller
                     continue;
                 }
                 if (! in_array($permissionName, $roleGrantedPermissions[$roleName] ?? [], true)) {
+                    continue;
+                }
+                if (! $this->permissionAllowedForRole($roleName, $permissionName)) {
                     continue;
                 }
                 if (! is_string($scopeType)) {
@@ -849,6 +938,10 @@ class PermissionMatrixController extends Controller
             return false;
         }
 
+        if (! $this->permissionAllowedForRole($roleName, $permissionName)) {
+            return false;
+        }
+
         if ($roleName === 'super_admin') {
             return $scopeType === 'all';
         }
@@ -862,6 +955,10 @@ class PermissionMatrixController extends Controller
 
     private function scopeOptionsForPermission(string $permissionName): array
     {
+        if ($permissionName === 'content.view' || $this->permissionStartsWith($permissionName, ['content.blog.'])) {
+            return ['all', 'own_projects', 'assigned_projects', 'selected_projects', 'none'];
+        }
+
         if ($this->permissionStartsWith($permissionName, [
             'permissions.',
             'settings.',
@@ -896,7 +993,7 @@ class PermissionMatrixController extends Controller
         }
 
         if ($this->permissionStartsWith($permissionName, ['dashboard.'])) {
-            return ['all', 'own_projects', 'assigned_projects', 'own_unit', 'none'];
+            return ['all', 'own_projects', 'assigned_projects', 'selected_projects', 'own_unit', 'none'];
         }
 
         return ['all', 'own_projects', 'assigned_projects', 'selected_projects', 'none'];
@@ -904,6 +1001,10 @@ class PermissionMatrixController extends Controller
 
     private function defaultScopeForRolePermission(string $roleName, string $permissionName): string
     {
+        if (! $this->permissionAllowedForRole($roleName, $permissionName)) {
+            return 'none';
+        }
+
         if ($roleName === 'super_admin') {
             return 'all';
         }
@@ -935,6 +1036,8 @@ class PermissionMatrixController extends Controller
                     'support.',
                     'requests.',
                     'announcements.',
+                    'content.view',
+                    'content.blog.',
                     'certificates.',
                     'digital_bohca.',
                     'assignments.',
@@ -962,6 +1065,8 @@ class PermissionMatrixController extends Controller
                     'periods.',
                     'calendar.',
                     'announcements.',
+                    'content.view',
+                    'content.blog.',
                     'certificates.',
                     'digital_bohca.',
                     'assignments.',

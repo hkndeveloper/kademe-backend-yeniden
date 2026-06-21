@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
@@ -19,6 +20,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class AssignmentController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
@@ -155,6 +157,7 @@ class AssignmentController extends Controller
 
         $assignment = Assignment::findOrFail($id);
         $user = $request->user();
+        $this->assertPeriodWritable($request, $assignment->period_id);
 
         $canSubmit = Participant::query()
             ->where('user_id', $user->id)
@@ -250,9 +253,16 @@ class AssignmentController extends Controller
 
     public function panelIndex(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'assignments.view');
-        $user = $request->user();
-        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'assignments.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'assignments.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Assignment::query()
             ->with([
@@ -265,20 +275,7 @@ class AssignmentController extends Controller
             ])
             ->withCount('submissions')
             ->orderByDesc('created_at');
-
-        if (! $this->permissionResolver->hasGlobalScope($user, 'assignments.view')) {
-            $query->whereIn('project_id', $projectIds);
-        }
-
-        if ($request->filled('project_id')) {
-            $projectId = $request->integer('project_id');
-            abort_unless(
-                $this->permissionResolver->canAccessProject($user, 'assignments.view', $projectId),
-                403,
-                'Bu proje icin odev goruntuleme yetkiniz yok.'
-            );
-            $query->where('project_id', $projectId);
-        }
+        $this->applyProjectPeriodContext($query, $context);
 
         return response()->json([
             'assignments' => $query->paginate(20)->through(
@@ -309,6 +306,7 @@ class AssignmentController extends Controller
             422,
             'Secilen donem bu projeye ait degil.'
         );
+        $this->assertPeriodWritable($request, (int) $validated['period_id']);
 
         $assignment = Assignment::query()->create([
             'project_id' => $validated['project_id'],
@@ -348,9 +346,17 @@ class AssignmentController extends Controller
 
     public function panelExport(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'assignments.view');
-        $user = $request->user();
-        $projectIds = $this->permissionResolver->projectIdsForPermission($user, 'assignments.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'format' => 'nullable|string|max:20',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'assignments.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $query = Assignment::query()
             ->with([
@@ -362,16 +368,7 @@ class AssignmentController extends Controller
             ])
             ->withCount('submissions')
             ->orderByDesc('created_at');
-
-        if (! $this->permissionResolver->hasGlobalScope($user, 'assignments.view')) {
-            $query->whereIn('project_id', $projectIds);
-        }
-
-        if ($request->filled('project_id')) {
-            $projectId = $request->integer('project_id');
-            $this->abortUnlessProjectAllowed($request, 'assignments.view', $projectId);
-            $query->where('project_id', $projectId);
-        }
+        $this->applyProjectPeriodContext($query, $context);
 
         $assignments = $query->get();
 
@@ -412,6 +409,7 @@ class AssignmentController extends Controller
         $this->abortUnlessAllowed($request, 'assignments.delete');
         $assignment = Assignment::query()->with('submissions:id,assignment_id,file_path')->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'assignments.delete', (int) $assignment->project_id);
+        $this->assertPeriodWritable($request, $assignment->period_id);
         $assignment->submissions->each(fn (AssignmentSubmission $submission) => MediaStorage::delete($submission->file_path));
         $assignment->delete();
 
@@ -422,10 +420,11 @@ class AssignmentController extends Controller
     {
         $this->abortUnlessAllowed($request, 'assignments.submissions.review');
         $submission = AssignmentSubmission::query()
-            ->with('assignment:id,project_id,title')
+            ->with('assignment:id,project_id,period_id,title')
             ->findOrFail($id);
 
         $this->abortUnlessProjectAllowed($request, 'assignments.submissions.review', (int) $submission->assignment->project_id);
+        $this->assertPeriodWritable($request, $submission->assignment->period_id);
 
         $validated = $request->validate([
             'status' => 'required|in:reviewed,approved,rejected',

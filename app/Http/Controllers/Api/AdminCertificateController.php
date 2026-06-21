@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Certificate;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
+use App\Support\CertificatePdfGenerator;
 use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,6 +18,7 @@ use Illuminate\Support\Str;
 class AdminCertificateController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     private const CERTIFICATE_TYPES = [
         'participation',
@@ -31,7 +34,7 @@ class AdminCertificateController extends Controller
 
     private function scopedCertificateQuery(Request $request, string $permission)
     {
-        $query = Certificate::with(['project:id,name', 'user:id,name,surname,email']);
+        $query = Certificate::with(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email']);
 
         if (! $this->permissionResolver->hasGlobalScope($request->user(), $permission)) {
             $projectIds = $this->permissionResolver->projectIdsForPermission($request->user(), $permission);
@@ -77,22 +80,23 @@ class AdminCertificateController extends Controller
      */
     public function index(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'certificates.view');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'search' => 'nullable|string|max:255',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'certificates.view',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
-        $query = $this->scopedCertificateQuery($request, 'certificates.view');
+        $query = Certificate::with(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email']);
+        $this->applyProjectPeriodContext($query, $context);
 
-        if ($request->filled('project_id')) {
-            $projectId = (int) $request->project_id;
-            abort_unless(
-                $this->permissionResolver->canAccessProject($request->user(), 'certificates.view', $projectId),
-                403,
-                'Bu proje icin sertifika goruntuleme yetkiniz yok.',
-            );
-            $query->where('project_id', $projectId);
-        }
-
-        if ($request->filled('search')) {
-            $s = $request->search;
+        if (! empty($validated['search'])) {
+            $s = $validated['search'];
             $query->where(function ($builder) use ($s) {
                 $builder->whereHas('user', function ($q) use ($s) {
                     $q->where('name', 'like', "%$s%")
@@ -112,6 +116,7 @@ class AdminCertificateController extends Controller
                 ? url("/api/certificates/{$certificate->verification_code}/download")
                 : null,
             'project' => $certificate->project,
+            'period' => $certificate->period,
             'user' => $certificate->user,
         ]);
 
@@ -122,22 +127,24 @@ class AdminCertificateController extends Controller
 
     public function export(Request $request)
     {
-        $this->abortUnlessAllowed($request, 'certificates.export');
+        $validated = $request->validate([
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'search' => 'nullable|string|max:255',
+            'format' => 'nullable|string|max:20',
+        ]);
+        $context = $this->resolveProjectPeriodContext(
+            $request,
+            'certificates.export',
+            ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+            ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
-        $query = $this->scopedCertificateQuery($request, 'certificates.export');
+        $query = Certificate::with(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email']);
+        $this->applyProjectPeriodContext($query, $context);
 
-        if ($request->filled('project_id')) {
-            $projectId = (int) $request->project_id;
-            abort_unless(
-                $this->permissionResolver->canAccessProject($request->user(), 'certificates.export', $projectId),
-                403,
-                'Bu proje icin sertifika disa aktarma yetkiniz yok.',
-            );
-            $query->where('project_id', $projectId);
-        }
-
-        if ($request->filled('search')) {
-            $s = $request->search;
+        if (! empty($validated['search'])) {
+            $s = $validated['search'];
             $query->where(function ($builder) use ($s) {
                 $builder->whereHas('user', function ($q) use ($s) {
                     $q->where('name', 'like', "%$s%")
@@ -195,8 +202,21 @@ class AdminCertificateController extends Controller
             'Bu projede sertifika olusturma yetkiniz yok.',
         );
 
+        if (! empty($validated['period_id'])) {
+            abort_unless(
+                \App\Models\Period::query()
+                    ->whereKey((int) $validated['period_id'])
+                    ->where('project_id', (int) $validated['project_id'])
+                    ->exists(),
+                422,
+                'Secilen donem bu projeye ait degil.'
+            );
+            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+        }
+
         $exists = Certificate::where('user_id', $validated['user_id'])
             ->where('project_id', $validated['project_id'])
+            ->where('period_id', $validated['period_id'] ?? null)
             ->where('type', $validated['type'])
             ->first();
 
@@ -219,6 +239,11 @@ class AdminCertificateController extends Controller
             'certificate_path' => $certificatePath,
             'created_by' => $request->user()->id,
         ]);
+
+        if (empty($certificate->certificate_path)) {
+            $certificate = CertificatePdfGenerator::generate($certificate);
+        }
+
         $this->attachCertificateAudit($request, $certificate, 'created');
 
         $certificate->loadMissing(['user:id,email,name,surname', 'project:id,name']);
@@ -253,6 +278,7 @@ class AdminCertificateController extends Controller
             403,
             'Bu sertifikayi silme yetkiniz yok.',
         );
+        $this->assertPeriodWritable($request, $certificate->period_id);
 
         MediaStorage::delete($certificate->certificate_path);
         $this->attachCertificateAudit($request, $certificate, 'deleted');

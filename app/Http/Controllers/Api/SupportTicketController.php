@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\SupportReply;
 use App\Models\SupportTicket;
 use App\Models\Participant;
+use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\AdminExportResponder;
@@ -18,11 +20,13 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SupportTicketController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
@@ -106,22 +110,84 @@ class SupportTicketController extends Controller
             ->exists();
     }
 
-    private function replyPayload(SupportReply $reply): array
+    private function canUseProjectPeriodAsTicketOwner(User $user, int $projectId, int $periodId): bool
     {
+        return Participant::query()
+            ->where('user_id', $user->id)
+            ->where('project_id', $projectId)
+            ->where('period_id', $periodId)
+            ->where(function (Builder $query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->exists();
+    }
+
+    private function resolveSupportPeriod(Request $request, array &$validated, string $permission): ?int
+    {
+        if (empty($validated['period_id'])) {
+            return null;
+        }
+
+        $period = Period::query()->select(['id', 'project_id', 'status'])->findOrFail((int) $validated['period_id']);
+        if (! empty($validated['project_id']) && (int) $validated['project_id'] !== (int) $period->project_id) {
+            throw ValidationException::withMessages([
+                'period_id' => ['Secilen donem bu projeye ait degil.'],
+            ]);
+        }
+
+        $validated['project_id'] = (int) $period->project_id;
+        $user = $request->user();
+        if ($user && in_array($user->role, ['student', 'alumni'], true)) {
+            abort_unless(
+                $this->canUseProjectPeriodAsTicketOwner($user, (int) $period->project_id, (int) $period->id),
+                403,
+                'Bu donem icin destek talebi olusturma yetkiniz bulunmuyor.'
+            );
+        } else {
+            $this->resolveProjectPeriodContext($request, $permission, (int) $period->project_id, (int) $period->id);
+        }
+
+        return (int) $period->id;
+    }
+
+    private function replyPayload(SupportReply $reply, bool $usePanelAttachmentUrls = false): array
+    {
+        $attachmentPath = $reply->attachment_path
+            ? ($usePanelAttachmentUrls
+                ? "/panel/support/tickets/replies/{$reply->id}/attachment"
+                : "/tickets/replies/{$reply->id}/attachment")
+            : null;
+
         return [
             'id' => $reply->id,
             'ticket_id' => $reply->ticket_id,
             'user_id' => $reply->user_id,
             'message' => $reply->message,
             'attachment_path' => $reply->attachment_path,
-            'attachment_download_url' => $reply->attachment_path ? "/tickets/replies/{$reply->id}/attachment" : null,
+            'attachment_download_url' => $attachmentPath,
             'created_at' => optional($reply->created_at)?->toIso8601String(),
             'updated_at' => optional($reply->updated_at)?->toIso8601String(),
             'user' => $reply->relationLoaded('user') ? $reply->user : null,
         ];
     }
 
-    private function ticketPayload(SupportTicket $ticket): array
+    private function ticketAttachmentUrl(SupportTicket $ticket, bool $usePanelAttachmentUrls = false): ?string
+    {
+        if (! $ticket->attachment_path) {
+            return null;
+        }
+
+        return $usePanelAttachmentUrls
+            ? "/panel/support/tickets/{$ticket->id}/attachment"
+            : "/tickets/{$ticket->id}/attachment";
+    }
+
+    private function ticketPayload(SupportTicket $ticket, bool $usePanelAttachmentUrls = false): array
     {
         return [
             'id' => $ticket->id,
@@ -130,19 +196,48 @@ class SupportTicketController extends Controller
             'email' => $ticket->email,
             'subject' => $ticket->subject,
             'message' => $ticket->message,
+            'attachment_path' => $ticket->attachment_path,
+            'attachment_download_url' => $this->ticketAttachmentUrl($ticket, $usePanelAttachmentUrls),
             'category' => $ticket->category,
             'project_id' => $ticket->project_id,
+            'period_id' => $ticket->period_id,
             'assigned_to' => $ticket->assigned_to,
             'status' => $ticket->status,
             'created_at' => optional($ticket->created_at)?->toIso8601String(),
             'updated_at' => optional($ticket->updated_at)?->toIso8601String(),
             'user' => $ticket->relationLoaded('user') ? $ticket->user : null,
             'project' => $ticket->relationLoaded('project') ? $ticket->project : null,
+            'period' => $ticket->relationLoaded('period') ? $ticket->period : null,
             'assignee' => $ticket->relationLoaded('assignee') ? $ticket->assignee : null,
             'replies' => $ticket->relationLoaded('replies')
-                ? $ticket->replies->map(fn (SupportReply $reply) => $this->replyPayload($reply))->values()
+                ? $ticket->replies->map(fn (SupportReply $reply) => $this->replyPayload($reply, $usePanelAttachmentUrls))->values()
                 : [],
         ];
+    }
+
+    private function streamTicketAttachment(SupportTicket $ticket): JsonResponse|StreamedResponse
+    {
+        if (! $ticket->attachment_path) {
+            return response()->json(['message' => 'Ek dosya bulunamadi.'], 404);
+        }
+
+        if ($this->isUrl($ticket->attachment_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json([
+                'download_url' => MediaStorage::url($ticket->attachment_path),
+            ]);
+        }
+
+        if (! MediaStorage::exists($ticket->attachment_path)) {
+            return response()->json(['message' => 'Ek dosya storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($ticket->attachment_path, PATHINFO_EXTENSION);
+        $filename = 'destek_talebi_ek_' . $ticket->id;
+
+        return MediaStorage::disk()->download(
+            $ticket->attachment_path,
+            $filename . ($extension ? ".{$extension}" : '')
+        );
     }
 
     private function streamReplyAttachment(SupportReply $reply): JsonResponse|StreamedResponse
@@ -173,6 +268,13 @@ class SupportTicketController extends Controller
     private function isUrl(string $path): bool
     {
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
+    }
+
+    private function isOfficialDocumentCategory(?string $category): bool
+    {
+        $normalized = Str::lower(trim((string) $category));
+
+        return in_array($normalized, ['official_document', 'official_doc', 'resmi_evrak'], true);
     }
 
     private function pickLeastLoadedAssignee(array $candidateIds): ?int
@@ -281,33 +383,35 @@ class SupportTicketController extends Controller
     public function myTickets(Request $request): JsonResponse
     {
         $tickets = SupportTicket::query()
-            ->with(['project:id,name', 'replies.user:id,name,surname,role'])
+            ->with(['project:id,name', 'period:id,name,status', 'replies.user:id,name,surname,role'])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('created_at')
             ->get();
 
         return response()->json([
-            'tickets' => $tickets->map(fn (SupportTicket $ticket) => $this->ticketPayload($ticket))->values(),
+            'tickets' => $tickets->map(fn (SupportTicket $ticket) => $this->ticketPayload($ticket, false))->values(),
         ]);
     }
 
     public function exportMyTickets(Request $request)
     {
         $tickets = SupportTicket::query()
-            ->with(['project:id,name'])
+            ->with(['project:id,name', 'period:id,name,status'])
             ->where('user_id', $request->user()->id)
             ->when($request->filled('project_id'), fn ($query) => $query->where('project_id', $request->project_id))
+            ->when($request->filled('period_id'), fn ($query) => $query->where('period_id', $request->period_id))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->status))
             ->latest()
             ->get();
 
-        $headings = ['ID', 'Konu', 'Kategori', 'Durum', 'Proje', 'Olusturma Tarihi'];
+        $headings = ['ID', 'Konu', 'Kategori', 'Durum', 'Proje', 'Donem', 'Olusturma Tarihi'];
         $rows = $tickets->map(fn (SupportTicket $ticket) => [
             $ticket->id,
             $ticket->subject,
             $ticket->category,
             $ticket->status,
             $ticket->project?->name ?? '-',
+            $ticket->period?->name ?? '-',
             $ticket->created_at?->format('d.m.Y H:i') ?? '-',
         ])->all();
 
@@ -330,12 +434,18 @@ class SupportTicketController extends Controller
             $this->abortUnlessAllowed($request, 'support.create');
         }
 
+        $officialDocumentRequired = $this->isOfficialDocumentCategory($request->input('category'));
+
         $validated = $request->validate([
             'subject' => 'required|string|max:255',
             'category' => 'required|string|max:100',
             'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
             'message' => 'required|string',
+            'attachment' => $officialDocumentRequired ? 'required|file|max:10240' : 'nullable|file|max:10240',
         ]);
+
+        $periodId = $this->resolveSupportPeriod($request, $validated, 'support.create');
 
         if (! empty($validated['project_id'])) {
             if (in_array($user->role, ['student', 'alumni'], true)) {
@@ -353,6 +463,11 @@ class SupportTicketController extends Controller
             }
         }
 
+        $attachmentPath = null;
+        if ($request->hasFile('attachment') && $request->file('attachment')?->isValid()) {
+            $attachmentPath = MediaStorage::putFile('support-attachments', $request->file('attachment'));
+        }
+
         $autoAssigneeId = $this->resolveAutoAssignee($validated['project_id'] ?? null, $validated['category'] ?? null);
 
         $ticket = SupportTicket::create([
@@ -362,8 +477,10 @@ class SupportTicketController extends Controller
             'subject' => $validated['subject'],
             'category' => $validated['category'],
             'project_id' => $validated['project_id'] ?? null,
+            'period_id' => $periodId,
             'assigned_to' => $autoAssigneeId,
             'message' => $validated['message'],
+            'attachment_path' => $attachmentPath,
             'status' => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
 
@@ -376,7 +493,7 @@ class SupportTicketController extends Controller
 
         return response()->json([
             'message' => 'Destek talebiniz basariyla alindi.',
-            'ticket' => $ticket->fresh(['project:id,name']),
+            'ticket' => $this->ticketPayload($ticket->fresh(['project:id,name', 'period:id,name,status']), false),
         ], 201);
     }
 
@@ -385,7 +502,7 @@ class SupportTicketController extends Controller
      */
     public function storePublic(Request $request): JsonResponse
     {
-        $officialDocumentRequired = $request->input('category') === 'official_document';
+        $officialDocumentRequired = $this->isOfficialDocumentCategory($request->input('category'));
 
         $validated = $request->validate([
             'name'       => 'required|string|max:255',
@@ -484,7 +601,11 @@ class SupportTicketController extends Controller
             );
         }
 
-        return response()->json(['reply' => $this->replyPayload($reply->load('user:id,name,surname,role'))]);
+        $usePanelUrls = ! in_array($user->role, ['student', 'alumni'], true);
+
+        return response()->json([
+            'reply' => $this->replyPayload($reply->load('user:id,name,surname,role'), $usePanelUrls),
+        ]);
     }
 
     public function downloadReplyAttachment(Request $request, int $id): JsonResponse|StreamedResponse
@@ -504,6 +625,19 @@ class SupportTicketController extends Controller
         return $this->streamReplyAttachment($reply);
     }
 
+    public function downloadTicketAttachment(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $ticket = SupportTicket::query()->findOrFail($id);
+        $user = $request->user();
+        $canDownload = (int) $ticket->user_id === (int) $user->id
+            || $this->canAccessTicket($user, $ticket, 'support.view')
+            || $this->canAccessTicket($user, $ticket, 'support.reply');
+
+        abort_unless($canDownload, 403, 'Bu ek dosyayi indirme yetkiniz yok.');
+
+        return $this->streamTicketAttachment($ticket);
+    }
+
     /**
      * Admin tum ticketlari, koordinatör ise kendi proje havuzunu listeler.
      */
@@ -511,12 +645,32 @@ class SupportTicketController extends Controller
     {
         $this->abortUnlessAllowed($request, 'support.view');
         $user = $request->user();
+        $validated = $request->validate([
+            'status' => 'nullable|string|max:50',
+            'category' => 'nullable|string|max:100',
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+            'assigned_to' => 'nullable|integer|exists:users,id',
+            'search' => 'nullable|string|max:255',
+        ]);
+        $periodId = null;
+        if (! empty($validated['period_id'])) {
+            $context = $this->resolveProjectPeriodContext(
+                $request,
+                'support.view',
+                ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+                (int) $validated['period_id']
+            );
+            $validated['project_id'] = $context->projectId;
+            $periodId = $context->periodId;
+        }
 
         $query = SupportTicket::query()
             ->with([
                 'user:id,name,surname,email,role',
                 'assignee:id,name,surname,role',
                 'project:id,name',
+                'period:id,name,status',
                 'replies.user:id,name,surname,role',
             ])
             ->latest();
@@ -532,24 +686,28 @@ class SupportTicketController extends Controller
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('category')) {
-            $query->where('category', $request->category);
+        if (! empty($validated['category'])) {
+            $query->where('category', $validated['category']);
         }
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', $request->project_id);
+        if (! empty($validated['project_id'])) {
+            $query->where('project_id', (int) $validated['project_id']);
         }
 
-        if ($request->filled('assigned_to')) {
-            $query->where('assigned_to', $request->assigned_to);
+        if ($periodId !== null) {
+            $query->where('period_id', $periodId);
         }
 
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (! empty($validated['assigned_to'])) {
+            $query->where('assigned_to', (int) $validated['assigned_to']);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
             $query->where(function (Builder $builder) use ($search) {
                 $builder
                     ->where('subject', 'like', '%' . $search . '%')
@@ -560,7 +718,7 @@ class SupportTicketController extends Controller
         }
 
         return response()->json([
-            'tickets' => $query->paginate(20)->through(fn (SupportTicket $ticket) => $this->ticketPayload($ticket)),
+            'tickets' => $query->paginate(20)->through(fn (SupportTicket $ticket) => $this->ticketPayload($ticket, true)),
         ]);
     }
 
@@ -568,12 +726,31 @@ class SupportTicketController extends Controller
     {
         $this->abortUnlessAllowed($request, 'support.export');
         $user = $request->user();
+        $validated = $request->validate([
+            'status' => 'nullable|string|max:50',
+            'category' => 'nullable|string|max:100',
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+            'search' => 'nullable|string|max:255',
+        ]);
+        $periodId = null;
+        if (! empty($validated['period_id'])) {
+            $context = $this->resolveProjectPeriodContext(
+                $request,
+                'support.export',
+                ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
+                (int) $validated['period_id']
+            );
+            $validated['project_id'] = $context->projectId;
+            $periodId = $context->periodId;
+        }
 
         $query = SupportTicket::query()
             ->with([
                 'user:id,name,surname,email,role',
                 'assignee:id,name,surname,role',
                 'project:id,name',
+                'period:id,name,status',
             ])
             ->latest();
 
@@ -588,20 +765,24 @@ class SupportTicketController extends Controller
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('category')) {
-            $query->where('category', $request->category);
+        if (! empty($validated['category'])) {
+            $query->where('category', $validated['category']);
         }
 
-        if ($request->filled('project_id')) {
-            $query->where('project_id', $request->project_id);
+        if (! empty($validated['project_id'])) {
+            $query->where('project_id', (int) $validated['project_id']);
         }
 
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if ($periodId !== null) {
+            $query->where('period_id', $periodId);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = $validated['search'];
             $query->where(function (Builder $builder) use ($search) {
                 $builder
                     ->where('subject', 'like', '%' . $search . '%')
@@ -613,7 +794,7 @@ class SupportTicketController extends Controller
 
         $tickets = $query->get();
 
-        $headings = ['ID', 'Konu', 'Kategori', 'Durum', 'Talep Sahibi', 'E-posta', 'Proje', 'Atanan Kisi', 'Olusturma Tarihi'];
+        $headings = ['ID', 'Konu', 'Kategori', 'Durum', 'Talep Sahibi', 'E-posta', 'Proje', 'Donem', 'Atanan Kisi', 'Olusturma Tarihi'];
         $rows = $tickets->map(fn (SupportTicket $ticket) => [
             $ticket->id,
             $ticket->subject,
@@ -622,6 +803,7 @@ class SupportTicketController extends Controller
             $ticket->user ? trim($ticket->user->name . ' ' . $ticket->user->surname) : $ticket->name,
             $ticket->user?->email ?? $ticket->email ?? '-',
             $ticket->project?->name ?? '-',
+            $ticket->period?->name ?? '-',
             $ticket->assignee ? trim($ticket->assignee->name . ' ' . $ticket->assignee->surname) : '-',
             $ticket->created_at?->format('d.m.Y H:i') ?? '-',
         ])->all();

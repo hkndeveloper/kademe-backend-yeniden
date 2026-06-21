@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\EurodeskPartnership;
 use App\Models\EurodeskProject;
@@ -24,6 +25,7 @@ use Illuminate\Validation\Rule;
 class ProjectSpecialModuleController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -37,9 +39,50 @@ class ProjectSpecialModuleController extends Controller
         return $project;
     }
 
+    private function ensureProjectSupports(Project $project, string|array $moduleKeys): void
+    {
+        $required = is_array($moduleKeys) ? $moduleKeys : [$moduleKeys];
+        $available = ProjectSpecialModuleCatalog::forProject($project);
+
+        abort_unless(
+            collect($required)->contains(fn (string $key) => in_array($key, $available, true)),
+            404,
+            'Bu proje turu bu ozel modulu desteklemiyor.'
+        );
+    }
+
+    /**
+     * @param  array<string, bool>  $access
+     * @return array<string, bool>
+     */
+    private function filterAccessBySupportedModules(Project $project, array $access): array
+    {
+        $modules = ProjectSpecialModuleCatalog::forProject($project);
+        $families = [
+            'projects.internships.' => ['internships'],
+            'projects.mentors.' => ['mentors'],
+            'projects.eurodesk.' => ['eurodesk_projects'],
+            'projects.rewards.' => ['reward_tiers', 'participants_by_module', 'badges'],
+        ];
+
+        foreach ($families as $prefix => $requiredModules) {
+            $supported = collect($requiredModules)->contains(fn (string $key) => in_array($key, $modules, true));
+            foreach (array_keys($access) as $permission) {
+                if (str_starts_with($permission, $prefix) && ! $supported) {
+                    $access[$permission] = false;
+                }
+            }
+        }
+
+        return $access;
+    }
+
     public function index(Request $request, int $projectId): JsonResponse
     {
         $project = Project::query()->findOrFail($projectId);
+        $validated = $request->validate([
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
         $permissions = [
             'projects.internships.view',
             'projects.internships.manage',
@@ -50,17 +93,26 @@ class ProjectSpecialModuleController extends Controller
             'projects.rewards.view',
             'projects.rewards.manage',
         ];
+        $context = $this->resolveProjectPeriodContextForAnyPermission(
+            $request,
+            $permissions,
+            $project->id,
+            isset($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
+        $periodId = $context->periodId;
 
         $access = [];
         foreach ($permissions as $permission) {
             $access[$permission] = $this->permissionResolver->canAccessProject($request->user(), $permission, $project->id);
         }
+        $access = $this->filterAccessBySupportedModules($project, $access);
 
         abort_unless(in_array(true, $access, true), 403, 'Bu proje modulleri icin yetkiniz bulunmuyor.');
 
         $participants = Participant::query()
             ->with('user:id,name,surname,email')
             ->where('project_id', $project->id)
+            ->when($periodId, fn ($query) => $query->where('period_id', $periodId))
             ->orderByDesc('created_at')
             ->get();
 
@@ -85,15 +137,50 @@ class ProjectSpecialModuleController extends Controller
                 ? Internship::query()
                     ->with('participant.user:id,name,surname,email')
                     ->whereHas('participant', fn ($query) => $query->where('project_id', $project->id))
+                    ->when($periodId, fn ($query) => $query->whereHas('participant', fn ($inner) => $inner->where('period_id', $periodId)))
                     ->latest()
                     ->get()
                 : [],
             'mentors' => ($access['projects.mentors.view'] || $access['projects.mentors.manage'])
-                ? Mentor::query()->where('project_id', $project->id)->latest()->get()
+                ? Mentor::query()
+                    ->where('project_id', $project->id)
+                    ->with(['participants' => fn ($query) => $query
+                        ->when($periodId, fn ($builder) => $builder->wherePivot('period_id', $periodId))
+                        ->with('user:id,name,surname,email')
+                    ])
+                    ->latest()
+                    ->get()
+                    ->map(fn (Mentor $mentor) => [
+                        'id' => $mentor->id,
+                        'name' => $mentor->name,
+                        'expertise' => $mentor->expertise,
+                        'bio' => $mentor->bio,
+                        'photo_path' => $mentor->photo_path,
+                        'assigned_participants' => $mentor->participants
+                            ->map(fn (Participant $participant) => [
+                                'id' => $participant->id,
+                                'name' => trim(($participant->user?->name ?? '').' '.($participant->user?->surname ?? '')),
+                                'email' => $participant->user?->email,
+                                'period_id' => $participant->pivot?->period_id,
+                                'note' => $participant->pivot?->note,
+                            ])
+                            ->values(),
+                    ])
+                    ->values()
                 : [],
             'eurodesk_projects' => ($access['projects.eurodesk.view'] || $access['projects.eurodesk.manage'])
-                ? EurodeskProject::query()->with('partnerships')->where('project_id', $project->id)->latest()->get()
+                ? EurodeskProject::query()
+                    ->with(['partnerships', 'period:id,name,status'])
+                    ->where('project_id', $project->id)
+                    ->when($periodId, fn ($query) => $query->where(function ($builder) use ($periodId) {
+                        $builder->whereNull('period_id')->orWhere('period_id', $periodId);
+                    }))
+                    ->latest()
+                    ->get()
                 : [],
+            'eurodesk_summary' => ($access['projects.eurodesk.view'] || $access['projects.eurodesk.manage'])
+                ? $this->eurodeskSummary($project, $periodId)
+                : null,
             'reward_tiers' => ($access['projects.rewards.view'] || $access['projects.rewards.manage'])
                 ? $rewardTiers
                 : [],
@@ -102,32 +189,22 @@ class ProjectSpecialModuleController extends Controller
                 : [],
             'reward_awards' => ($access['projects.rewards.view'] || $access['projects.rewards.manage'])
                 ? RewardAward::query()
-                    ->with(['participant.user:id,name,surname,email', 'tier:id,name,reward_description', 'awarder:id,name,surname'])
+                    ->with(['participant.user:id,name,surname,email', 'tier:id,name,reward_description', 'awarder:id,name,surname', 'deliverer:id,name,surname'])
                     ->where('project_id', $project->id)
+                    ->when($periodId, fn ($query) => $query->whereHas('participant', fn ($inner) => $inner->where('period_id', $periodId)))
                     ->latest('awarded_at')
                     ->get()
-                    ->map(fn (RewardAward $award) => [
-                        'id' => $award->id,
-                        'participant_id' => $award->participant_id,
-                        'name' => trim(($award->participant?->user?->name ?? '').' '.($award->participant?->user?->surname ?? '')),
-                        'email' => $award->participant?->user?->email,
-                        'reward_name' => $award->reward_name,
-                        'status' => $award->status,
-                        'awarded_at' => optional($award->awarded_at)?->toIso8601String(),
-                        'note' => $award->note,
-                        'tier' => $award->tier?->only(['id', 'name', 'reward_description']),
-                        'awarder' => $award->awarder ? trim($award->awarder->name.' '.$award->awarder->surname) : null,
-                    ])
+                    ->map(fn (RewardAward $award) => $this->rewardAwardPayload($award))
                     ->values()
                 : [],
-            'kademe_modules' => $this->kademeModulesPayload($project, $access),
+            'kademe_modules' => $this->kademeModulesPayload($project, $access, $periodId),
         ]);
     }
 
     /**
      * @param  array<string, bool>  $access
      */
-    private function kademeModulesPayload(Project $project, array $access): array
+    private function kademeModulesPayload(Project $project, array $access, ?int $periodId = null): array
     {
         if (! ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project)) {
             return [];
@@ -137,7 +214,13 @@ class ProjectSpecialModuleController extends Controller
             return [];
         }
 
-        $query = ProjectModule::query()->where('project_id', $project->id)->orderBy('sort_order');
+        $query = ProjectModule::query()
+            ->where('project_id', $project->id)
+            ->when(
+                $periodId,
+                fn ($builder) => $builder->where(fn ($inner) => $inner->whereNull('period_id')->orWhere('period_id', $periodId))
+            )
+            ->orderBy('sort_order');
 
         if ($access['projects.rewards.manage'] ?? false) {
             return $query
@@ -162,6 +245,7 @@ class ProjectSpecialModuleController extends Controller
             'id' => $module->id,
             'title' => $module->title,
             'description' => $module->description,
+            'period_id' => $module->period_id,
             'sort_order' => (int) $module->sort_order,
             'is_active' => (bool) $module->is_active,
             'application_open' => (bool) $module->application_open,
@@ -201,6 +285,14 @@ class ProjectSpecialModuleController extends Controller
         abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
 
         $validated = $this->validatedKademeModule($request, true);
+        if (! empty($validated['period_id'])) {
+            abort_unless(
+                \App\Models\Period::query()->whereKey((int) $validated['period_id'])->where('project_id', $projectId)->exists(),
+                422,
+                'Secilen donem bu projeye ait degil.'
+            );
+            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+        }
 
         $module = ProjectModule::query()->create(array_merge([
             'sort_order' => 0,
@@ -221,7 +313,17 @@ class ProjectSpecialModuleController extends Controller
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
         abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
         $module = ProjectModule::query()->where('project_id', $projectId)->findOrFail($id);
-        $module->update($this->validatedKademeModule($request, false));
+        $validated = $this->validatedKademeModule($request, false);
+        if (! empty($validated['period_id'])) {
+            abort_unless(
+                \App\Models\Period::query()->whereKey((int) $validated['period_id'])->where('project_id', $projectId)->exists(),
+                422,
+                'Secilen donem bu projeye ait degil.'
+            );
+        }
+        $this->assertPeriodWritable($request, $module->period_id);
+        $this->assertPeriodWritable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
+        $module->update($validated);
 
         return response()->json([
             'message' => 'KADEME+ modulu guncellendi.',
@@ -233,17 +335,22 @@ class ProjectSpecialModuleController extends Controller
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
         abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
-        ProjectModule::query()->where('project_id', $projectId)->findOrFail($id)->delete();
+        $module = ProjectModule::query()->where('project_id', $projectId)->findOrFail($id);
+        $this->assertPeriodWritable($request, $module->period_id);
+        $module->delete();
 
         return response()->json(['message' => 'KADEME+ modulu silindi.']);
     }
 
     public function updateKademeModuleEnrollment(Request $request, int $projectId, int $enrollmentId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'participants_by_module');
         $enrollment = ProjectModuleEnrollment::query()
+            ->with('module:id,project_id,period_id')
             ->whereHas('module', fn ($q) => $q->where('project_id', $projectId))
             ->findOrFail($enrollmentId);
+        $this->assertPeriodWritable($request, $enrollment->module?->period_id);
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
@@ -269,6 +376,7 @@ class ProjectSpecialModuleController extends Controller
 
         return $request->validate([
             'title' => $titleRule.'|string|max:255',
+            'period_id' => 'nullable|integer|exists:periods,id',
             'description' => 'nullable|string|max:20000',
             'sort_order' => 'nullable|integer|min:0',
             'is_active' => 'sometimes|boolean',
@@ -291,7 +399,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function storeInternship(Request $request, int $projectId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.internships.manage');
+        $project = $this->project($request, $projectId, 'projects.internships.manage');
+        $this->ensureProjectSupports($project, 'internships');
         $validated = $request->validate([
             'participant_id' => 'required|exists:participants,id',
             'company_name' => 'required|string|max:255',
@@ -302,11 +411,9 @@ class ProjectSpecialModuleController extends Controller
             'document_path' => 'nullable|string|max:2048',
         ]);
 
-        abort_unless(
-            Participant::query()->where('id', $validated['participant_id'])->where('project_id', $projectId)->exists(),
-            422,
-            'Secilen katilimci bu projeye ait degil.'
-        );
+        $participant = Participant::query()->where('id', $validated['participant_id'])->where('project_id', $projectId)->first();
+        abort_unless($participant, 422, 'Secilen katilimci bu projeye ait degil.');
+        $this->assertPeriodWritable($request, $participant->period_id);
 
         return response()->json([
             'message' => 'Staj bilgisi kaydedildi.',
@@ -316,10 +423,13 @@ class ProjectSpecialModuleController extends Controller
 
     public function updateInternship(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.internships.manage');
+        $project = $this->project($request, $projectId, 'projects.internships.manage');
+        $this->ensureProjectSupports($project, 'internships');
         $internship = Internship::query()
+            ->with('participant:id,period_id')
             ->whereHas('participant', fn ($query) => $query->where('project_id', $projectId))
             ->findOrFail($id);
+        $this->assertPeriodWritable($request, $internship->participant?->period_id);
         $validated = $request->validate([
             'company_name' => 'required|string|max:255',
             'position' => 'required|string|max:255',
@@ -336,18 +446,22 @@ class ProjectSpecialModuleController extends Controller
 
     public function destroyInternship(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.internships.manage');
-        Internship::query()
+        $project = $this->project($request, $projectId, 'projects.internships.manage');
+        $this->ensureProjectSupports($project, 'internships');
+        $internship = Internship::query()
+            ->with('participant:id,period_id')
             ->whereHas('participant', fn ($query) => $query->where('project_id', $projectId))
-            ->findOrFail($id)
-            ->delete();
+            ->findOrFail($id);
+        $this->assertPeriodWritable($request, $internship->participant?->period_id);
+        $internship->delete();
 
         return response()->json(['message' => 'Staj bilgisi silindi.']);
     }
 
     public function storeMentor(Request $request, int $projectId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.mentors.manage');
+        $project = $this->project($request, $projectId, 'projects.mentors.manage');
+        $this->ensureProjectSupports($project, 'mentors');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'bio' => 'nullable|string|max:5000',
@@ -363,7 +477,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function updateMentor(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.mentors.manage');
+        $project = $this->project($request, $projectId, 'projects.mentors.manage');
+        $this->ensureProjectSupports($project, 'mentors');
         $mentor = Mentor::query()->where('project_id', $projectId)->findOrFail($id);
         $mentor->update($request->validate([
             'name' => 'required|string|max:255',
@@ -377,7 +492,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function destroyMentor(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.mentors.manage');
+        $project = $this->project($request, $projectId, 'projects.mentors.manage');
+        $this->ensureProjectSupports($project, 'mentors');
         Mentor::query()->where('project_id', $projectId)->findOrFail($id)->delete();
 
         return response()->json(['message' => 'Mentor silindi.']);
@@ -389,7 +505,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function assignMentorToParticipant(Request $request, int $projectId, int $mentorId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.mentors.manage');
+        $project = $this->project($request, $projectId, 'projects.mentors.manage');
+        $this->ensureProjectSupports($project, 'mentors');
         $mentor = Mentor::query()->where('project_id', $projectId)->findOrFail($mentorId);
 
         $validated = $request->validate([
@@ -398,9 +515,23 @@ class ProjectSpecialModuleController extends Controller
             'note'           => 'nullable|string|max:1000',
         ]);
 
+        $participant = Participant::query()
+            ->where('project_id', $projectId)
+            ->findOrFail((int) $validated['participant_id']);
+
+        if (! empty($validated['period_id'])) {
+            $this->assertOptionalPeriodBelongsToProject($validated['period_id'], $projectId);
+            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+            abort_unless(
+                (int) $participant->period_id === (int) $validated['period_id'],
+                422,
+                'Secilen katilimci bu doneme ait degil.'
+            );
+        }
+
         $mentor->participants()->syncWithoutDetaching([
             $validated['participant_id'] => [
-                'period_id'   => $validated['period_id'] ?? null,
+                'period_id'   => $validated['period_id'] ?? $participant->period_id,
                 'assigned_by' => $request->user()->id,
                 'note'        => $validated['note'] ?? null,
             ],
@@ -411,8 +542,13 @@ class ProjectSpecialModuleController extends Controller
 
     public function unassignMentorFromParticipant(Request $request, int $projectId, int $mentorId, int $participantId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.mentors.manage');
+        $project = $this->project($request, $projectId, 'projects.mentors.manage');
+        $this->ensureProjectSupports($project, 'mentors');
         $mentor = Mentor::query()->where('project_id', $projectId)->findOrFail($mentorId);
+        $participant = Participant::query()
+            ->where('project_id', $projectId)
+            ->findOrFail($participantId);
+        $this->assertPeriodWritable($request, $participant->period_id);
         $mentor->participants()->detach($participantId);
 
         return response()->json(['message' => 'Katilimci mentor eslestirmesi kaldirildi.']);
@@ -420,9 +556,19 @@ class ProjectSpecialModuleController extends Controller
 
     public function mentorParticipants(Request $request, int $projectId, int $mentorId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.mentors.view');
+        $project = $this->project($request, $projectId, 'projects.mentors.view');
+        $this->ensureProjectSupports($project, 'mentors');
+        $validated = $request->validate([
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+        if (! empty($validated['period_id'])) {
+            $this->assertOptionalPeriodBelongsToProject($validated['period_id'], $projectId);
+        }
+
         $mentor = Mentor::query()->where('project_id', $projectId)->with([
-            'participants.user:id,name,surname,email',
+            'participants' => fn ($query) => $query
+                ->when(! empty($validated['period_id']), fn ($builder) => $builder->wherePivot('period_id', (int) $validated['period_id']))
+                ->with('user:id,name,surname,email'),
         ])->findOrFail($mentorId);
 
         return response()->json([
@@ -431,30 +577,72 @@ class ProjectSpecialModuleController extends Controller
         ]);
     }
 
+    private function eurodeskSummary(Project $project, ?int $periodId): array
+    {
+        $rows = EurodeskProject::query()
+            ->with('partnerships:id,eurodesk_project_id,country')
+            ->where('project_id', $project->id)
+            ->when($periodId, fn ($query) => $query->where(function ($builder) use ($periodId) {
+                $builder->whereNull('period_id')->orWhere('period_id', $periodId);
+            }))
+            ->get();
+
+        $countries = $rows
+            ->flatMap(fn (EurodeskProject $row) => $row->partnerships->pluck('country'))
+            ->filter()
+            ->map(fn ($country) => trim((string) $country))
+            ->filter()
+            ->unique()
+            ->values();
+
+        return [
+            'total_projects' => $rows->count(),
+            'applied_projects' => $rows->where('grant_status', 'applied')->count(),
+            'approved_projects' => $rows->where('grant_status', 'approved')->count(),
+            'completed_projects' => $rows->where('grant_status', 'completed')->count(),
+            'rejected_projects' => $rows->where('grant_status', 'rejected')->count(),
+            'total_grant_amount' => round((float) $rows->sum(fn (EurodeskProject $row) => (float) $row->grant_amount), 2),
+            'approved_grant_amount' => round((float) $rows->where('grant_status', 'approved')->sum(fn (EurodeskProject $row) => (float) $row->grant_amount), 2),
+            'partnership_count' => $rows->sum(fn (EurodeskProject $row) => $row->partnerships->count()),
+            'country_count' => $countries->count(),
+            'countries' => $countries->all(),
+        ];
+    }
     public function storeEurodeskProject(Request $request, int $projectId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $this->ensureProjectSupports($project, 'eurodesk_projects');
         $validated = $this->validateEurodesk($request);
+        $this->assertOptionalPeriodBelongsToProject($validated['period_id'] ?? null, $projectId);
+        $this->assertPeriodWritable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
 
         return response()->json([
             'message' => 'Eurodesk proje bilgisi kaydedildi.',
-            'eurodesk_project' => EurodeskProject::create($validated + ['project_id' => $projectId])->load('partnerships'),
+            'eurodesk_project' => EurodeskProject::create($validated + ['project_id' => $projectId])->load(['partnerships', 'period:id,name,status']),
         ], 201);
     }
 
     public function updateEurodeskProject(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $this->ensureProjectSupports($project, 'eurodesk_projects');
         $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($id);
-        $eurodeskProject->update($this->validateEurodesk($request));
+        $validated = $this->validateEurodesk($request);
+        $this->assertOptionalPeriodBelongsToProject($validated['period_id'] ?? null, $projectId);
+        $this->assertPeriodWritable($request, $eurodeskProject->period_id);
+        $this->assertPeriodWritable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
+        $eurodeskProject->update($validated);
 
-        return response()->json(['message' => 'Eurodesk proje bilgisi guncellendi.', 'eurodesk_project' => $eurodeskProject->fresh('partnerships')]);
+        return response()->json(['message' => 'Eurodesk proje bilgisi guncellendi.', 'eurodesk_project' => $eurodeskProject->fresh(['partnerships', 'period:id,name,status'])]);
     }
 
     public function destroyEurodeskProject(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.eurodesk.manage');
-        EurodeskProject::query()->where('project_id', $projectId)->findOrFail($id)->delete();
+        $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $this->ensureProjectSupports($project, 'eurodesk_projects');
+        $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($id);
+        $this->assertPeriodWritable($request, $eurodeskProject->period_id);
+        $eurodeskProject->delete();
 
         return response()->json(['message' => 'Eurodesk proje bilgisi silindi.']);
     }
@@ -465,8 +653,10 @@ class ProjectSpecialModuleController extends Controller
 
     public function storeEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $this->ensureProjectSupports($project, 'eurodesk_projects');
         $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($eurodeskProjectId);
+        $this->assertPeriodWritable($request, $eurodeskProject->period_id);
 
         $validated = $request->validate([
             'organization_name' => 'required|string|max:255',
@@ -481,8 +671,10 @@ class ProjectSpecialModuleController extends Controller
 
     public function updateEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId, int $partnershipId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $this->ensureProjectSupports($project, 'eurodesk_projects');
         $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($eurodeskProjectId);
+        $this->assertPeriodWritable($request, $eurodeskProject->period_id);
 
         $partnership = EurodeskPartnership::query()
             ->where('eurodesk_project_id', $eurodeskProject->id)
@@ -499,8 +691,10 @@ class ProjectSpecialModuleController extends Controller
 
     public function destroyEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId, int $partnershipId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
+        $this->ensureProjectSupports($project, 'eurodesk_projects');
         $eurodeskProject = EurodeskProject::query()->where('project_id', $projectId)->findOrFail($eurodeskProjectId);
+        $this->assertPeriodWritable($request, $eurodeskProject->period_id);
 
         EurodeskPartnership::query()
             ->where('eurodesk_project_id', $eurodeskProject->id)
@@ -513,6 +707,7 @@ class ProjectSpecialModuleController extends Controller
     private function validateEurodesk(Request $request): array
     {
         return $request->validate([
+            'period_id' => 'nullable|integer|exists:periods,id',
             'title' => 'required|string|max:255',
             'partner_organizations' => 'nullable|array',
             'partner_organizations.*' => 'nullable|string|max:255',
@@ -523,9 +718,41 @@ class ProjectSpecialModuleController extends Controller
         ]);
     }
 
+    private function assertOptionalPeriodBelongsToProject(mixed $periodId, int $projectId): void
+    {
+        if (empty($periodId)) {
+            return;
+        }
+
+        abort_unless(
+            \App\Models\Period::query()->whereKey((int) $periodId)->where('project_id', $projectId)->exists(),
+            422,
+            'Secilen donem bu projeye ait degil.'
+        );
+    }
+
+    private function rewardAwardPayload(RewardAward $award): array
+    {
+        return [
+            'id' => $award->id,
+            'participant_id' => $award->participant_id,
+            'reward_tier_id' => $award->reward_tier_id,
+            'name' => trim(($award->participant?->user?->name ?? '').' '.($award->participant?->user?->surname ?? '')),
+            'email' => $award->participant?->user?->email,
+            'reward_name' => $award->reward_name,
+            'status' => $award->status,
+            'awarded_at' => optional($award->awarded_at)?->toIso8601String(),
+            'delivered_at' => optional($award->delivered_at)?->toIso8601String(),
+            'note' => $award->note,
+            'tier' => $award->tier?->only(['id', 'name', 'reward_description']),
+            'awarder' => $award->awarder ? trim($award->awarder->name.' '.$award->awarder->surname) : null,
+            'deliverer' => $award->deliverer ? trim($award->deliverer->name.' '.$award->deliverer->surname) : null,
+        ];
+    }
     public function storeRewardTier(Request $request, int $projectId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'reward_tiers');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:5000',
@@ -542,7 +769,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function updateRewardTier(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'reward_tiers');
         $tier = RewardTier::query()->where('project_id', $projectId)->findOrFail($id);
         $tier->update($request->validate([
             'name' => 'required|string|max:255',
@@ -557,7 +785,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function destroyRewardTier(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'reward_tiers');
         RewardTier::query()->where('project_id', $projectId)->findOrFail($id)->delete();
 
         return response()->json(['message' => 'Hediye kademesi silindi.']);
@@ -565,7 +794,8 @@ class ProjectSpecialModuleController extends Controller
 
     public function storeRewardAward(Request $request, int $projectId): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'reward_tiers');
         $validated = $request->validate([
             'participant_id' => 'required|exists:participants,id',
             'reward_tier_id' => 'nullable|exists:reward_tiers,id',
@@ -575,11 +805,9 @@ class ProjectSpecialModuleController extends Controller
             'note' => 'nullable|string|max:2000',
         ]);
 
-        abort_unless(
-            Participant::query()->where('id', $validated['participant_id'])->where('project_id', $projectId)->exists(),
-            422,
-            'Secilen katilimci bu projeye ait degil.'
-        );
+        $participant = Participant::query()->where('id', $validated['participant_id'])->where('project_id', $projectId)->first();
+        abort_unless($participant, 422, 'Secilen katilimci bu projeye ait degil.');
+        $this->assertPeriodWritable($request, $participant->period_id);
 
         if (! empty($validated['reward_tier_id'])) {
             abort_unless(
@@ -607,29 +835,38 @@ class ProjectSpecialModuleController extends Controller
 
         return response()->json([
             'message' => 'Hediye kaydi olusturuldu.',
-            'reward_award' => $award->load(['participant.user:id,name,surname,email', 'tier:id,name,reward_description', 'awarder:id,name,surname']),
+            'reward_award' => $this->rewardAwardPayload($award->load(['participant.user:id,name,surname,email', 'tier:id,name,reward_description', 'awarder:id,name,surname', 'deliverer:id,name,surname'])),
         ], 201);
     }
 
     public function markRewardDelivered(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'reward_tiers');
         $award = RewardAward::query()
+            ->with('participant:id,period_id')
             ->where('project_id', $projectId)
             ->findOrFail($id);
+        $this->assertPeriodWritable($request, $award->participant?->period_id);
 
         $award->markDelivered($request->user()->id);
 
-        return response()->json(['message' => 'Hediye teslim edildi olarak isaretlendi.', 'award' => $award->fresh()]);
+        return response()->json([
+            'message' => 'Hediye teslim edildi olarak isaretlendi.',
+            'award' => $this->rewardAwardPayload($award->fresh(['participant.user:id,name,surname,email', 'tier:id,name,reward_description', 'awarder:id,name,surname', 'deliverer:id,name,surname'])),
+        ]);
     }
 
     public function destroyRewardAward(Request $request, int $projectId, int $id): JsonResponse
     {
-        $this->project($request, $projectId, 'projects.rewards.manage');
-        RewardAward::query()
+        $project = $this->project($request, $projectId, 'projects.rewards.manage');
+        $this->ensureProjectSupports($project, 'reward_tiers');
+        $award = RewardAward::query()
+            ->with('participant:id,period_id')
             ->where('project_id', $projectId)
-            ->findOrFail($id)
-            ->delete();
+            ->findOrFail($id);
+        $this->assertPeriodWritable($request, $award->participant?->period_id);
+        $award->delete();
 
         return response()->json(['message' => 'Hediye kaydi silindi.']);
     }
@@ -682,3 +919,4 @@ class ProjectSpecialModuleController extends Controller
             ->all();
     }
 }
+

@@ -3,41 +3,30 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\PersonalityTestResolver;
 use Illuminate\Http\Request;
 
 class PersonalityTestController extends Controller
 {
     private function questions(): array
     {
-        return [
-            ['id' => 'vision', 'category' => 'leadership', 'text' => 'Uzun vadeli hedefler belirlemek beni motive eder.'],
-            ['id' => 'initiative', 'category' => 'leadership', 'text' => 'Bir grupta sorumluluk almakta rahat hissederim.'],
-            ['id' => 'empathy', 'category' => 'social', 'text' => 'Baskalarinin duygularini hizlica fark ederim.'],
-            ['id' => 'communication', 'category' => 'social', 'text' => 'Yeni insanlarla iletisim kurmak benim icin kolaydir.'],
-            ['id' => 'discipline', 'category' => 'execution', 'text' => 'Plan yaptigimda o plana sadik kalmaya calisirim.'],
-            ['id' => 'focus', 'category' => 'execution', 'text' => 'Uzun sure dikkat gerektiren islerde verimli kalabilirim.'],
-            ['id' => 'adaptability', 'category' => 'resilience', 'text' => 'Beklenmedik degisikliklere hizli uyum saglarim.'],
-            ['id' => 'stress', 'category' => 'resilience', 'text' => 'Yogun baski altinda sakin kalabilirim.'],
-        ];
+        return PersonalityTestResolver::resolved()['questions'];
     }
 
     private function scale(): array
     {
-        return [
-            1 => 'Kesinlikle katilmiyorum',
-            2 => 'Katilmiyorum',
-            3 => 'Kararsizim',
-            4 => 'Katiliyorum',
-            5 => 'Kesinlikle katiliyorum',
-        ];
+        return PersonalityTestResolver::scale();
     }
 
     public function show(Request $request)
     {
         $profile = $request->user()->profile;
+        $test = PersonalityTestResolver::resolved();
 
         return response()->json([
-            'questions' => $this->questions(),
+            'template_id' => $test['template_id'],
+            'template_name' => $test['template_name'],
+            'questions' => $test['questions'],
             'scale' => $this->scale(),
             'saved_result' => $profile?->personality_test_data,
         ]);
@@ -45,7 +34,8 @@ class PersonalityTestController extends Controller
 
     public function submit(Request $request)
     {
-        $questions = collect($this->questions());
+        $test = PersonalityTestResolver::resolved();
+        $questions = collect($test['questions']);
         $questionIds = $questions->pluck('id')->all();
 
         $validated = $request->validate([
@@ -79,14 +69,11 @@ class PersonalityTestController extends Controller
         arsort($scores);
         $topCategory = array_key_first($scores);
 
-        $summaries = [
-            'leadership' => 'Liderlik ve inisiyatif yonun guclu gorunuyor.',
-            'social' => 'Iletisim ve empati tarafin one cikiyor.',
-            'execution' => 'Disiplin ve uygulama odagin dikkat cekiyor.',
-            'resilience' => 'Uyum ve psikolojik dayanikliligin guclu gorunuyor.',
-        ];
+        $summaries = $test['summaries'];
 
         $result = [
+            'template_id' => $test['template_id'],
+            'template_name' => $test['template_name'],
             'answers' => array_map(fn ($value) => (int) $value, $answers),
             'scores' => $scores,
             'top_category' => $topCategory,

@@ -27,6 +27,7 @@ class DigitalBohca extends Model
     protected $fillable = [
         'user_id',
         'project_id',
+        'period_id',
         'title',
         'description',
         'file_path',
@@ -48,6 +49,11 @@ class DigitalBohca extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function uploader()

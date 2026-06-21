@@ -33,6 +33,9 @@ class User extends Authenticatable implements CanResetPasswordContract
         'class_year',
         'hometown',
         'profile_photo_path',
+        'public_profile_visible',
+        'public_photo_visible',
+        'public_alumni_visible',
         'role',
         'status',
         'blacklist_count',
@@ -70,6 +73,9 @@ class User extends Authenticatable implements CanResetPasswordContract
             'kvkk_forgotten' => 'boolean',
             'yok_verified' => 'boolean',
             'tc_verified' => 'boolean',
+            'public_profile_visible' => 'boolean',
+            'public_photo_visible' => 'boolean',
+            'public_alumni_visible' => 'boolean',
         ];
     }
 

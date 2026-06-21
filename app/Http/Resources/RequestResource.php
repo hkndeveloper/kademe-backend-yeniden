@@ -24,7 +24,7 @@ class RequestResource extends JsonResource
             'response_file_path' => $this->response_file_path,
             'response_file_url' => MediaStorage::directDownloadsEnabled() ? MediaStorage::url($this->response_file_path) : null,
             'response_file_download_url' => $this->response_file_path
-                ? "/requests/{$this->id}/response-file"
+                ? "/panel/requests/{$this->id}/response-file"
                 : null,
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'updated_at' => optional($this->updated_at)?->toIso8601String(),
@@ -50,6 +50,15 @@ class RequestResource extends JsonResource
                     'name' => $this->project?->name,
                     'slug' => $this->project?->slug,
                     'type' => $this->project?->type,
+                ];
+            }),
+            'period' => $this->whenLoaded('period', function () {
+                return [
+                    'id' => $this->period?->id,
+                    'name' => $this->period?->name,
+                    'status' => $this->period?->status,
+                    'start_date' => optional($this->period?->start_date)?->toDateString(),
+                    'end_date' => optional($this->period?->end_date)?->toDateString(),
                 ];
             }),
         ];

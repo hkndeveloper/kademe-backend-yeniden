@@ -24,6 +24,8 @@ class GoogleCalendarService
             'connected' => (bool) $this->getSetting('google_calendar_refresh_token'),
             'calendar_id' => config('services.google_calendar.calendar_id'),
             'last_synced_at' => $this->getSetting('google_calendar_last_synced_at'),
+            'last_error' => $this->getSetting('google_calendar_last_error'),
+            'last_error_at' => $this->getSetting('google_calendar_last_error_at'),
         ];
     }
 
@@ -76,23 +78,33 @@ class GoogleCalendarService
         $this->putSetting('google_calendar_refresh_token', $payload['refresh_token'] ?? $this->getSetting('google_calendar_refresh_token'));
         $this->putSetting('google_calendar_token_expires_at', now()->addSeconds((int) ($payload['expires_in'] ?? 3600))->toIso8601String());
         $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
+        $this->clearSyncError();
 
         return $this->resolveFrontendRedirect($panel, 'connected');
     }
 
     public function syncAllPrograms(): array
     {
-        $programs = Program::query()->with(['project:id,name'])->get();
+        $programs = Program::query()
+            ->with(['project:id,name'])
+            ->where(function ($query) {
+                $query->whereNull('period_id')
+                    ->orWhereHas('period', fn ($periodQuery) => $periodQuery->where('status', '!=', 'completed'));
+            })
+            ->get();
 
         foreach ($programs as $program) {
             $this->syncProgram($program);
         }
 
         $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
+        $this->clearSyncError();
 
         return [
             'count' => $programs->count(),
             'last_synced_at' => $this->getSetting('google_calendar_last_synced_at'),
+            'last_error' => $this->getSetting('google_calendar_last_error'),
+            'last_error_at' => $this->getSetting('google_calendar_last_error_at'),
         ];
     }
 
@@ -104,6 +116,7 @@ class GoogleCalendarService
             ['program_id' => $program->id],
             [
                 'project_id' => $program->project_id,
+                'period_id' => $program->period_id,
                 'title' => $program->title,
                 'description' => $program->description,
                 'location' => $program->location,
@@ -143,13 +156,17 @@ class GoogleCalendarService
             );
         }
 
-        if ($response->successful()) {
-            $googleEventId = $response->json('id');
-            if ($googleEventId) {
-                $event->update(['google_event_id' => $googleEventId]);
-            }
-            $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
+        if (! $response->successful()) {
+            $message = $response->json('error.message') ?? 'Google Calendar etkinlik senkronizasyonu basarisiz.';
+            $this->recordSyncError((string) $message);
+            abort(422, $message);
         }
+
+        $googleEventId = $response->json('id');
+        if ($googleEventId) {
+            $event->update(['google_event_id' => $googleEventId]);
+        }
+        $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
 
         return $event->fresh();
     }
@@ -218,6 +235,18 @@ class GoogleCalendarService
     {
         $calendarId = urlencode((string) config('services.google_calendar.calendar_id'));
         return "/calendars/{$calendarId}/events/{$eventId}";
+    }
+
+    public function recordSyncError(string $message): void
+    {
+        $this->putSetting('google_calendar_last_error', Str::limit($message, 500));
+        $this->putSetting('google_calendar_last_error_at', now()->toIso8601String());
+    }
+
+    private function clearSyncError(): void
+    {
+        $this->putSetting('google_calendar_last_error', null);
+        $this->putSetting('google_calendar_last_error_at', null);
     }
 
     private function getSetting(string $key): ?string

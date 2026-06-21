@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\CreditLog;
@@ -9,54 +10,27 @@ use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
 use App\Services\CreditService;
+use App\Services\PermissionResolver;
+use App\Support\FeedbackFormResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class FeedbackController extends Controller
 {
-    public function __construct(
-        private readonly CreditService $creditService
-    ) {
-    }
+    use ResolvesProjectPeriodContext;
 
-    private function questions(): array
-    {
-        return [
-            [
-                'id' => 'content_quality',
-                'label' => 'Oturumun icerik kalitesini nasil degerlendiriyorsun?',
-                'type' => 'rating',
-                'min' => 1,
-                'max' => 5,
-            ],
-            [
-                'id' => 'speaker_quality',
-                'label' => 'Konusmaci veya yuruten ekip faydali miydi?',
-                'type' => 'rating',
-                'min' => 1,
-                'max' => 5,
-            ],
-            [
-                'id' => 'organization_quality',
-                'label' => 'Oturum organizasyonu ve akisindan memnun kaldin mi?',
-                'type' => 'rating',
-                'min' => 1,
-                'max' => 5,
-            ],
-            [
-                'id' => 'comment',
-                'label' => 'Eklemek istedigin gorus veya oneriler',
-                'type' => 'text',
-                'required' => false,
-            ],
-        ];
+    public function __construct(
+        private readonly CreditService $creditService,
+        private readonly PermissionResolver $permissionResolver,
+    ) {
     }
 
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Degerlendirme yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
 
         $attendedPrograms = Program::query()
             ->with(['project:id,name,slug,type'])
@@ -65,6 +39,17 @@ class FeedbackController extends Controller
                     ->where('is_valid', true);
             })
             ->where('status', 'completed')
+            ->where(function ($query) use ($user) {
+                if ($user->role === 'alumni') {
+                    $query->where('status', 'completed')
+                        ->orWhereJsonContains('target_audience', 'alumni');
+
+                    return;
+                }
+
+                $query->whereNull('target_audience')
+                    ->orWhereJsonContains('target_audience', 'student');
+            })
             ->orderByDesc('start_at')
             ->get();
 
@@ -82,6 +67,7 @@ class FeedbackController extends Controller
                 ->latest()
                 ->first();
             $deadline = $this->feedbackDeadline($program);
+            $questions = FeedbackFormResolver::forProgram($program);
 
             return [
                 'id' => $program->id,
@@ -98,6 +84,7 @@ class FeedbackController extends Controller
                 'feedback_submitted' => (bool) $submittedFeedback,
                 'submitted_at' => optional($submittedFeedback?->submitted_at)?->toIso8601String(),
                 'anonymous_feedback_id' => Feedback::usesPublicIdColumn() ? $submittedFeedback?->public_id : null,
+                'questions' => $questions,
                 'credit_restored' => (bool) $rewardLog,
                 'feedback_deadline_at' => optional($deadline)?->toIso8601String(),
                 'feedback_open' => ! $submittedFeedback && ($deadline === null || now()->lt($deadline)),
@@ -105,7 +92,7 @@ class FeedbackController extends Controller
         })->values();
 
         return response()->json([
-            'questions' => $this->questions(),
+            'questions' => FeedbackFormResolver::defaultQuestions(),
             'programs' => $programs,
         ]);
     }
@@ -115,20 +102,48 @@ class FeedbackController extends Controller
         $validated = $request->validate([
             'program_id' => 'required|exists:programs,id',
             'responses' => 'required|array',
-            'responses.content_quality' => 'required|integer|min:1|max:5',
-            'responses.speaker_quality' => 'required|integer|min:1|max:5',
-            'responses.organization_quality' => 'required|integer|min:1|max:5',
-            'responses.comment' => 'nullable|string|max:2000',
         ]);
 
         $user = $request->user();
-        abort_unless(in_array($user->role, ['student', 'alumni'], true), 403, 'Degerlendirme yalnizca ogrenci ve mezun paneli icin kullanilabilir.');
         $program = Program::query()->findOrFail($validated['program_id']);
+        $this->assertPeriodWritable($request, $program->period_id);
+        $questions = FeedbackFormResolver::forProgram($program);
+        $responseRules = [];
+
+        foreach ($questions as $question) {
+            $key = 'responses.'.$question['id'];
+            $required = ($question['required'] ?? true) ? 'required' : 'nullable';
+
+            if (($question['type'] ?? null) === 'rating') {
+                $responseRules[$key] = [
+                    $required,
+                    'integer',
+                    'min:'.($question['min'] ?? 1),
+                    'max:'.($question['max'] ?? 5),
+                ];
+            } elseif (($question['type'] ?? null) === 'choice') {
+                $responseRules[$key] = [
+                    $required,
+                    'string',
+                    Rule::in(array_values($question['options'] ?? [])),
+                ];
+            } else {
+                $responseRules[$key] = [$required, 'string', 'max:2000'];
+            }
+        }
+
+        Validator::make($request->all(), $responseRules)->validate();
 
         if ($program->status !== 'completed') {
             return response()->json([
                 'message' => 'Degerlendirme formu etkinlik tamamlandiktan sonra acilir.',
             ], 422);
+        }
+
+        if (! $program->isTargetedTo($user->role) && ! ($user->role === 'alumni' && $program->status === 'completed')) {
+            return response()->json([
+                'message' => 'Bu degerlendirme panel turunuz icin acik degil.',
+            ], 403);
         }
 
         $deadline = $this->feedbackDeadline($program);
@@ -153,7 +168,11 @@ class FeedbackController extends Controller
         $participant = Participant::query()
             ->where('user_id', $user->id)
             ->where('project_id', $program->project_id)
-            ->where('period_id', $program->period_id)
+            ->when(
+                $program->period_id,
+                fn ($query) => $query->where('period_id', $program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
             ->where(function ($query) {
                 $query->where('status', 'active')
                     ->orWhere('graduation_status', 'graduated');
@@ -179,7 +198,7 @@ class FeedbackController extends Controller
             ], 422);
         }
 
-        $savedFeedback = DB::transaction(function () use ($validated, $program, $anonymousToken, $participant) {
+        $savedFeedback = DB::transaction(function () use ($validated, $program, $anonymousToken, $participant, $user) {
             $created = Feedback::create([
                 'program_id' => $program->id,
                 'anonymous_token' => $anonymousToken,
@@ -187,7 +206,9 @@ class FeedbackController extends Controller
                 'submitted_at' => now(),
             ]);
 
-            $this->creditService->restoreOnceForFeedback($participant, $program);
+            if ($user->role === 'student' && $participant->status === 'active') {
+                $this->creditService->restoreOnceForFeedback($participant, $program);
+            }
 
             return $created;
         });
@@ -195,7 +216,9 @@ class FeedbackController extends Controller
         $participant->refresh();
 
         return response()->json([
-            'message' => 'Degerlendirmen alindi ve oturuma ait kredi iadesi uygulandi.',
+            'message' => $user->role === 'alumni'
+                ? 'Degerlendirmen alindi. Mezun etkinliklerinde kredi islemi uygulanmaz.'
+                : 'Degerlendirmen alindi ve oturuma ait kredi iadesi uygulandi.',
             'current_credit' => $participant->credit,
             'anonymous_feedback_id' => Feedback::usesPublicIdColumn() ? $savedFeedback->public_id : null,
         ], 201);

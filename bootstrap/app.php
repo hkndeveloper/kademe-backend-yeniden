@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\RefreshCorsConfigFromEnv;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Her istekten önce CORS izin listesi + gerekirse preflight cevabı.
         $middleware->prepend(\App\Http\Middleware\RefreshCorsConfigFromEnv::class);
         $middleware->prepend(\App\Http\Middleware\FinalizeApiCorsHeaders::class);
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/auth/login');
 
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
@@ -35,9 +37,18 @@ return Application::configure(basePath: dirname(__DIR__))
             'kvkk' => \App\Http\Middleware\CheckKvkkConsent::class,
             'audit.action' => \App\Http\Middleware\AuditAdminActions::class,
             'password.not_pending_setup' => \App\Http\Middleware\DenyIfPasswordSetupPending::class,
+            'scoped.permission' => \App\Http\Middleware\EnsureScopedPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+
+            return null;
+        });
+
         // Yakalanan hatalar middleware zincirini kirpar; tarayici CORS yok sanir. API/Sanctum
         // yollarinda izinli Origin icin exception cevabina da ACAO eklenir.
         $exceptions->respond(function (SymfonyResponse $response, \Throwable $e, Request $request): SymfonyResponse {

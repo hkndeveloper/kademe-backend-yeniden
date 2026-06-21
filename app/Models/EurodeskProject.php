@@ -11,6 +11,7 @@ class EurodeskProject extends Model
 
     protected $fillable = [
         'project_id',
+        'period_id',
         'title',
         'partner_organizations',
         'grant_amount',
@@ -29,6 +30,11 @@ class EurodeskProject extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function partnerships()

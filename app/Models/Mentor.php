@@ -31,7 +31,7 @@ class Mentor extends Model
     public function participants()
     {
         return $this->belongsToMany(Participant::class, 'participant_mentor')
-                    ->withPivot('period_id')
+                    ->withPivot(['period_id', 'assigned_by', 'note'])
                     ->withTimestamps();
     }
 }

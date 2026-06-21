@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\RolePermissionScope;
 use App\Models\FinancialTransaction;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Activitylog\Models\Activity;
@@ -73,6 +74,27 @@ class UnifiedPanelAliasTest extends TestCase
         $this->assertNotNull($log);
         $this->assertSame('api/panel/periods', $log->properties['path'] ?? null);
         $this->assertSame('periods.view', $log->properties['permission_checked'] ?? null);
+    }
+
+    public function test_panel_activity_log_export_respects_requested_format(): void
+    {
+        Carbon::setTestNow('2026-06-07 12:00:00');
+        $this->actingSuperAdmin();
+
+        Activity::query()->create([
+            'log_name' => 'admin_actions',
+            'description' => 'admin_action.test',
+            'event' => 'test',
+            'properties' => [],
+        ]);
+
+        $response = $this->get('/api/panel/dashboard/activity-logs/export?format=xlsx');
+
+        $response->assertOk();
+        $this->assertStringContainsString(
+            'islem_loglari_20260607_120000.xlsx',
+            (string) $response->headers->get('content-disposition')
+        );
     }
 
     public function test_custom_role_with_action_can_use_unified_panel_without_system_role(): void

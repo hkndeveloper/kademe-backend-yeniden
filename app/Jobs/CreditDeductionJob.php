@@ -2,8 +2,9 @@
 
 namespace App\Jobs;
 
-use App\Models\Program;
+use App\Models\Attendance;
 use App\Models\Participant;
+use App\Models\Program;
 use App\Services\CreditService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,43 +18,38 @@ class CreditDeductionJob implements ShouldQueue
 
     protected Program $program;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct(Program $program)
     {
         $this->program = $program;
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(CreditService $creditService): void
     {
-        // Program bittiğinde çağrılır.
-        // Bu programın ait olduğu proje ve dönemdeki tüm aktif katılımcıları bul
-        $participants = Participant::where('project_id', $this->program->project_id)
-            ->where('period_id', $this->program->period_id)
+        $participants = Participant::query()
+            ->where('project_id', $this->program->project_id)
+            ->when(
+                $this->program->period_id,
+                fn ($query) => $query->where('period_id', $this->program->period_id),
+                fn ($query) => $query->whereNull('period_id')
+            )
             ->where('status', 'active')
             ->get();
 
         foreach ($participants as $participant) {
-            // Öğrenci bu programa katılmış mı?
-            $hasAttended = \App\Models\Attendance::where('program_id', $this->program->id)
+            $hasAttended = Attendance::query()
+                ->where('program_id', $this->program->id)
                 ->where('user_id', $participant->user_id)
+                ->where('is_valid', true)
                 ->exists();
 
-            // Eğer katılmamışsa kredi düşümünü (ceza) uygula
-            if (!$hasAttended) {
-                $deductionAmount = $this->program->credit_deduction ?? 10;
-                
-                $creditService->deduct(
-                    $participant,
-                    $deductionAmount,
-                    "Devamsızlık: {$this->program->title}",
-                    $this->program->id
-                );
-            }
+            $creditService->deductOnceForProgram(
+                $participant,
+                $this->program,
+                null,
+                $hasAttended
+                    ? 'Etkinlik tamamlandi, degerlendirme bekleniyor'
+                    : 'Etkinlige katilim saglanmadi, kredi dusumu uygulandi'
+            );
         }
     }
 }

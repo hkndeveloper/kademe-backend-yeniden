@@ -613,10 +613,16 @@ class ApplicationController extends Controller
         ]);
 
         $application = Application::query()
-            ->with(['project:id,name', 'period:id,credit_start_amount', 'program:id,title,application_quota', 'user:id,email,role,status'])
+            ->with(['project:id,name', 'period:id,credit_start_amount,status', 'program:id,title,application_quota', 'user:id,email,role,status'])
             ->where('id', $id)
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
+
+        if ($application->period?->status === 'completed') {
+            throw ValidationException::withMessages([
+                'application' => ['Bu basvurunun donemi kapandigi icin yedek liste daveti yanitlanamaz.'],
+            ]);
+        }
 
         $this->assertWaitlistInvitationOpen($application);
 
@@ -702,7 +708,26 @@ class ApplicationController extends Controller
             $this->waitlistService->inviteNextIfSeatAvailable($scopeForNextInvitation);
         }
 
-        $application->loadMissing(['project:id,name', 'period', 'program:id,title,start_at', 'form:id,fields']);
+        $application->loadMissing(['project:id,name', 'project.coordinators:id,email,name,surname', 'period', 'program:id,title,start_at', 'form:id,fields', 'user:id,email,name,surname']);
+
+        $this->notificationService->sendEmail(
+            array_filter([$application->user?->email]),
+            $validated['decision'] === 'accept' ? 'Yedek liste davetiniz kabul edildi' : 'Yedek liste davetiniz reddedildi',
+            'Proje: '.($application->project?->name ?? '-')."\nDurum: ".($validated['decision'] === 'accept' ? 'Davet kabul edildi ve basvurunuz onaylandi.' : 'Davet reddedildi.'),
+            $application->project_id,
+            $request->user()->id
+        );
+
+        $coordinatorEmails = $application->project?->coordinators?->pluck('email')->filter()->values()->all() ?? [];
+        if ($coordinatorEmails !== []) {
+            $this->notificationService->sendEmail(
+                $coordinatorEmails,
+                'Yedek liste daveti yanitlandi',
+                'Proje: '.($application->project?->name ?? '-')."\nAday: ".trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))."\nYanit: ".($validated['decision'] === 'accept' ? 'Kabul' : 'Red'),
+                $application->project_id,
+                $request->user()->id
+            );
+        }
 
         return response()->json([
             'message' => $validated['decision'] === 'accept'

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BlogCategory;
 use App\Models\BlogPost;
 use App\Models\Faq;
+use App\Models\Project;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\JsonResponse;
@@ -34,28 +35,93 @@ class ContentManagementController extends Controller
         );
     }
 
+    private function abortUnlessContentPermission(Request $request, string $permission): void
+    {
+        $this->abortUnlessAllowed($request, $permission);
+
+        $scope = $this->permissionResolver->scopeFor($request->user(), $permission);
+        abort_if(($scope['scope_type'] ?? 'none') === 'none', 403, 'Bu icerik islemi icin kapsam verilmemis.');
+    }
+
+    private function hasGlobalContentPermission(Request $request, string $permission): bool
+    {
+        return $this->permissionResolver->hasGlobalScope($request->user(), $permission);
+    }
+
+    private function applyBlogScope($query, Request $request, string $permission): void
+    {
+        if ($this->hasGlobalContentPermission($request, $permission)) {
+            return;
+        }
+
+        $projectIds = $this->permissionResolver->projectIdsForPermission($request->user(), $permission);
+        $query->whereIn('project_id', $projectIds);
+    }
+
+    private function assertCanUseBlogProject(Request $request, string $permission, ?int $projectId): void
+    {
+        if ($projectId === null) {
+            abort_unless(
+                $this->hasGlobalContentPermission($request, $permission),
+                422,
+                'Global blog yazisi icin tum sistem kapsami gerekir.'
+            );
+
+            return;
+        }
+
+        Project::query()->findOrFail($projectId);
+
+        abort_unless(
+            $this->hasGlobalContentPermission($request, $permission)
+                || $this->permissionResolver->canAccessProject($request->user(), $permission, $projectId),
+            403,
+            'Bu proje icin blog icerigi yonetme yetkiniz yok.'
+        );
+    }
+
+    private function assertCanManageBlog(Request $request, string $permission, BlogPost $blog): void
+    {
+        $this->assertCanUseBlogProject($request, $permission, $blog->project_id);
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $this->abortUnlessGlobalContentPermission($request, 'content.view');
+        $this->abortUnlessContentPermission($request, 'content.view');
+        $blogQuery = BlogPost::query()->with(['category', 'project:id,name']);
+        $this->applyBlogScope($blogQuery, $request, 'content.view');
+        $canViewGlobalContent = $this->hasGlobalContentPermission($request, 'content.view');
 
         return response()->json([
-            'blogs' => BlogPost::with('category')->orderByDesc('created_at')->get(),
+            'blogs' => $blogQuery->orderByDesc('created_at')->get(),
             'categories' => BlogCategory::orderBy('name')->get(),
-            'faqs' => Faq::orderBy('category')->orderBy('order')->get(),
+            'faqs' => $canViewGlobalContent ? Faq::orderBy('category')->orderBy('order')->get() : [],
+            'content_scope' => [
+                'global' => $canViewGlobalContent,
+                'project_ids' => $canViewGlobalContent ? [] : $this->permissionResolver->projectIdsForPermission($request->user(), 'content.view'),
+            ],
+            'projects' => Project::query()
+                ->when(
+                    ! $canViewGlobalContent,
+                    fn ($query) => $query->whereIn('id', $this->permissionResolver->projectIdsForPermission($request->user(), 'content.view'))
+                )
+                ->orderBy('name')
+                ->get(['id', 'name']),
         ]);
     }
 
     public function exportBlogs(Request $request)
     {
-        $this->abortUnlessGlobalContentPermission($request, 'content.blog.export');
+        $this->abortUnlessContentPermission($request, 'content.blog.export');
 
-        $blogs = BlogPost::with('category')
-            ->orderByDesc('created_at')
-            ->get();
+        $query = BlogPost::query()->with(['category', 'project:id,name']);
+        $this->applyBlogScope($query, $request, 'content.blog.export');
+        $blogs = $query->orderByDesc('created_at')->get();
 
-        $headings = ['ID', 'Baslik', 'Slug', 'Kategori', 'Durum', 'Yayin Tarihi', 'Olusturma Tarihi'];
+        $headings = ['ID', 'Proje', 'Baslik', 'Slug', 'Kategori', 'Durum', 'Yayin Tarihi', 'Olusturma Tarihi'];
         $rows = $blogs->map(fn (BlogPost $blog) => [
             $blog->id,
+            $blog->project?->name ?? 'Global',
             $blog->title,
             $blog->slug,
             $blog->category?->name ?? '-',
@@ -102,7 +168,7 @@ class ContentManagementController extends Controller
 
     public function storeBlog(Request $request): JsonResponse
     {
-        $this->abortUnlessGlobalContentPermission($request, 'content.blog.create');
+        $this->abortUnlessContentPermission($request, 'content.blog.create');
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -111,9 +177,11 @@ class ContentManagementController extends Controller
             'content' => 'required|string',
             'cover_image_path' => 'nullable|string|max:2048',
             'category_id' => 'nullable|exists:blog_categories,id',
+            'project_id' => 'nullable|integer|exists:projects,id',
             'status' => ['required', Rule::in(['draft', 'published'])],
             'published_at' => 'nullable|date',
         ]);
+        $this->assertCanUseBlogProject($request, 'content.blog.create', $validated['project_id'] ?? null);
 
         $blog = BlogPost::create([
             ...$validated,
@@ -132,9 +200,10 @@ class ContentManagementController extends Controller
 
     public function updateBlog(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessGlobalContentPermission($request, 'content.blog.update');
+        $this->abortUnlessContentPermission($request, 'content.blog.update');
 
         $blog = BlogPost::findOrFail($id);
+        $this->assertCanManageBlog($request, 'content.blog.update', $blog);
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -143,9 +212,11 @@ class ContentManagementController extends Controller
             'content' => 'required|string',
             'cover_image_path' => 'nullable|string|max:2048',
             'category_id' => 'nullable|exists:blog_categories,id',
+            'project_id' => 'nullable|integer|exists:projects,id',
             'status' => ['required', Rule::in(['draft', 'published'])],
             'published_at' => 'nullable|date',
         ]);
+        $this->assertCanUseBlogProject($request, 'content.blog.update', $validated['project_id'] ?? null);
 
         $blog->update([
             ...$validated,
@@ -162,9 +233,11 @@ class ContentManagementController extends Controller
 
     public function deleteBlog(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessGlobalContentPermission($request, 'content.blog.delete');
+        $this->abortUnlessContentPermission($request, 'content.blog.delete');
 
-        BlogPost::findOrFail($id)->delete();
+        $blog = BlogPost::findOrFail($id);
+        $this->assertCanManageBlog($request, 'content.blog.delete', $blog);
+        $blog->delete();
 
         return response()->json([
             'message' => 'Blog yazisi silindi.',

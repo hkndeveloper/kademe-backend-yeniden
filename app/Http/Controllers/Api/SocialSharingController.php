@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Services\PermissionResolver;
-use App\Models\SiteSettings;
+use App\Models\SystemSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -19,6 +19,14 @@ class SocialSharingController extends Controller
         private readonly PermissionResolver $permissionResolver
     ) {}
 
+    private function canShareSocially(Request $request): bool
+    {
+        $user = $request->user();
+
+        return $this->permissionResolver->hasGlobalScope($user, 'content.blog.update')
+            || $this->permissionResolver->hasGlobalScope($user, 'announcements.create');
+    }
+
     /**
      * POST /admin/social-sharing/post
      *
@@ -28,7 +36,8 @@ class SocialSharingController extends Controller
      */
     public function post(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'announcements.create');
+        abort_unless($this->canShareSocially($request), 403, 'Bu islem icin yetkiniz bulunmuyor.');
+        $request->attributes->set('audit.permission_checked', 'content.blog.update|announcements.create');
 
         $validated = $request->validate([
             'text'       => 'required|string|max:2000',
@@ -38,8 +47,10 @@ class SocialSharingController extends Controller
             'platforms.*' => 'nullable|string|in:instagram,twitter,linkedin,facebook',
         ]);
 
-        $settings = SiteSettings::first();
-        $webhookUrl = $settings?->getSettingValue('social_media.sharing_webhook_url') ?? '';
+        $webhookUrl = (string) SystemSetting::query()
+            ->where('group', 'social_media')
+            ->where('key', 'sharing_webhook_url')
+            ->value('value');
 
         if (empty($webhookUrl)) {
             return response()->json([

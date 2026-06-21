@@ -19,14 +19,18 @@ use App\Http\Controllers\Api\ContentManagementController;
 use App\Http\Controllers\Api\CoordinatorParticipantController;
 use App\Http\Controllers\Api\DigitalBohcaController;
 use App\Http\Controllers\Api\FeedbackController;
+use App\Http\Controllers\Api\FeedbackFormTemplateController;
 use App\Http\Controllers\Api\FinancialTransactionController;
 use App\Http\Controllers\Api\ForumController;
 use App\Http\Controllers\Api\InboxController;
 use App\Http\Controllers\Api\MediaUploadController;
+use App\Http\Controllers\Api\MotivationController;
 use App\Http\Controllers\Api\NewsletterController;
+use App\Http\Controllers\Api\PanelModuleController;
 use App\Http\Controllers\Api\PeriodController;
 use App\Http\Controllers\Api\PermissionMatrixController;
 use App\Http\Controllers\Api\PersonalityTestController;
+use App\Http\Controllers\Api\PersonalityTestTemplateController;
 use App\Http\Controllers\Api\ProgramController;
 use App\Http\Controllers\Api\ProjectContentController;
 use App\Http\Controllers\Api\ProjectController;
@@ -47,7 +51,7 @@ Route::get('/ping', function () {
     return response()->json(['message' => 'KADEME API is running!']);
 });
 
-// --- GENEL Ä°Ã‡ERÄ°K (PUBLIC) --- //
+// --- GENEL Ãƒâ€Ã‚Â°ÃƒÆ’Ã¢â‚¬Â¡ERÃƒâ€Ã‚Â°K (PUBLIC) --- //
 Route::get('/blogs', [PublicContentController::class, 'blogs']);
 Route::get('/blogs/{slug}', [PublicContentController::class, 'blogDetail']);
 Route::get('/faqs', [PublicContentController::class, 'faqs']);
@@ -56,6 +60,8 @@ Route::get('/activities/{id}', [PublicContentController::class, 'activityDetail'
 Route::get('/certificates/verify/{verificationCode}', [CertificateController::class, 'verify']);
 Route::get('/certificates/{verificationCode}/download', [CertificateController::class, 'download']);
 Route::get('/site-config', [SiteSettingsController::class, 'public']);
+Route::get('/homepage', [SiteSettingsController::class, 'homepage']);
+Route::get('/motivation/current', [MotivationController::class, 'current']);
 Route::post('/contact', [SupportTicketController::class, 'storePublic'])
     ->middleware('throttle:10,1');
 Route::post('/newsletter/subscribe', [NewsletterController::class, 'subscribe'])
@@ -78,8 +84,8 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-// --- KULLANICI & PROFÄ°L --- //
-// KVKK onay endpointi haricindekilere 'kvkk' kÄ±sÄ±tlamasÄ± getiriyoruz
+// --- KULLANICI & PROFÃƒâ€Ã‚Â°L --- //
+// KVKK onay endpointi haricindekilere 'kvkk' kÃƒâ€Ã‚Â±sÃƒâ€Ã‚Â±tlamasÃƒâ€Ã‚Â± getiriyoruz
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('user')->group(function () {
     Route::post('/consent-kvkk', [UserController::class, 'consentKvkk']);
     Route::post('/kvkk/forget-request', [UserController::class, 'requestKvkkForget']);
@@ -99,14 +105,14 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     });
 });
 
-// --- PROJELER & BAÅVURULAR --- //
+// --- PROJELER & BAÃƒâ€¦Ã‚ÂVURULAR --- //
 Route::prefix('projects')->group(function () {
-    // Herkese aÃ§Ä±k (ZiyaretÃ§iler dahil) projeleri listeleme
+    // Herkese aÃƒÆ’Ã‚Â§Ãƒâ€Ã‚Â±k (ZiyaretÃƒÆ’Ã‚Â§iler dahil) projeleri listeleme
     Route::get('/', [ProjectController::class, 'index']);
     Route::get('/{slug}', [ProjectController::class, 'show']);
 });
 
-// BaÅŸvuru iÅŸlemleri (Oturum gerektirir)
+// BaÃƒâ€¦Ã…Â¸vuru iÃƒâ€¦Ã…Â¸lemleri (Oturum gerektirir)
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->prefix('applications')->group(function () {
     Route::get('/', [ApplicationController::class, 'myApplications']);
     Route::get('/{id}', [ApplicationController::class, 'show']);
@@ -118,72 +124,76 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
 Route::post('/applications/public', [ApplicationController::class, 'storePublic'])
     ->middleware('throttle:10,1');
 
-// --- PROGRAM (ETKÄ°NLÄ°K) & YOKLAMA --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'role:student|alumni', 'audit.action'])->group(function () {
+// --- PROGRAM (ETKÃƒâ€Ã‚Â°NLÃƒâ€Ã‚Â°K) & YOKLAMA --- //
+Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->group(function () {
 
-    // Ã–ÄŸrencinin kendi programlarÄ±nÄ± listelemesi
-    Route::get('/programs', [ProgramController::class, 'myPrograms']);
-    Route::get('/programs/{id}', [ProgramController::class, 'show']);
+    // ÃƒÆ’Ã¢â‚¬â€œÃƒâ€Ã…Â¸rencinin kendi programlarÃƒâ€Ã‚Â±nÃƒâ€Ã‚Â± listelemesi
+    Route::get('/programs', [ProgramController::class, 'myPrograms'])->middleware('scoped.permission:participant.programs.view');
+    Route::get('/programs/{id}', [ProgramController::class, 'show'])->middleware('scoped.permission:participant.programs.view');
 
-    // Ã–ÄŸrencinin QR Kod ile yoklama vermesi
-    Route::post('/attendances/qr', [AttendanceController::class, 'markQrAttendance']);
+    // ÃƒÆ’Ã¢â‚¬â€œÃƒâ€Ã…Â¸rencinin QR Kod ile yoklama vermesi
+    Route::post('/attendances/qr', [AttendanceController::class, 'markQrAttendance'])->middleware('scoped.permission:participant.qr.use');
 
-    // --- Ã–ÄRENCÄ° PANELÄ° (KREDÄ°, BOHÃ‡A, Ã–DEV) --- //
-    Route::get('/dashboard/summary', [StudentDashboardController::class, 'summary']);
-    Route::get('/dashboard/projects', [StudentDashboardController::class, 'projects']);
-    Route::get('/dashboard/digital-cv', [StudentDashboardController::class, 'digitalCv']);
-    Route::get('/dashboard/project-specials', [StudentDashboardController::class, 'projectSpecials']);
-    Route::post('/dashboard/projects/{projectId}/kademe-modules/{moduleId}/enroll', [StudentDashboardController::class, 'enrollKademeModule']);
-    Route::get('/dashboard/projects/{projectId}/badge-leaderboard', [StudentDashboardController::class, 'badgeLeaderboard']);
-    Route::get('/announcements', [AnnouncementController::class, 'recipientAnnouncements']);
-    Route::get('/alumni-opportunities', [AlumniOpportunityController::class, 'recipientIndex']);
-    Route::get('/forum/posts', [ForumController::class, 'index']);
-    Route::post('/forum/posts', [ForumController::class, 'store']);
-    Route::post('/forum/posts/{postId}/replies', [ForumController::class, 'reply']);
-    Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
-    Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    // --- ÃƒÆ’Ã¢â‚¬â€œÃƒâ€Ã‚ÂRENCÃƒâ€Ã‚Â° PANELÃƒâ€Ã‚Â° (KREDÃƒâ€Ã‚Â°, BOHÃƒÆ’Ã¢â‚¬Â¡A, ÃƒÆ’Ã¢â‚¬â€œDEV) --- //
+    Route::get('/dashboard/summary', [StudentDashboardController::class, 'summary'])->middleware('scoped.permission:participant.dashboard.view');
+    Route::get('/dashboard/projects', [StudentDashboardController::class, 'projects'])->middleware('scoped.permission:participant.projects.view');
+    Route::get('/dashboard/digital-cv', [StudentDashboardController::class, 'digitalCv'])->middleware('scoped.permission:participant.cv.manage');
+    Route::put('/dashboard/digital-cv', [StudentDashboardController::class, 'saveDigitalCv'])->middleware('scoped.permission:participant.cv.manage');
+    Route::post('/dashboard/digital-cv/pdf', [StudentDashboardController::class, 'digitalCvPdf'])->middleware('scoped.permission:participant.cv.manage');
+    Route::get('/dashboard/project-specials', [StudentDashboardController::class, 'projectSpecials'])->middleware('scoped.permission:participant.projects.view');
+    Route::post('/dashboard/projects/{projectId}/kademe-modules/{moduleId}/enroll', [StudentDashboardController::class, 'enrollKademeModule'])->middleware('scoped.permission:participant.projects.view');
+    Route::get('/dashboard/projects/{projectId}/badge-leaderboard', [StudentDashboardController::class, 'badgeLeaderboard'])->middleware('scoped.permission:participant.projects.view');
+    Route::get('/announcements', [AnnouncementController::class, 'recipientAnnouncements'])->middleware('scoped.permission:participant.inbox.view');
+    Route::get('/alumni-opportunities', [AlumniOpportunityController::class, 'recipientIndex'])->middleware('scoped.permission:alumni.opportunities.view');
+    Route::get('/forum/posts', [ForumController::class, 'index'])->middleware('scoped.permission:participant.forum.view');
+    Route::post('/forum/posts', [ForumController::class, 'store'])->middleware('scoped.permission:participant.forum.view');
+    Route::post('/forum/posts/{postId}/replies', [ForumController::class, 'reply'])->middleware('scoped.permission:participant.forum.view');
+    Route::get('/inbox/messages', [InboxController::class, 'recipientMessages'])->middleware('scoped.permission:participant.inbox.view');
+    Route::put('/inbox/messages/state', [InboxController::class, 'upsertState'])->middleware('scoped.permission:participant.inbox.view');
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
-    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
+    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post'])->middleware('scoped.permission:participant.profile.manage');
 
-    Route::get('/digital-bohca', [DigitalBohcaController::class, 'index']);
-    Route::get('/digital-bohca/{id}/download', [DigitalBohcaController::class, 'download']);
-    Route::get('/certificates', [CertificateController::class, 'index']);
-    Route::get('/feedbacks', [FeedbackController::class, 'index']);
-    Route::post('/feedbacks', [FeedbackController::class, 'store']);
-    Route::get('/requests', [RequestController::class, 'index']);
-    Route::get('/requests/export', [RequestController::class, 'export']);
-    Route::post('/requests', [RequestController::class, 'store']);
-    Route::put('/requests/{id}/status', [RequestController::class, 'updateStatus']);
-    Route::post('/requests/{id}/upload-response', [RequestController::class, 'uploadResponseFile']);
-    Route::get('/requests/{id}/response-file', [RequestController::class, 'downloadResponseFile']);
-    Route::get('/kpd/appointments', [StudentKpdController::class, 'index']);
-    Route::post('/kpd/appointments', [StudentKpdController::class, 'store']);
-    Route::post('/kpd/appointments/{id}/cancel', [StudentKpdController::class, 'cancel']);
-    Route::get('/kpd/reports/{id}/download', [StudentKpdController::class, 'downloadReport']);
-    Route::get('/volunteer/opportunities', [VolunteerController::class, 'index']);
-    Route::post('/volunteer/opportunities/{id}/apply', [VolunteerController::class, 'apply']);
+    Route::get('/digital-bohca', [DigitalBohcaController::class, 'index'])->middleware('scoped.permission:participant.bohca.view');
+    Route::get('/digital-bohca/{id}/download', [DigitalBohcaController::class, 'download'])->middleware('scoped.permission:participant.bohca.view');
+    Route::get('/certificates', [CertificateController::class, 'index'])->middleware('scoped.permission:participant.certificates.view');
+    Route::get('/feedbacks', [FeedbackController::class, 'index'])->middleware('scoped.permission:participant.feedback.create');
+    Route::post('/feedbacks', [FeedbackController::class, 'store'])->middleware('scoped.permission:participant.feedback.create');
+    Route::get('/requests', [RequestController::class, 'index'])->middleware('scoped.permission:participant.support.manage');
+    Route::get('/requests/export', [RequestController::class, 'export'])->middleware('scoped.permission:participant.support.manage');
+    Route::post('/requests', [RequestController::class, 'store'])->middleware('scoped.permission:participant.support.manage');
+    Route::put('/requests/{id}/status', [RequestController::class, 'updateStatus'])->middleware('scoped.permission:participant.support.manage');
+    Route::post('/requests/{id}/upload-response', [RequestController::class, 'uploadResponseFile'])->middleware('scoped.permission:participant.support.manage');
+    Route::get('/requests/{id}/response-file', [RequestController::class, 'downloadResponseFile'])->middleware('scoped.permission:participant.support.manage');
+    Route::get('/kpd/appointments', [StudentKpdController::class, 'index'])->middleware('scoped.permission:participant.kpd.view');
+    Route::post('/kpd/appointments', [StudentKpdController::class, 'store'])->middleware('scoped.permission:participant.kpd.view');
+    Route::post('/kpd/appointments/{id}/cancel', [StudentKpdController::class, 'cancel'])->middleware('scoped.permission:participant.kpd.view');
+    Route::get('/kpd/reports/{id}/download', [StudentKpdController::class, 'downloadReport'])->middleware('scoped.permission:participant.kpd.view');
+    Route::get('/volunteer/opportunities', [VolunteerController::class, 'index'])->middleware('scoped.permission:participant.volunteer.apply');
+    Route::post('/volunteer/opportunities/{id}/apply', [VolunteerController::class, 'apply'])->middleware('scoped.permission:participant.volunteer.apply');
 
-    Route::get('/assignments', [AssignmentController::class, 'index']);
-    Route::post('/assignments/{id}/submit', [AssignmentController::class, 'submit']);
-    Route::get('/assignment-submissions/{id}/download', [AssignmentController::class, 'downloadSubmission']);
+    Route::get('/assignments', [AssignmentController::class, 'index'])->middleware('scoped.permission:participant.assignments.view');
+    Route::post('/assignments/{id}/submit', [AssignmentController::class, 'submit'])->middleware('scoped.permission:participant.assignments.submit');
+    Route::get('/assignment-submissions/{id}/download', [AssignmentController::class, 'downloadSubmission'])->middleware('scoped.permission:participant.assignments.view');
 
-    // Destek Talepleri (Ã–ÄŸrenci TarafÄ±)
-    Route::get('/tickets', [SupportTicketController::class, 'myTickets']);
-    Route::get('/tickets/export', [SupportTicketController::class, 'exportMyTickets']);
-    Route::post('/tickets', [SupportTicketController::class, 'store']);
-    Route::post('/tickets/{id}/reply', [SupportTicketController::class, 'reply']);
-    Route::get('/tickets/replies/{id}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
+    // Destek Talepleri (ÃƒÆ’Ã¢â‚¬â€œÃƒâ€Ã…Â¸renci TarafÃƒâ€Ã‚Â±)
+    Route::get('/tickets', [SupportTicketController::class, 'myTickets'])->middleware('scoped.permission:participant.support.manage');
+    Route::get('/tickets/export', [SupportTicketController::class, 'exportMyTickets'])->middleware('scoped.permission:participant.support.manage');
+    Route::post('/tickets', [SupportTicketController::class, 'store'])->middleware('scoped.permission:participant.support.manage');
+    Route::post('/tickets/{id}/reply', [SupportTicketController::class, 'reply'])->middleware('scoped.permission:participant.support.manage');
+    Route::get('/tickets/{id}/attachment', [SupportTicketController::class, 'downloadTicketAttachment'])->middleware('scoped.permission:participant.support.manage');
+    Route::get('/tickets/replies/{id}/attachment', [SupportTicketController::class, 'downloadReplyAttachment'])->middleware('scoped.permission:participant.support.manage');
 });
 
-// --- ADMIN / KOORDÄ°NATÃ–R PANELÄ° --- //
+// --- ADMIN / KOORDÃƒâ€Ã‚Â°NATÃƒÆ’Ã¢â‚¬â€œR PANELÃƒâ€Ã‚Â° --- //
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'role:super_admin|coordinator|staff', 'audit.action'])->prefix('admin')->group(function () {
 
-    // Dashboard Ä°statistikleri
+    // Dashboard Ãƒâ€Ã‚Â°statistikleri
     Route::get('/dashboard/stats', [AdminDashboardController::class, 'stats']);
     Route::get('/dashboard/activity-logs', [AdminDashboardController::class, 'activityLogs']);
     Route::get('/dashboard/activity-logs/export', [AdminDashboardController::class, 'exportActivityLogs']);
+    Route::get('/dashboard/credit-risk/export', [AdminDashboardController::class, 'exportCreditRisk']);
 
-    // BaÅŸvurularÄ± YÃ¶net
+    // BaÃƒâ€¦Ã…Â¸vurularÃƒâ€Ã‚Â± YÃƒÆ’Ã‚Â¶net
     Route::get('/applications', [AdminApplicationController::class, 'index']);
     Route::get('/applications/export', [AdminApplicationController::class, 'export']);
     Route::get('/applications/{id}/form-files/{field}', [AdminApplicationController::class, 'downloadFormFile']);
@@ -194,7 +204,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::post('/applications/{id}/waitlist-invite', [AdminApplicationController::class, 'inviteFromWaitlist']);
     Route::post('/applications/{id}/waitlist-refresh', [AdminApplicationController::class, 'refreshWaitlistInvitations']);
 
-    // Etkinlik (Program) ve QR YÃ¶netimi
+    // Etkinlik (Program) ve QR YÃƒÆ’Ã‚Â¶netimi
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
     Route::post('/programs', [AdminProgramController::class, 'store']);
@@ -204,13 +214,15 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
     Route::put('/programs/{id}/attendances/{participantId}', [AdminProgramController::class, 'markManualAttendance']);
     Route::get('/programs/{id}/attendances/export', [AdminProgramController::class, 'exportAttendanceDetails']);
+    Route::get('/programs/feedback-summary', [AdminProgramController::class, 'feedbackSummary']);
+    Route::get('/programs/feedback-summary/export', [AdminProgramController::class, 'exportFeedbackSummary']);
     Route::get('/programs/{id}/feedback-stats', [AdminProgramController::class, 'feedbackStats']);
     Route::get('/programs/{id}/feedback-stats/export', [AdminProgramController::class, 'exportFeedback']);
 
-    // Kredi (Puan) ve Rozet YÃ¶netimi
+    // Kredi (Puan) ve Rozet YÃƒÆ’Ã‚Â¶netimi
     Route::post('/credits/adjust', [AdminCreditController::class, 'adjustCredit']);
     Route::post('/badges/award', [AdminCreditController::class, 'awardBadge']);
-    // Sertifika Yönetimi
+    // Sertifika YÃƒÂ¶netimi
     Route::get('/certificates', [AdminCertificateController::class, 'index']);
     Route::get('/certificates/export', [AdminCertificateController::class, 'export']);
     Route::post('/certificates', [AdminCertificateController::class, 'store']);
@@ -251,9 +263,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/periods', [PeriodController::class, 'index']);
     Route::get('/periods/export', [PeriodController::class, 'export']);
     Route::post('/periods', [PeriodController::class, 'store']);
+    Route::get('/periods/{id}/closure-summary', [PeriodController::class, 'closureSummary']);
+    Route::post('/periods/{id}/complete', [PeriodController::class, 'complete']);
+    Route::post('/periods/{id}/reopen', [PeriodController::class, 'reopen']);
     Route::put('/periods/{id}', [PeriodController::class, 'update']);
 
-    // KPD YÃ¶netimi
+    // KPD YÃƒÆ’Ã‚Â¶netimi
     Route::get('/kpd/appointments', [AdminKpdController::class, 'index']);
     Route::post('/kpd/appointments', [AdminKpdController::class, 'store']);
     Route::put('/kpd/appointments/{id}/status', [AdminKpdController::class, 'updateStatus']);
@@ -263,7 +278,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/kpd/reports/{id}/download', [AdminKpdController::class, 'downloadReport']);
     Route::delete('/kpd/reports/{id}', [AdminKpdController::class, 'destroyReport']);
 
-    // Site AyarlarÄ± & Ä°Ã§erik
+    // Site AyarlarÃƒâ€Ã‚Â± & Ãƒâ€Ã‚Â°ÃƒÆ’Ã‚Â§erik
     Route::get('/site-settings', [SiteSettingsController::class, 'admin']);
     Route::put('/site-settings', [SiteSettingsController::class, 'update']);
     Route::post('/media/upload', [MediaUploadController::class, 'store']);
@@ -279,11 +294,16 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::post('/content/faqs', [ContentManagementController::class, 'storeFaq']);
     Route::put('/content/faqs/{id}', [ContentManagementController::class, 'updateFaq']);
     Route::delete('/content/faqs/{id}', [ContentManagementController::class, 'deleteFaq']);
+    Route::get('/personality-test-templates', [PersonalityTestTemplateController::class, 'index']);
+    Route::post('/personality-test-templates', [PersonalityTestTemplateController::class, 'store']);
+    Route::put('/personality-test-templates/{id}', [PersonalityTestTemplateController::class, 'update']);
+    Route::post('/personality-test-templates/{id}/activate', [PersonalityTestTemplateController::class, 'activate']);
+    Route::delete('/personality-test-templates/{id}', [PersonalityTestTemplateController::class, 'destroy']);
 
     Route::get('/newsletter/subscribers', [NewsletterController::class, 'adminSubscribers']);
     Route::get('/newsletter/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
 
-    // â”€â”€ MALÄ° Ä°ÅLEMLER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ MALÃƒâ€Ã‚Â° Ãƒâ€Ã‚Â°Ãƒâ€¦Ã‚ÂLEMLER ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     Route::get('/financials/export', [FinancialTransactionController::class, 'export']);
     Route::get('/financials', [FinancialTransactionController::class, 'index']);
     Route::post('/financials', [FinancialTransactionController::class, 'store']);
@@ -294,7 +314,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::delete('/financials/{id}', [FinancialTransactionController::class, 'destroy']);
     Route::get('/financials/{id}/invoice', [FinancialTransactionController::class, 'downloadInvoice']);
 
-    // â”€â”€ PERSONEL YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ PERSONEL YÃƒÆ’Ã¢â‚¬â€œNETÃƒâ€Ã‚Â°MÃƒâ€Ã‚Â° ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     Route::get('/staff/export', [StaffController::class, 'export']);
     Route::get('/staff/active', [StaffController::class, 'active']);
     Route::get('/staff/create-options', [StaffController::class, 'createOptions']);
@@ -305,14 +325,21 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::put('/staff/{id}/projects', [StaffController::class, 'syncProjects']);
     Route::post('/staff/{id}/documents', [StaffController::class, 'uploadDocument']);
 
-    // â”€â”€ Ä°ZÄ°N TALEPLERÄ° (Admin gÃ¶rÃ¼nÃ¼mÃ¼) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Ãƒâ€Ã‚Â°ZÃƒâ€Ã‚Â°N TALEPLERÃƒâ€Ã‚Â° (Admin gÃƒÆ’Ã‚Â¶rÃƒÆ’Ã‚Â¼nÃƒÆ’Ã‚Â¼mÃƒÆ’Ã‚Â¼) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
-    // â”€â”€ DUYURULAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ DUYURULAR ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     Route::post('/announcements/send-sms', [AnnouncementController::class, 'sendSms']);
     Route::post('/announcements/send-email', [AnnouncementController::class, 'sendEmail']);
     Route::get('/announcements/communication-logs', [AnnouncementController::class, 'communicationLogs']);
     Route::get('/announcements/communication-logs/export', [AnnouncementController::class, 'exportCommunicationLogs']);
     Route::get('/announcements/communication-logs/{id}/attachment', [AnnouncementController::class, 'downloadCommunicationAttachment']);
+    Route::get('/motivation/lists', [MotivationController::class, 'index']);
+    Route::post('/motivation/lists', [MotivationController::class, 'storeList']);
+    Route::put('/motivation/lists/{id}', [MotivationController::class, 'updateList']);
+    Route::delete('/motivation/lists/{id}', [MotivationController::class, 'destroyList']);
+    Route::post('/motivation/lists/{id}/quotes', [MotivationController::class, 'storeQuote']);
+    Route::put('/motivation/quotes/{id}', [MotivationController::class, 'updateQuote']);
+    Route::delete('/motivation/quotes/{id}', [MotivationController::class, 'destroyQuote']);
     Route::get('/announcements', [AnnouncementController::class, 'index']);
     Route::get('/announcements/export', [AnnouncementController::class, 'export']);
     Route::post('/announcements', [AnnouncementController::class, 'store']);
@@ -324,7 +351,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
     Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
 
-    // â”€â”€ KULLANICI YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ KULLANICI YÃƒÆ’Ã¢â‚¬â€œNETÃƒâ€Ã‚Â°MÃƒâ€Ã‚Â° ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     Route::get('/users/export', [UserController::class, 'exportUsers']);
     Route::get('/users/create-options', [UserController::class, 'createOptions']);
     Route::post('/users', [UserController::class, 'storeUser']);
@@ -346,10 +373,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::put('/permissions-matrix/roles/{id}', [PermissionMatrixController::class, 'updateRole']);
     Route::delete('/permissions-matrix/roles/{id}', [PermissionMatrixController::class, 'deleteRole']);
 
-    // â”€â”€ DESTEK MERKEZÄ° (Admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ DESTEK MERKEZÃƒâ€Ã‚Â° (Admin) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     Route::get('/support/tickets', [SupportTicketController::class, 'index']);
     Route::get('/support/assignable-users', [SupportTicketController::class, 'assignableUsers']);
     Route::get('/support/tickets/export', [SupportTicketController::class, 'export']);
+    Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'reply']);
+    Route::get('/support/tickets/{id}/attachment', [SupportTicketController::class, 'downloadTicketAttachment']);
     Route::put('/support/tickets/{id}/assign', [SupportTicketController::class, 'assign']);
     Route::put('/support/tickets/{id}/close', [SupportTicketController::class, 'close']);
     Route::get('/tickets/replies/{id}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
@@ -358,6 +387,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
 // Unified panel icin rol-prefix bagimsiz generic alias endpointleri.
 // /admin/* endpointleri geriye donuk uyumluluk icin oldugu gibi korunur.
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('panel')->group(function () {
+    Route::get('/modules', [PanelModuleController::class, 'index']);
+
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
     Route::post('/programs', [AdminProgramController::class, 'store']);
@@ -367,8 +398,20 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
     Route::put('/programs/{id}/attendances/{participantId}', [AdminProgramController::class, 'markManualAttendance']);
     Route::get('/programs/{id}/attendances/export', [AdminProgramController::class, 'exportAttendanceDetails']);
+    Route::get('/programs/feedback-summary', [AdminProgramController::class, 'feedbackSummary']);
+    Route::get('/programs/feedback-summary/export', [AdminProgramController::class, 'exportFeedbackSummary']);
     Route::get('/programs/{id}/feedback-stats', [AdminProgramController::class, 'feedbackStats']);
     Route::get('/programs/{id}/feedback-stats/export', [AdminProgramController::class, 'exportFeedback']);
+    Route::get('/feedback-form-templates', [FeedbackFormTemplateController::class, 'index']);
+    Route::post('/feedback-form-templates', [FeedbackFormTemplateController::class, 'store']);
+    Route::put('/feedback-form-templates/{id}', [FeedbackFormTemplateController::class, 'update']);
+    Route::delete('/feedback-form-templates/{id}', [FeedbackFormTemplateController::class, 'destroy']);
+    Route::get('/programs/{id}/photos', [AdminProgramController::class, 'photos']);
+    Route::post('/programs/{id}/photos', [AdminProgramController::class, 'uploadPhoto']);
+    Route::put('/programs/{id}/photos/reorder', [AdminProgramController::class, 'reorderPhotos']);
+    Route::put('/programs/{id}/photos/{photoId}', [AdminProgramController::class, 'updatePhoto']);
+    Route::delete('/programs/{id}/photos/{photoId}', [AdminProgramController::class, 'deletePhoto']);
+    Route::patch('/programs/{id}/visibility', [AdminProgramController::class, 'updateVisibility']);
 
     Route::get('/applications', [AdminApplicationController::class, 'index']);
     Route::get('/applications/export', [AdminApplicationController::class, 'export']);
@@ -389,6 +432,9 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/periods', [PeriodController::class, 'index']);
     Route::get('/periods/export', [PeriodController::class, 'export']);
     Route::post('/periods', [PeriodController::class, 'store']);
+    Route::get('/periods/{id}/closure-summary', [PeriodController::class, 'closureSummary']);
+    Route::post('/periods/{id}/complete', [PeriodController::class, 'complete']);
+    Route::post('/periods/{id}/reopen', [PeriodController::class, 'reopen']);
     Route::put('/periods/{id}', [PeriodController::class, 'update']);
 
     Route::get('/projects/manageable', [ProjectContentController::class, 'manageable']);
@@ -453,12 +499,15 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/calendar/google/connect', [CalendarController::class, 'googleConnect']);
     Route::post('/calendar/google/sync', [CalendarController::class, 'googleSync']);
     Route::get('/calendar/export', [CalendarController::class, 'export']);
+    Route::post('/calendar/meetings', [CalendarController::class, 'storeMeeting']);
+    Route::put('/calendar/meetings/{id}/assignments', [CalendarController::class, 'updateMeetingAssignments']);
     Route::put('/calendar/programs/{id}/assignments', [CalendarController::class, 'updateAssignments']);
 
     // Dashboard
     Route::get('/dashboard/stats', [AdminDashboardController::class, 'stats']);
     Route::get('/dashboard/activity-logs', [AdminDashboardController::class, 'activityLogs']);
     Route::get('/dashboard/activity-logs/export', [AdminDashboardController::class, 'exportActivityLogs']);
+    Route::get('/dashboard/credit-risk/export', [AdminDashboardController::class, 'exportCreditRisk']);
 
     // Announcements
     Route::post('/announcements/send-sms', [AnnouncementController::class, 'sendSms']);
@@ -466,6 +515,13 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/announcements/communication-logs', [AnnouncementController::class, 'communicationLogs']);
     Route::get('/announcements/communication-logs/export', [AnnouncementController::class, 'exportCommunicationLogs']);
     Route::get('/announcements/communication-logs/{id}/attachment', [AnnouncementController::class, 'downloadCommunicationAttachment']);
+    Route::get('/motivation/lists', [MotivationController::class, 'index']);
+    Route::post('/motivation/lists', [MotivationController::class, 'storeList']);
+    Route::put('/motivation/lists/{id}', [MotivationController::class, 'updateList']);
+    Route::delete('/motivation/lists/{id}', [MotivationController::class, 'destroyList']);
+    Route::post('/motivation/lists/{id}/quotes', [MotivationController::class, 'storeQuote']);
+    Route::put('/motivation/quotes/{id}', [MotivationController::class, 'updateQuote']);
+    Route::delete('/motivation/quotes/{id}', [MotivationController::class, 'destroyQuote']);
     Route::get('/announcements', [AnnouncementController::class, 'index']);
     Route::get('/announcements/export', [AnnouncementController::class, 'export']);
     Route::post('/announcements', [AnnouncementController::class, 'store']);
@@ -509,6 +565,9 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/support/tickets', [SupportTicketController::class, 'index']);
     Route::get('/support/assignable-users', [SupportTicketController::class, 'assignableUsers']);
     Route::get('/support/tickets/export', [SupportTicketController::class, 'export']);
+    Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'reply']);
+    Route::get('/support/tickets/{id}/attachment', [SupportTicketController::class, 'downloadTicketAttachment']);
+    Route::get('/support/tickets/replies/{id}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
     Route::put('/support/tickets/{id}/assign', [SupportTicketController::class, 'assign']);
     Route::put('/support/tickets/{id}/close', [SupportTicketController::class, 'close']);
 
@@ -556,6 +615,11 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/content/faqs', [ContentManagementController::class, 'storeFaq']);
     Route::put('/content/faqs/{id}', [ContentManagementController::class, 'updateFaq']);
     Route::delete('/content/faqs/{id}', [ContentManagementController::class, 'deleteFaq']);
+    Route::get('/personality-test-templates', [PersonalityTestTemplateController::class, 'index']);
+    Route::post('/personality-test-templates', [PersonalityTestTemplateController::class, 'store']);
+    Route::put('/personality-test-templates/{id}', [PersonalityTestTemplateController::class, 'update']);
+    Route::post('/personality-test-templates/{id}/activate', [PersonalityTestTemplateController::class, 'activate']);
+    Route::delete('/personality-test-templates/{id}', [PersonalityTestTemplateController::class, 'destroy']);
 
     // Certificates
     Route::get('/certificates', [AdminCertificateController::class, 'index']);
@@ -580,15 +644,16 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/participants/{id}/cv', [CoordinatorParticipantController::class, 'cv']);
     Route::post('/participants/bulk-graduation', [CoordinatorParticipantController::class, 'bulkUpdateGraduationStatus']);
     Route::patch('/participants/{id}/graduation', [CoordinatorParticipantController::class, 'updateGraduationStatus']);
+    Route::patch('/participants/{id}/public-visibility', [CoordinatorParticipantController::class, 'updatePublicVisibility']);
     Route::get('/members', [StaffController::class, 'unitMembers']);
     Route::get('/members/export', [StaffController::class, 'exportUnitMembers']);
     Route::get('/my-projects', [StaffController::class, 'myProjects']);
     Route::get('/my-projects/export', [StaffController::class, 'exportMyProjects']);
 });
 
-// â”€â”€ KOORDÄ°NATÃ–R Ã–ZEL (sadece coordinator) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ KOORDÃƒâ€Ã‚Â°NATÃƒÆ’Ã¢â‚¬â€œR ÃƒÆ’Ã¢â‚¬â€œZEL (sadece coordinator) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
-    // KoordinatÃ¶rÃ¼n mali iÅŸlemleri (kendi projesi)
+    // KoordinatÃƒÆ’Ã‚Â¶rÃƒÆ’Ã‚Â¼n mali iÃƒâ€¦Ã…Â¸lemleri (kendi projesi)
     Route::get('/coordinator/financials', [FinancialTransactionController::class, 'myFinancials']);
     Route::get('/coordinator/financials/export', [FinancialTransactionController::class, 'exportMyFinancials']);
     Route::post('/coordinator/financials', [FinancialTransactionController::class, 'store']);
@@ -597,9 +662,10 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/coordinator/participants/{id}/cv', [CoordinatorParticipantController::class, 'cv']);
     Route::post('/coordinator/participants/bulk-graduation', [CoordinatorParticipantController::class, 'bulkUpdateGraduationStatus']);
     Route::patch('/coordinator/participants/{id}/graduation', [CoordinatorParticipantController::class, 'updateGraduationStatus']);
+    Route::patch('/coordinator/participants/{id}/public-visibility', [CoordinatorParticipantController::class, 'updatePublicVisibility']);
 });
 
-// â”€â”€ PERSONEL / KOORDÄ°NATÃ–R (Ä°zin Talepleri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ PERSONEL / KOORDÃƒâ€Ã‚Â°NATÃƒÆ’Ã¢â‚¬â€œR (Ãƒâ€Ã‚Â°zin Talepleri) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     Route::post('/leave-requests', [StaffController::class, 'storeLeaveRequest']);
     Route::get('/my-leave-requests', [StaffController::class, 'myLeaveRequests']);
@@ -623,12 +689,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/google/status', [CalendarController::class, 'googleStatus']);
     Route::get('/google/connect', [CalendarController::class, 'googleConnect']);
     Route::post('/google/sync', [CalendarController::class, 'googleSync']);
-});
-
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('calendar')->group(function () {
+    Route::post('/meetings', [CalendarController::class, 'storeMeeting']);
+    Route::put('/meetings/{id}/assignments', [CalendarController::class, 'updateMeetingAssignments']);
     Route::put('/programs/{id}/assignments', [CalendarController::class, 'updateAssignments']);
 });
-
-
-
-

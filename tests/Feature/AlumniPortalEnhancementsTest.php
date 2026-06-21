@@ -8,8 +8,10 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
+use App\Support\MediaStorage;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -21,6 +23,8 @@ class AlumniPortalEnhancementsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['filesystems.media_disk' => 'public']);
+        Storage::fake('public');
         $this->seed(RolePermissionSeeder::class);
     }
 
@@ -92,6 +96,78 @@ class AlumniPortalEnhancementsTest extends TestCase
         $this->assertNotEmpty($certificate->verification_code);
         $this->assertNotNull($certificate->issued_at);
         $this->assertSame($admin->id, (int) $certificate->created_by);
+        $this->assertNotEmpty($certificate->certificate_path);
+        $this->assertTrue(MediaStorage::exists($certificate->certificate_path));
+    }
+
+    public function test_graduation_certificates_are_period_specific(): void
+    {
+        $admin = $this->makeSuperAdmin('period-cert-admin@test.local');
+        $student = $this->makeStudent('period-cert-student@test.local');
+        [$project, $periodA] = $this->makeProjectWithPeriod('period-cert-proj');
+        $periodB = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => 'Ikinci Donem',
+            'start_date' => now()->addMonth(),
+            'end_date' => now()->addMonths(7),
+            'credit_start_amount' => 100,
+            'credit_threshold' => 75,
+            'status' => 'active',
+        ]);
+
+        $participantA = $this->makeParticipant($student, $project, $periodA);
+        $participantB = $this->makeParticipant($student, $project, $periodB);
+
+        Sanctum::actingAs($admin);
+
+        $this->patchJson("/api/panel/participants/{$participantA->id}/graduation", [
+            'graduation_status' => 'completed',
+        ])->assertOk();
+
+        $this->patchJson("/api/panel/participants/{$participantB->id}/graduation", [
+            'graduation_status' => 'completed',
+        ])->assertOk();
+
+        $certificates = Certificate::query()
+            ->where('user_id', $student->id)
+            ->where('project_id', $project->id)
+            ->where('type', 'participation')
+            ->orderBy('period_id')
+            ->get();
+
+        $this->assertCount(2, $certificates);
+        $expectedPeriodIds = [$periodA->id, $periodB->id];
+        $actualPeriodIds = $certificates->pluck('period_id')->all();
+        sort($expectedPeriodIds);
+        sort($actualPeriodIds);
+        $this->assertSame($expectedPeriodIds, $actualPeriodIds);
+        $this->assertTrue($certificates->every(fn (Certificate $certificate) => ! empty($certificate->verification_code)));
+        $this->assertTrue($certificates->every(fn (Certificate $certificate) => ! empty($certificate->certificate_path)));
+    }
+
+    public function test_admin_certificate_store_generates_pdf_when_file_is_not_uploaded(): void
+    {
+        $admin = $this->makeSuperAdmin('manual-cert-admin@test.local');
+        $student = $this->makeStudent('manual-cert-student@test.local');
+        [$project, $period] = $this->makeProjectWithPeriod('manual-cert-proj');
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->postJson('/api/panel/certificates', [
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'type' => 'graduation',
+        ]);
+
+        $response->assertCreated();
+        $certificate = Certificate::query()->findOrFail((int) $response->json('certificate.id'));
+
+        $this->assertSame($period->id, (int) $certificate->period_id);
+        $this->assertSame('graduation', $certificate->type);
+        $this->assertNotEmpty($certificate->verification_code);
+        $this->assertNotEmpty($certificate->certificate_path);
+        $this->assertTrue(MediaStorage::exists($certificate->certificate_path));
     }
 
     public function test_student_sees_scoped_alumni_opportunities(): void

@@ -20,6 +20,7 @@ class SupportTicket extends Model
         'attachment_path',
         'category',
         'project_id',
+        'period_id',
         'assigned_to',
         'status',
     ];
@@ -32,6 +33,11 @@ class SupportTicket extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(Period::class);
     }
 
     public function assignee()
@@ -52,5 +58,4 @@ class SupportTicket extends Model
             ->dontLogEmptyChanges();
     }
 }
-
 

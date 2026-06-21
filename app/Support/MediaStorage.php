@@ -41,14 +41,46 @@ class MediaStorage
         }
     }
 
+    /**
+     * Veritabanında veya istemcide saklanmış tam URL'yi, disk üzerindeki göreli anahtara çevirir.
+     * (Eski kayıtlar tam URL tutuyorsa silme/varlık kontrolü çalışsın diye.)
+     */
+    public static function normalizeToStorageKey(?string $stored): ?string
+    {
+        if ($stored === null || $stored === '') {
+            return null;
+        }
+        $stored = trim($stored);
+        if (! self::isUrl($stored)) {
+            return $stored;
+        }
+        foreach (self::configuredPublicBases() as $publicBase) {
+            if (str_starts_with($stored, $publicBase . '/')) {
+                return ltrim(substr($stored, strlen($publicBase)), '/');
+            }
+        }
+
+        $pathPart = parse_url($stored, PHP_URL_PATH);
+        if (! is_string($pathPart) || $pathPart === '' || $pathPart === '/') {
+            return null;
+        }
+        $pathPart = ltrim($pathPart, '/');
+        if (str_starts_with($pathPart, 'storage/')) {
+            return substr($pathPart, strlen('storage/'));
+        }
+
+        return $pathPart;
+    }
+
     public static function delete(?string $path): bool
     {
-        if (! $path || self::isUrl($path)) {
+        $key = self::normalizeToStorageKey($path);
+        if (! $key) {
             return false;
         }
 
         try {
-            return self::disk()->delete($path);
+            return self::disk()->delete($key);
         } catch (\Throwable) {
             return false;
         }
@@ -56,12 +88,13 @@ class MediaStorage
 
     public static function exists(?string $path): bool
     {
-        if (! $path || self::isUrl($path)) {
+        $key = self::normalizeToStorageKey($path);
+        if (! $key) {
             return false;
         }
 
         try {
-            return self::disk()->exists($path);
+            return self::disk()->exists($key);
         } catch (\Throwable) {
             return false;
         }
@@ -69,12 +102,13 @@ class MediaStorage
 
     public static function mimeType(?string $path): ?string
     {
-        if (! $path || self::isUrl($path)) {
+        $key = self::normalizeToStorageKey($path);
+        if (! $key) {
             return null;
         }
 
         try {
-            $mimeType = self::disk()->mimeType($path);
+            $mimeType = self::disk()->mimeType($key);
 
             return is_string($mimeType) && $mimeType !== '' ? $mimeType : null;
         } catch (\Throwable) {
@@ -88,13 +122,27 @@ class MediaStorage
             return null;
         }
 
+        $publicBase = self::publicBaseUrl();
+
         if (self::isUrl($path)) {
+            $key = self::storageKeyFromKnownPublicUrl($path);
+            if ($publicBase !== '' && $key) {
+                return $publicBase . '/' . ltrim($key, '/');
+            }
+
             return $path;
         }
 
-        $publicBase = rtrim((string) config('filesystems.disks.' . self::diskName() . '.url'), '/');
         if ($publicBase !== '') {
             return $publicBase . '/' . ltrim($path, '/');
+        }
+
+        if (self::usesTemporaryUrls()) {
+            try {
+                return self::disk()->temporaryUrl(ltrim($path, '/'), now()->addMinutes(30));
+            } catch (\Throwable) {
+                // Yerel diskler veya temporaryUrl desteklemeyen adapter'lar normal URL akışına düşer.
+            }
         }
 
         return self::disk()->url($path);
@@ -102,7 +150,7 @@ class MediaStorage
 
     public static function publicUrlConfigured(): bool
     {
-        return rtrim((string) config('filesystems.disks.' . self::diskName() . '.url'), '/') !== '';
+        return self::publicBaseUrl() !== '';
     }
 
     public static function directDownloadsEnabled(): bool
@@ -131,5 +179,57 @@ class MediaStorage
     public static function isUrl(string $path): bool
     {
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
+    }
+
+    private static function usesTemporaryUrls(): bool
+    {
+        $diskConfig = config('filesystems.disks.' . self::diskName(), []);
+
+        return is_array($diskConfig)
+            && ($diskConfig['driver'] ?? null) === 's3'
+            && self::publicBaseUrl() === '';
+    }
+
+    private static function publicBaseUrl(): string
+    {
+        return rtrim((string) config('filesystems.disks.' . self::diskName() . '.url'), '/');
+    }
+
+    private static function storageKeyFromKnownPublicUrl(string $url): ?string
+    {
+        foreach (self::configuredPublicBases() as $publicBase) {
+            if (str_starts_with($url, $publicBase . '/')) {
+                return ltrim(substr($url, strlen($publicBase)), '/');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Current and legacy public bases. This lets old DB rows that stored a full
+     * r2.dev URL be served from the active custom domain without rewriting data.
+     *
+     * @return array<int, string>
+     */
+    private static function configuredPublicBases(): array
+    {
+        $diskConfig = config('filesystems.disks.' . self::diskName(), []);
+        $bases = [self::publicBaseUrl()];
+
+        if (is_array($diskConfig)) {
+            $legacyUrls = $diskConfig['legacy_urls'] ?? [];
+            if (is_string($legacyUrls)) {
+                $legacyUrls = explode(',', $legacyUrls);
+            }
+            if (is_array($legacyUrls)) {
+                $bases = array_merge($bases, $legacyUrls);
+            }
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn ($base) => rtrim((string) $base, '/'),
+            $bases,
+        ))));
     }
 }
