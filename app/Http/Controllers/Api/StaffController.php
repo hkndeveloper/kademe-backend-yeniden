@@ -141,7 +141,7 @@ class StaffController extends Controller
                 'assignment_type' => 'staff',
             ]);
 
-        return $coordinated
+        return collect($coordinated->all())
             ->merge($assigned)
             ->unique(fn (array $project) => $project['assignment_type'] . ':' . $project['id'])
             ->values()
