@@ -192,7 +192,22 @@ class MediaStorage
 
     private static function publicBaseUrl(): string
     {
-        return rtrim((string) config('filesystems.disks.' . self::diskName() . '.url'), '/');
+        $diskConfig = config('filesystems.disks.' . self::diskName(), []);
+        $configuredUrl = is_array($diskConfig) ? rtrim((string) ($diskConfig['url'] ?? ''), '/') : '';
+        $stableUrl = is_array($diskConfig) ? rtrim((string) ($diskConfig['stable_url'] ?? ''), '/') : '';
+
+        if ($stableUrl !== '' && self::isR2DevPublicUrl($configuredUrl)) {
+            return $stableUrl;
+        }
+
+        return $configuredUrl;
+    }
+
+    private static function isR2DevPublicUrl(string $url): bool
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+
+        return is_string($host) && str_ends_with($host, '.r2.dev');
     }
 
     private static function storageKeyFromKnownPublicUrl(string $url): ?string
@@ -218,6 +233,8 @@ class MediaStorage
         $bases = [self::publicBaseUrl()];
 
         if (is_array($diskConfig)) {
+            $bases[] = $diskConfig['url'] ?? null;
+            $bases[] = $diskConfig['stable_url'] ?? null;
             $legacyUrls = $diskConfig['legacy_urls'] ?? [];
             if (is_string($legacyUrls)) {
                 $legacyUrls = explode(',', $legacyUrls);

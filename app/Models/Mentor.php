@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Mentor extends Model
 {
@@ -30,8 +31,18 @@ class Mentor extends Model
 
     public function participants()
     {
+        $pivotColumns = ['period_id'];
+
+        if (Schema::hasColumn('participant_mentor', 'assigned_by')) {
+            $pivotColumns[] = 'assigned_by';
+        }
+
+        if (Schema::hasColumn('participant_mentor', 'note')) {
+            $pivotColumns[] = 'note';
+        }
+
         return $this->belongsToMany(Participant::class, 'participant_mentor')
-                    ->withPivot(['period_id', 'assigned_by', 'note'])
+                    ->withPivot($pivotColumns)
                     ->withTimestamps();
     }
 }

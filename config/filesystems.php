@@ -71,6 +71,7 @@ return [
             'region' => env('R2_DEFAULT_REGION', 'auto'),
             'bucket' => env('R2_BUCKET_NAME'),
             'url' => env('R2_PUBLIC_URL', 'https://img.hakankekec.me'),
+            'stable_url' => env('R2_STABLE_PUBLIC_URL', env('MEDIA_PUBLIC_URL', 'https://img.hakankekec.me')),
             'legacy_urls' => array_values(array_filter(array_map('trim', explode(',', (string) env('R2_LEGACY_PUBLIC_URLS', ''))))),
             'endpoint' => env('R2_ENDPOINT', env('R2_ACCOUNT_ID') ? 'https://' . env('R2_ACCOUNT_ID') . '.r2.cloudflarestorage.com' : null),
             'use_path_style_endpoint' => env('R2_USE_PATH_STYLE_ENDPOINT', true),

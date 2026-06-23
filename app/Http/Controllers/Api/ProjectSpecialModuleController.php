@@ -21,6 +21,7 @@ use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Schema;
 
 class ProjectSpecialModuleController extends Controller
 {
@@ -529,12 +530,20 @@ class ProjectSpecialModuleController extends Controller
             );
         }
 
+        $pivotData = [
+            'period_id' => $validated['period_id'] ?? $participant->period_id,
+        ];
+
+        if (Schema::hasColumn('participant_mentor', 'assigned_by')) {
+            $pivotData['assigned_by'] = $request->user()->id;
+        }
+
+        if (Schema::hasColumn('participant_mentor', 'note')) {
+            $pivotData['note'] = $validated['note'] ?? null;
+        }
+
         $mentor->participants()->syncWithoutDetaching([
-            $validated['participant_id'] => [
-                'period_id'   => $validated['period_id'] ?? $participant->period_id,
-                'assigned_by' => $request->user()->id,
-                'note'        => $validated['note'] ?? null,
-            ],
+            $validated['participant_id'] => $pivotData,
         ]);
 
         return response()->json(['message' => 'Katilimci mentor ile eslendi.']);

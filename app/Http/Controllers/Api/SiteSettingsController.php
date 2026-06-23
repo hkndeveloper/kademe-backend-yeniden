@@ -12,6 +12,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\SystemSetting;
 use App\Services\PermissionResolver;
+use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -355,6 +356,19 @@ class SiteSettingsController extends Controller
         return $settings;
     }
 
+    private function normalizeStoredMediaUrls(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return array_map(fn ($item) => $this->normalizeStoredMediaUrls($item), $value);
+        }
+
+        if (is_string($value) && MediaStorage::isUrl($value)) {
+            return MediaStorage::url($value) ?? $value;
+        }
+
+        return $value;
+    }
+
     private function groupedSettings(): array
     {
         $settings = $this->defaults();
@@ -375,7 +389,7 @@ class SiteSettingsController extends Controller
             $settings[$group][$setting->key] = $value;
         }
 
-        return $this->normalizeSettings($settings);
+        return $this->normalizeStoredMediaUrls($this->normalizeSettings($settings));
     }
 
     public function public(): JsonResponse
