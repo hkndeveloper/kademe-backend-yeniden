@@ -25,7 +25,11 @@ use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Spatie\Activitylog\Models\Activity;
 
+/**
+ * @group Admin Dashboard
+ */
 class AdminDashboardController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -37,7 +41,7 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Dashboard özetine erişim: en az bir operasyonel görünürlük izni gerekir.
+     * Dashboard Ã¶zetine eriÅŸim: en az bir operasyonel gÃ¶rÃ¼nÃ¼rlÃ¼k izni gerekir.
      */
     private function assertCanViewDashboard(Request $request): void
     {
@@ -149,8 +153,15 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * GET /admin/dashboard/stats
-     * Süper admin: genel; diğer roller: yalnızca PermissionResolver kapsamındaki projeler.
+     * Get admin dashboard statistics.
+     *
+     * Requires at least one dashboard/operational visibility permission: `dashboard.admin.view`, `dashboard.coordinator.view`, `dashboard.staff.view`, `programs.view`, `applications.view`, `financial.view`, `support.view` or `certificates.view`. Global scope returns all projects; scoped users only receive projects allowed by their action+scope permissions. Optional project/period filters are validated through PermissionResolver and completed periods are returned in archive mode.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. The user must be allowed to access this project for one of the dashboard permissions. Example: 1
+     * @queryParam period_id integer Optional period filter. Must belong to the selected/allowed project. Example: 3
+     * @response 200 {"students":{"active":42},"programs":{"monthly_total":8,"monthly_completed":3,"monthly_upcoming":5},"financials":{"monthly_expense":12500,"expense_change_percent":12.5,"pending_count":2},"pending":{"applications":4,"support":1,"financials":2},"stats_scope":"projects","dashboard_context":{"project_id":1,"period_id":3,"archive_mode":false,"projects":[]}}
+     * @response 403 {"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}
      */
     public function stats(Request $request)
     {
@@ -480,6 +491,18 @@ class AdminDashboardController extends Controller
     }
 
 
+    /**
+     * Export credit-risk participants.
+     *
+     * Requires dashboard visibility for the selected project/period context. Global users export all visible risk rows; scoped users export only participants in projects allowed by their dashboard/project permissions. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter validated against the user dashboard scope. Example: 1
+     * @queryParam period_id integer Optional period filter validated against the selected/allowed project. Example: 3
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     * @response 200 binary Credit-risk export file.
+     * @response 403 {"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}
+     */
     public function exportCreditRisk(Request $request)
     {
         $this->assertCanViewDashboard($request);
@@ -552,7 +575,21 @@ class AdminDashboardController extends Controller
         );
     }
     /**
-     * GET /admin/dashboard/activity-logs
+     * List panel activity logs.
+     *
+     * Requires permission: `logs.view`. Users with global scope can see all activity logs; scoped users see their own logs plus permission matrix logs. The endpoint returns paginated logs, summary counters and filter options for the log screen.
+     *
+     * @authenticated
+     * @queryParam log_name string Optional log source filter. Example: audit
+     * @queryParam event string Optional event/action filter. Example: updated
+     * @queryParam outcome string Optional outcome filter: `success` or `denied_or_failed`. Example: success
+     * @queryParam status_code integer Optional HTTP status code filter. Example: 403
+     * @queryParam search string Optional text search in description, event, source, subject and properties. Example: basvuru
+     * @queryParam date_from date Optional start date. Example: 2026-06-01
+     * @queryParam date_to date Optional end date. Example: 2026-06-30
+     * @queryParam per_page integer Optional page size between 5 and 100. Example: 25
+     * @response 200 {"logs":{"data":[]},"summary":{"total":0,"success":0,"failed":0,"sources":[],"events":[]},"filters":{"log_names":[],"events":[]}}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
     public function activityLogs(Request $request)
     {
@@ -560,72 +597,70 @@ class AdminDashboardController extends Controller
         $actor = $request->user();
 
         try {
-            $query = \Spatie\Activitylog\Models\Activity::query()
-                ->with('causer:id,name,surname,role')
-                ->latest();
+            $validated = $this->validatedActivityLogFilters($request);
+            $query = $this->activityLogQuery($request, 'logs.view', $validated);
+            $summaryQuery = clone $query;
+            $perPage = (int) ($validated['per_page'] ?? 25);
+            $logs = $query->paginate($perPage);
 
-            if (! $this->permissionResolver->hasGlobalScope($actor, 'logs.view')) {
-                // Non-admin users can see their own actions and permission-related audit trail.
-                $query->where(function ($builder) use ($actor) {
-                    $builder
-                        ->where(function ($self) use ($actor) {
-                            $self->where('causer_type', \App\Models\User::class)
-                                ->where('causer_id', $actor->id);
-                        })
-                        ->orWhere('log_name', 'permissions');
-                });
-            }
-
-            if ($request->filled('log_name')) {
-                $query->where('log_name', $request->string('log_name')->toString());
-            }
-
-            $logs = $query->take(50)->get();
-
-            return response()->json(['logs' => $logs]);
+            return response()->json([
+                'logs' => $logs,
+                'summary' => $this->activityLogSummary($summaryQuery),
+                'filters' => $this->activityLogFilterOptions($actor),
+            ]);
         } catch (\Throwable $e) {
-            return response()->json(['logs' => [], 'warning' => 'Activity log paketi etkin değil.']);
+            report($e);
+            return response()->json(['logs' => ['data' => []], 'warning' => 'Activity log paketi etkin degil.']);
         }
     }
 
+    /**
+     * Export panel activity logs.
+     *
+     * Requires permission: `logs.export`. Global scope exports all matching logs; scoped users are limited to their own activity plus permission matrix logs. Export is capped to the latest 1000 filtered rows and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @queryParam log_name string Optional log source filter. Example: audit
+     * @queryParam event string Optional event/action filter. Example: updated
+     * @queryParam outcome string Optional outcome filter: `success` or `denied_or_failed`. Example: success
+     * @queryParam status_code integer Optional HTTP status code filter. Example: 403
+     * @queryParam search string Optional text search. Example: kullanici
+     * @queryParam date_from date Optional start date. Example: 2026-06-01
+     * @queryParam date_to date Optional end date. Example: 2026-06-30
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: pdf
+     * @response 200 binary Activity-log export file.
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     */
     public function exportActivityLogs(Request $request)
     {
         $this->abortUnlessAllowed($request, 'logs.export');
-        $actor = $request->user();
 
         try {
-            $query = \Spatie\Activitylog\Models\Activity::query()
-                ->with('causer:id,name,surname,role')
-                ->latest();
+            $validated = $this->validatedActivityLogFilters($request);
+            $logs = $this->activityLogQuery($request, 'logs.export', $validated)
+                ->limit(1000)
+                ->get();
 
-            if (! $this->permissionResolver->hasGlobalScope($actor, 'logs.export')) {
-                $query->where(function ($builder) use ($actor) {
-                    $builder
-                        ->where(function ($self) use ($actor) {
-                            $self->where('causer_type', \App\Models\User::class)
-                                ->where('causer_id', $actor->id);
-                        })
-                        ->orWhere('log_name', 'permissions');
-                });
-            }
+            $headings = ['ID', 'Tarih', 'Kaynak', 'Kullanici', 'Rol', 'Aksiyon', 'Sonuc', 'HTTP', 'Sure (ms)', 'Yol', 'Hedef Model', 'Hedef ID', 'Aciklama'];
+            $rows = $logs->map(function (Activity $log) {
+                $properties = $log->properties?->toArray() ?? [];
 
-            if ($request->filled('log_name')) {
-                $query->where('log_name', $request->string('log_name')->toString());
-            }
-
-            $logs = $query->take(500)->get();
-
-            $headings = ['ID', 'Tarih', 'Kullanici', 'Rol', 'Aksiyon', 'Hedef Model', 'Hedef ID', 'Aciklama'];
-            $rows = $logs->map(fn ($log) => [
-                $log->id,
-                optional($log->created_at)?->format('d.m.Y H:i:s') ?? '-',
-                $log->causer ? trim($log->causer->name . ' ' . $log->causer->surname) : 'Sistem',
-                $log->causer->role ?? '-',
-                $log->event ?? ($log->description ?? '-'),
-                $log->subject_type ? class_basename($log->subject_type) : '-',
-                $log->subject_id ?? '-',
-                $log->description ?? '-',
-            ])->all();
+                return [
+                    $log->id,
+                    optional($log->created_at)?->format('d.m.Y H:i:s') ?? '-',
+                    $log->log_name ?? '-',
+                    $log->causer ? trim($log->causer->name . ' ' . $log->causer->surname) : 'Sistem',
+                    $log->causer->role ?? '-',
+                    $log->event ?? ($log->description ?? '-'),
+                    data_get($properties, 'outcome', '-'),
+                    data_get($properties, 'status_code', '-'),
+                    data_get($properties, 'duration_ms', '-'),
+                    data_get($properties, 'path', '-'),
+                    $log->subject_type ? class_basename($log->subject_type) : '-',
+                    $log->subject_id ?? '-',
+                    $log->description ?? '-',
+                ];
+            })->all();
 
             return AdminExportResponder::download(
                 $request->string('format')->toString() ?: 'csv',
@@ -635,7 +670,114 @@ class AdminDashboardController extends Controller
                 $rows
             );
         } catch (\Throwable $e) {
+            report($e);
             return response()->json(['message' => 'Log export olusturulamadi.'], 500);
         }
+    }
+
+    private function validatedActivityLogFilters(Request $request): array
+    {
+        return $request->validate([
+            'log_name' => 'nullable|string|max:80',
+            'event' => 'nullable|string|max:120',
+            'outcome' => 'nullable|in:success,denied_or_failed',
+            'status_code' => 'nullable|integer|min:100|max:599',
+            'search' => 'nullable|string|max:160',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'per_page' => 'nullable|integer|min:5|max:100',
+        ]);
+    }
+
+    private function activityLogQuery(Request $request, string $permission, array $filters)
+    {
+        $actor = $request->user();
+        $query = Activity::query()
+            ->with('causer:id,name,surname,role')
+            ->latest();
+
+        if (! $this->permissionResolver->hasGlobalScope($actor, $permission)) {
+            $query->where(function ($builder) use ($actor) {
+                $builder
+                    ->where(function ($self) use ($actor) {
+                        $self->where('causer_type', User::class)
+                            ->where('causer_id', $actor->id);
+                    })
+                    ->orWhere('log_name', 'permissions');
+            });
+        }
+
+        if (! empty($filters['log_name'])) {
+            $query->where('log_name', $filters['log_name']);
+        }
+
+        if (! empty($filters['event'])) {
+            $query->where('event', $filters['event']);
+        }
+
+        if (! empty($filters['outcome'])) {
+            $query->where('properties->outcome', $filters['outcome']);
+        }
+
+        if (! empty($filters['status_code'])) {
+            $query->where('properties->status_code', (int) $filters['status_code']);
+        }
+
+        if (! empty($filters['date_from'])) {
+            $query->where('created_at', '>=', Carbon::parse($filters['date_from'])->startOfDay());
+        }
+
+        if (! empty($filters['date_to'])) {
+            $query->where('created_at', '<=', Carbon::parse($filters['date_to'])->endOfDay());
+        }
+
+        if (! empty($filters['search'])) {
+            $search = trim((string) $filters['search']);
+            $query->where(function ($builder) use ($search) {
+                $builder->where('description', 'like', "%{$search}%")
+                    ->orWhere('event', 'like', "%{$search}%")
+                    ->orWhere('log_name', 'like', "%{$search}%")
+                    ->orWhere('subject_type', 'like', "%{$search}%")
+                    ->orWhere('properties', 'like', "%{$search}%");
+            });
+        }
+
+        return $query;
+    }
+
+    private function activityLogSummary($query): array
+    {
+        $total = (clone $query)->reorder()->count();
+        $success = (clone $query)->reorder()->where('properties->outcome', 'success')->count();
+        $failed = (clone $query)->reorder()->where('properties->outcome', 'denied_or_failed')->count();
+        $logs = (clone $query)->limit(1000)->get(['id', 'log_name', 'event', 'properties']);
+
+        return [
+            'total' => $total,
+            'success' => $success,
+            'failed' => $failed,
+            'sources' => $logs->pluck('log_name')->filter()->countBy()->sortDesc()->take(6)->all(),
+            'events' => $logs->pluck('event')->filter()->countBy()->sortDesc()->take(8)->all(),
+        ];
+    }
+
+    private function activityLogFilterOptions(User $actor): array
+    {
+        $query = Activity::query();
+        if (! $this->permissionResolver->hasGlobalScope($actor, 'logs.view')) {
+            $query->where(function ($builder) use ($actor) {
+                $builder
+                    ->where(function ($self) use ($actor) {
+                        $self->where('causer_type', User::class)
+                            ->where('causer_id', $actor->id);
+                    })
+                    ->orWhere('log_name', 'permissions');
+            });
+        }
+
+        return [
+            'log_names' => (clone $query)->select('log_name')->whereNotNull('log_name')->distinct()->orderBy('log_name')->pluck('log_name')->values()->all(),
+            'events' => (clone $query)->select('event')->whereNotNull('event')->distinct()->orderBy('event')->pluck('event')->values()->all(),
+        ];
     }
 }

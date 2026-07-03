@@ -22,6 +22,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @group Periods
+ */
 class PeriodController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -209,6 +212,17 @@ class PeriodController extends Controller
         ];
     }
 
+    /**
+     * List panel periods.
+     *
+     * Requires permission: `periods.view`. Global scope lists all periods; scoped users only see periods in projects allowed by `periods.view`. Exposed under `/api/admin/periods` and `/api/panel/periods` aliases.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Must be inside the user scope. Example: 1
+     * @queryParam status string Optional status filter: `active`, `passive` or `completed`. Example: active
+     * @response 200 {"periods":[{"id":3,"name":"2026 Bahar","status":"active","project":{"id":1,"name":"Diplomasi360"}}]}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     */
     public function index(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'periods.view');
@@ -229,6 +243,18 @@ class PeriodController extends Controller
         ]);
     }
 
+    /**
+     * Export panel periods.
+     *
+     * Requires permission: `periods.export`. Global scope exports all periods; scoped users export only periods in permitted projects. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam status string Optional status filter: `active`, `passive` or `completed`. Example: completed
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: pdf
+     * @response 200 binary Periods export file.
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     */
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'periods.export');
@@ -266,6 +292,23 @@ class PeriodController extends Controller
         );
     }
 
+    /**
+     * Create a project period.
+     *
+     * Requires permission: `periods.create` for the selected project. If the new period is active, other active periods in the same project are switched to passive.
+     *
+     * @authenticated
+     * @bodyParam project_id integer required Project ID. Example: 1
+     * @bodyParam name string required Period name. Example: 2026 Bahar
+     * @bodyParam start_date date required Start date. Example: 2026-03-01
+     * @bodyParam end_date date required End date, after or equal to start date. Example: 2026-06-30
+     * @bodyParam credit_start_amount integer required Starting credit amount. Example: 100
+     * @bodyParam credit_threshold integer required Critical credit threshold. Example: 75
+     * @bodyParam status string required Period status: `active`, `passive` or `completed`. Example: active
+     * @response 201 {"message":"Donem olusturuldu.","period":{"id":3,"name":"2026 Bahar","status":"active"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
+     */
     public function store(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'periods.create');
@@ -296,6 +339,22 @@ class PeriodController extends Controller
         ], 201);
     }
 
+    /**
+     * Update a project period.
+     *
+     * Requires permission: `periods.update` for the period project. If the period is set to active, other active periods in the same project are switched to passive.
+     *
+     * @authenticated
+     * @urlParam id integer required Period ID. Example: 3
+     * @bodyParam name string required Period name. Example: 2026 Bahar
+     * @bodyParam start_date date required Start date. Example: 2026-03-01
+     * @bodyParam end_date date required End date. Example: 2026-06-30
+     * @bodyParam credit_start_amount integer required Starting credit amount. Example: 100
+     * @bodyParam credit_threshold integer required Critical credit threshold. Example: 75
+     * @bodyParam status string required Period status: `active`, `passive` or `completed`. Example: passive
+     * @response 200 {"message":"Donem guncellendi.","period":{"id":3,"status":"passive"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function update(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'periods.update');
@@ -328,6 +387,16 @@ class PeriodController extends Controller
         ]);
     }
 
+    /**
+     * Get period closure summary.
+     *
+     * Requires permission: `periods.view` for the period project. Returns the computed closure payload, warnings and the latest archive snapshot without changing period status.
+     *
+     * @authenticated
+     * @urlParam id integer required Period ID. Example: 3
+     * @response 200 {"period":{"id":3,"status":"active"},"summary":{"participants":{"total":50},"credit_snapshot":{"below_threshold_count":4}},"warnings":{"open_programs":1},"latest_archive":null}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function closureSummary(Request $request, int $id): JsonResponse
     {
         $period = $this->resolvePeriodForAction($request, $id, 'periods.view')->load('latestArchive');
@@ -341,6 +410,17 @@ class PeriodController extends Controller
         ]);
     }
 
+    /**
+     * Complete and archive a period.
+     *
+     * Requires permission: `periods.update` for the period project. Creates an immutable period archive snapshot with summary, warnings, counts and integrity hash, then marks the period as completed.
+     *
+     * @authenticated
+     * @urlParam id integer required Period ID. Example: 3
+     * @bodyParam notes string Optional archive notes. Example: Donem kapanisi tamamlandi.
+     * @response 200 {"message":"Donem tamamlandi ve gecmis donem olarak arsivlendi.","period":{"id":3,"status":"completed"},"archive":{"archive_version":1,"integrity_hash":"hash"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function complete(Request $request, int $id): JsonResponse
     {
         $period = $this->resolvePeriodForAction($request, $id, 'periods.update');
@@ -389,6 +469,17 @@ class PeriodController extends Controller
         ]);
     }
 
+    /**
+     * Reopen a completed/passive period.
+     *
+     * Requires permission: `periods.update` for the period project. Reopens the period as passive by default, or active when requested; when reactivated, other active periods in the same project are switched to passive.
+     *
+     * @authenticated
+     * @urlParam id integer required Period ID. Example: 3
+     * @bodyParam status string Optional next status: `active` or `passive`. Defaults to passive. Example: active
+     * @response 200 {"message":"Donem yeniden aktif edildi.","period":{"id":3,"status":"active"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function reopen(Request $request, int $id): JsonResponse
     {
         $period = $this->resolvePeriodForAction($request, $id, 'periods.update');

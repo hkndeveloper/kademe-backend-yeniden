@@ -19,6 +19,9 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Requests
+ */
 class RequestController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -252,6 +255,23 @@ class RequestController extends Controller
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
+    /**
+     * List workflow requests.
+     *
+     * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.view`. The controller then applies the action+scope matrix: global scope sees all requests, otherwise visibility is limited to requester, target user, manageable project ids, or allowed target units.
+     *
+     * The response also returns form metadata for the UI: active projects/periods inside view/create scope, eligible target users, request types, status options, and target units.
+     *
+     * @group Requests
+     * @authenticated
+     *
+     * @queryParam status string Optional status filter: pending, in_progress, completed, rejected. Example: pending
+     * @queryParam type string Optional request type filter. Example: official_doc
+     * @queryParam project_id integer Optional project filter; scoped by `requests.view`. Example: 1
+     * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
+     * @response 200 {"requests":[{"id":1,"type":"official_doc","status":"pending","description":"Belge talebi"}],"projects":[{"id":1,"name":"KADEME","periods":[]}],"target_users":[{"id":2,"name":"Ayse","role":"staff"}],"request_types":["vehicle","food","official_doc"],"status_options":["pending","in_progress","completed","rejected"],"target_units":["media","operations","official_affairs"]}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function index(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'requests.view');
@@ -358,6 +378,22 @@ class RequestController extends Controller
         ]);
     }
 
+    /**
+     * Export workflow requests.
+     *
+     * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.export`. Non-global users are filtered to requester, target user, manageable project ids, or allowed target units. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
+     *
+     * @group Requests
+     * @authenticated
+     *
+     * @queryParam status string Optional status filter: pending, in_progress, completed, rejected. Example: completed
+     * @queryParam type string Optional request type filter. Example: vehicle
+     * @queryParam project_id integer Optional project filter; scoped by `requests.export`. Example: 1
+     * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
+     * @queryParam format string Optional export format. Example: csv
+     * @response 200 {"download":"Export file stream"}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'requests.export');
@@ -426,6 +462,26 @@ class RequestController extends Controller
         );
     }
 
+    /**
+     * Create a workflow request.
+     *
+     * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.create`. Either `target_unit` or `target_user_id` is required. Project and period values are checked through the action+scope matrix. `vehicle`, `accommodation`, and `ticket` require a project; `official_doc` is routed to `official_affairs`.
+     *
+     * When the actor does not have global create scope, direct `target_user_id` routing is limited to super admins or staff in the same unit. Creating a request notifies eligible target users who can view that unit/request.
+     *
+     * @group Requests
+     * @authenticated
+     *
+     * @bodyParam type string required One of vehicle, food, accommodation, ticket, official_doc, media_design, other. Example: official_doc
+     * @bodyParam target_unit string Optional target unit: media, operations, program, finance, official_affairs, general. Example: official_affairs
+     * @bodyParam target_user_id integer Optional active staff/admin target user id. Example: 2
+     * @bodyParam description string required Request description, min 10 and max 3000 characters. Example: Resmi belge talep ediyorum.
+     * @bodyParam project_id integer Optional project id. Required for vehicle, accommodation, and ticket. Example: 1
+     * @bodyParam period_id integer Optional period id. Example: 1
+     * @response 201 {"message":"Talep basariyla olusturuldu.","request_item":{"id":1,"type":"official_doc","status":"pending"}}
+     * @response 403 {"message":"Bu proje icin talep olusturma yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Talep icin hedef birim veya hedef kisi secmelisin."}
+     */
     public function store(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'requests.create');
@@ -498,6 +554,20 @@ class RequestController extends Controller
         ], 201);
     }
 
+    /**
+     * Update workflow request status.
+     *
+     * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.update_status`. The target request must be manageable through global scope, target user ownership, target unit scope, or project scope. Status changes are audit logged.
+     *
+     * @group Requests
+     * @authenticated
+     *
+     * @urlParam id integer required Request id. Example: 1
+     * @bodyParam status string required One of pending, in_progress, completed, rejected. Example: completed
+     * @response 200 {"message":"Talep durumu guncellendi.","request_item":{"id":1,"status":"completed"}}
+     * @response 403 {"message":"Bu talebin durumunu guncelleme yetkin yok."}
+     * @response 422 {"message":"The selected status is invalid."}
+     */
     public function updateStatus(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'requests.update_status');
@@ -547,6 +617,20 @@ class RequestController extends Controller
         ]);
     }
 
+    /**
+     * Upload a workflow request response file.
+     *
+     * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.upload_response`. The target request must be manageable through global scope, target user ownership, target unit scope, or project scope. Send as `multipart/form-data`; uploading a new file marks the request as completed and removes the previous response file when replaced.
+     *
+     * @group Requests
+     * @authenticated
+     *
+     * @urlParam id integer required Request id. Example: 1
+     * @bodyParam response_file file required Response attachment, max 10MB.
+     * @response 200 {"message":"Dosya basariyla yuklendi ve talep tamamlandi.","request_item":{"id":1,"status":"completed"}}
+     * @response 403 {"message":"Bu talebe dosya yukleme yetkin yok."}
+     * @response 422 {"message":"The response file field is required.","errors":{"response_file":["The response file field is required."]}}
+     */
     public function uploadResponseFile(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'requests.upload_response');
@@ -606,6 +690,20 @@ class RequestController extends Controller
         ]);
     }
 
+    /**
+     * Download a workflow request response file.
+     *
+     * The requester can download their response file. Panel users can download when they can manage the request through `requests.view`, `requests.upload_response`, or `requests.update_status`. Returns a storage direct URL when configured; otherwise streams the binary file. Downloads are audit logged.
+     *
+     * @group Requests
+     * @authenticated
+     *
+     * @urlParam id integer required Request id. Example: 1
+     * @response 200 {"download_url":"https://storage.example.com/requests/responses/file.pdf"}
+     * @response 200 {"download":"Binary response file stream"}
+     * @response 403 {"message":"Bu talep dosyasini indirme yetkiniz yok."}
+     * @response 404 {"message":"Yanit dosyasi bulunamadi."}
+     */
     public function downloadResponseFile(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $workflowRequest = WorkflowRequest::query()->findOrFail($id);

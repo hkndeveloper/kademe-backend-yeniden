@@ -14,6 +14,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Digital Bohca
+ */
 class DigitalBohcaController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -42,7 +45,16 @@ class DigitalBohcaController extends Controller
     }
 
     /**
-     * Öğrencinin katıldığı projelere ait Dijital Bohça materyallerini listeler
+     * List participant digital bohca materials.
+     *
+     * Requires permission: `participant.bohca.view`. Returns visible materials for the current user projects, periods, user-specific files, and general public materials.
+     *
+     * @group Digital Bohca
+     * @authenticated
+     *
+     * @response 200 {"materials":[{"id":1,"title":"Program Rehberi","file_type":"pdf","category":"general","download_url":"/digital-bohca/1/download","visible_to_student":true,"project_id":1}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function index(Request $request)
     {
@@ -249,6 +261,19 @@ class DigitalBohcaController extends Controller
         );
     }
 
+    /**
+     * Download a participant digital bohca material.
+     *
+     * Requires permission: `participant.bohca.view`. The file must be visible to the student and must belong to one of the current user projects/periods, be user-specific, or be a general material.
+     *
+     * @group Digital Bohca
+     * @authenticated
+     *
+     * @urlParam id integer required Material id. Example: 1
+     * @response 200 {"download":"Binary file stream or {download_url} when direct downloads are enabled"}
+     * @response 404 {"message":"Dosya bulunamadi."}
+     * @response 404 {"message":"Dosya storage uzerinde bulunamadi."}
+     */
     public function download(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $user = $request->user();

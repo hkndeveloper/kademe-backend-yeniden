@@ -11,6 +11,9 @@ use App\Support\AdminExportResponder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * @group Newsletter
+ */
 class NewsletterController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -22,8 +25,16 @@ class NewsletterController extends Controller
     }
 
     /**
-     * GET /admin/newsletter/subscribers
-     * Aktif e-bulten aboneleri (yalnizca newsletter.view).
+     * List newsletter subscribers.
+     *
+     * Panel/admin endpoint exposed under `/admin/newsletter/subscribers` and `/panel/newsletter/subscribers`. Requires `newsletter.view` with global/tum sistem scope because subscriber emails are system-wide personal data. Returns active subscribers only and paginates by 50.
+     *
+     * @group Newsletter
+     * @authenticated
+     *
+     * @queryParam search string Optional email/name search. Example: hakan@example.com
+     * @response 200 {"subscribers":{"data":[{"id":1,"email":"hakan@example.com","name":"Hakan","unsubscribed_at":null}]}}
+     * @response 403 {"message":"E-bulten aboneleri icin tum sistem kapsami gerekir."}
      */
     public function adminSubscribers(Request $request): JsonResponse
     {
@@ -51,6 +62,20 @@ class NewsletterController extends Controller
         ]);
     }
 
+    /**
+     * Export newsletter subscribers.
+     *
+     * Panel/admin endpoint exposed under `/admin/newsletter/subscribers/export` and `/panel/newsletter/subscribers/export`. Requires `newsletter.view` with global/tum sistem scope. By default exports only active subscribers; set `only_active=false` to include unsubscribed records. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
+     *
+     * @group Newsletter
+     * @authenticated
+     *
+     * @queryParam search string Optional email/name search. Example: hakan@example.com
+     * @queryParam only_active boolean Optional. Defaults to true. Example: true
+     * @queryParam format string Optional export format. Example: csv
+     * @response 200 {"download":"Export file stream"}
+     * @response 403 {"message":"E-bulten aboneleri icin tum sistem kapsami gerekir."}
+     */
     public function exportSubscribers(Request $request)
     {
         $this->abortUnlessAllowed($request, 'newsletter.view');
@@ -95,6 +120,19 @@ class NewsletterController extends Controller
         );
     }
 
+    /**
+     * Subscribe to the newsletter.
+     *
+     * Public endpoint. No bearer token is required and the route is throttled. Existing subscribers are reactivated by clearing `unsubscribed_at`. A confirmation email is sent with a signed unsubscribe link.
+     *
+     * @group Newsletter
+     * @unauthenticated
+     *
+     * @bodyParam email string required Subscriber email. Example: hakan@example.com
+     * @bodyParam name string Optional subscriber name. Example: Hakan Kekec
+     * @response 200 {"message":"E-bulten aboneliginiz kaydedildi.","subscriber":{"id":1,"email":"hakan@example.com","name":"Hakan Kekec"}}
+     * @response 422 {"message":"The email field is required.","errors":{"email":["The email field is required."]}}
+     */
     public function subscribe(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -127,8 +165,18 @@ class NewsletterController extends Controller
     }
 
     /**
-     * GET /newsletter/unsubscribe?token={token}&email={email}
-     * KVKK uyumlu: Kullanıcı giriş yapmadan e-bülten aboneliğinden çıkabilir.
+     * Unsubscribe from the newsletter.
+     *
+     * Public endpoint. No bearer token is required and the route is throttled. The `token` must match the SHA-256 hash generated from the email and application key by `generateUnsubscribeUrl`.
+     *
+     * @group Newsletter
+     * @unauthenticated
+     *
+     * @queryParam email string required Subscriber email. Example: hakan@example.com
+     * @queryParam token string required Unsubscribe token from email link. Example: abc123
+     * @response 200 {"message":"E-bulten aboneliginiz basariyla iptal edildi."}
+     * @response 403 {"message":"Gecersiz abonelik cikarma baglantisi."}
+     * @response 404 {"message":"E-posta adresi e-bulten listesinde bulunamadi."}
      */
     public function unsubscribe(Request $request): JsonResponse
     {

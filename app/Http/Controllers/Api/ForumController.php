@@ -10,6 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * @group Forum
+ */
 class ForumController extends Controller
 {
     /** @return int[] */
@@ -65,6 +68,19 @@ class ForumController extends Controller
         return $period;
     }
 
+    /**
+     * List forum posts for participant projects.
+     *
+     * Requires permission: `participant.forum.view`. Returns posts from projects and periods where the current user participates. Completed period archives can be listed but write endpoints are locked.
+     *
+     * @group Forum
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 1
+     * @response 200 {"posts":{"data":[{"id":1,"title":"Tanisma","content":"Merhaba","project":{"id":1,"name":"KADEME"},"replies":[]}]}}
+     * @response 403 {"message":"Bu proje forumuna erisiminiz yok."}
+     */
     public function index(Request $request): JsonResponse
     {
         $userId = (int) $request->user()->id;
@@ -119,6 +135,22 @@ class ForumController extends Controller
         ]);
     }
 
+    /**
+     * Create a forum post.
+     *
+     * Requires permission: `participant.forum.view`. The current user must participate in the selected project and, when `period_id` is given, that period. Completed period archives cannot receive new posts.
+     *
+     * @group Forum
+     * @authenticated
+     *
+     * @bodyParam project_id integer required Project id. Example: 1
+     * @bodyParam period_id integer Optional period id. Example: 1
+     * @bodyParam title string required Post title. Example: Tanisma
+     * @bodyParam content string required Post content, max 8000 characters. Example: Merhaba herkese.
+     * @response 201 {"message":"Forum konusu olusturuldu.","post":{"id":1,"title":"Tanisma","content":"Merhaba herkese."}}
+     * @response 403 {"message":"Bu proje forumuna erisiminiz yok."}
+     * @response 423 {"message":"Tamamlanmis donem arsiv modundadir. Forum arsivine yeni konu veya yanit eklenemez."}
+     */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -152,6 +184,20 @@ class ForumController extends Controller
         ], 201);
     }
 
+    /**
+     * Reply to a forum post.
+     *
+     * Requires permission: `participant.forum.view`. The parent post project/period must be accessible to the current participant. Completed period archives cannot receive replies.
+     *
+     * @group Forum
+     * @authenticated
+     *
+     * @urlParam postId integer required Forum post id. Example: 1
+     * @bodyParam content string required Reply content, max 5000 characters. Example: Ben de katiliyorum.
+     * @response 201 {"message":"Yanit eklendi.","reply":{"id":1,"content":"Ben de katiliyorum."}}
+     * @response 403 {"message":"Bu proje forumuna erisiminiz yok."}
+     * @response 422 {"message":"The content field is required.","errors":{"content":["The content field is required."]}}
+     */
     public function reply(Request $request, int $postId): JsonResponse
     {
         $validated = $request->validate([

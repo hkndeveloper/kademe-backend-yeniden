@@ -10,6 +10,9 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @group Credits & Rewards
+ */
 class AdminCreditController extends Controller
 {
     use AuthorizesGranularPermissions;

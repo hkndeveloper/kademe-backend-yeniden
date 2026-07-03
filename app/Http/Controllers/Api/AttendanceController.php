@@ -10,10 +10,28 @@ use App\Models\Program;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
+/**
+ * @group Programs & Attendance
+ */
 class AttendanceController extends Controller
 {
     /**
-     * Ogrencinin QR kod okutarak yoklama vermesi
+     * Mark attendance with a QR token.
+     *
+     * Requires permission: `participant.qr.use`. The QR token can be the raw token or a scanned URL containing `token`. If the program has coordinates, latitude and longitude are required and checked against the configured radius.
+     *
+     * @group Programs & Attendance
+     * @authenticated
+     *
+     * @bodyParam qr_token string required Raw QR token or scanned URL. Example: qr_abc123
+     * @bodyParam latitude number Optional participant latitude. Example: 41.0082
+     * @bodyParam longitude number Optional participant longitude. Example: 28.9784
+     * @response 200 {"message":"Yoklamaniz basariyla alindi. Etkinlik tamamlandiktan sonra degerlendirme formu acilacaktir.","current_credit":100}
+     * @response 200 {"message":"Yoklamaniz zaten alinmis."}
+     * @response 400 {"message":"Gecersiz veya suresi dolmus QR kod."}
+     * @response 403 {"message":"Bu programa katilma yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Bu yoklama icin konum izni zorunludur."}
+     * @response 423 {"message":"Onceki oturumun degerlendirmesini tamamlamadan yeni QR yoklama veremezsin.","requires_feedback":true,"program_id":1,"redirect_to":"/student/evaluate"}
      */
     public function markQrAttendance(Request $request)
     {

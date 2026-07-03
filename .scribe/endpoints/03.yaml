@@ -1,0 +1,133 @@
+name: Contact
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/contact
+    metadata:
+      custom: []
+      groupName: Contact
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a public contact support ticket.'
+      description: |-
+        Public contact endpoint. No bearer token is required; requests are throttled at route level. If `project_id` or a category maps to a known project/unit, the ticket may be auto-assigned and notification emails are sent through the configured notification service.
+
+        Send as `multipart/form-data` when uploading an attachment. Official document categories may require an attachment.
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Sender name.'
+        required: true
+        example: 'Hakan Kekec'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      email:
+        custom: []
+        name: email
+        description: 'Sender email.'
+        required: true
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      subject:
+        custom: []
+        name: subject
+        description: 'Message subject.'
+        required: true
+        example: 'Bilgi talebi'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Message category.'
+        required: true
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional related project id.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      message:
+        custom: []
+        name: message
+        description: 'Message body.'
+        required: true
+        example: 'Merhaba, bilgi almak istiyorum.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      attachment:
+        custom: []
+        name: attachment
+        description: 'Optional attachment file, max 10MB. Required for official document categories.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Hakan Kekec'
+      email: hakan@example.com
+      subject: 'Bilgi talebi'
+      category: general
+      project_id: 1
+      message: 'Merhaba, bilgi almak istiyorum.'
+    fileParameters:
+      attachment: null
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Mesajiniz basariyla alindi. En kisa surede sizinle iletisime gececegiz.","ticket":{"id":1,"name":"Hakan Kekec","email":"hakan@example.com","subject":"Bilgi talebi","status":"open"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The email field must be a valid email address.","errors":{"email":["The email field must be a valid email address."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null

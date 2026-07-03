@@ -1,0 +1,979 @@
+name: 'Admin Dashboard'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/dashboard/stats
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get admin dashboard statistics.'
+      description: 'Requires at least one dashboard/operational visibility permission: `dashboard.admin.view`, `dashboard.coordinator.view`, `dashboard.staff.view`, `programs.view`, `applications.view`, `financial.view`, `support.view` or `certificates.view`. Global scope returns all projects; scoped users only receive projects allowed by their action+scope permissions. Optional project/period filters are validated through PermissionResolver and completed periods are returned in archive mode.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. The user must be allowed to access this project for one of the dashboard permissions.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. Must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"students":{"active":42},"programs":{"monthly_total":8,"monthly_completed":3,"monthly_upcoming":5},"financials":{"monthly_expense":12500,"expense_change_percent":12.5,"pending_count":2},"pending":{"applications":4,"support":1,"financials":2},"stats_scope":"projects","dashboard_context":{"project_id":1,"period_id":3,"archive_mode":false,"projects":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/dashboard/activity-logs
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel activity logs.'
+      description: 'Requires permission: `logs.view`. Users with global scope can see all activity logs; scoped users see their own logs plus permission matrix logs. The endpoint returns paginated logs, summary counters and filter options for the log screen.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      log_name:
+        custom: []
+        name: log_name
+        description: 'Optional log source filter.'
+        required: false
+        example: audit
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      event:
+        custom: []
+        name: event
+        description: 'Optional event/action filter.'
+        required: false
+        example: updated
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      outcome:
+        custom: []
+        name: outcome
+        description: 'Optional outcome filter: `success` or `denied_or_failed`.'
+        required: false
+        example: success
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status_code:
+        custom: []
+        name: status_code
+        description: 'Optional HTTP status code filter.'
+        required: false
+        example: 403
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional text search in description, event, source, subject and properties.'
+        required: false
+        example: basvuru
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Optional page size between 5 and 100.'
+        required: false
+        example: 25
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      log_name: audit
+      event: updated
+      outcome: success
+      status_code: 403
+      search: basvuru
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      per_page: 25
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"logs":{"data":[]},"summary":{"total":0,"success":0,"failed":0,"sources":[],"events":[]},"filters":{"log_names":[],"events":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/dashboard/activity-logs/export
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel activity logs.'
+      description: 'Requires permission: `logs.export`. Global scope exports all matching logs; scoped users are limited to their own activity plus permission matrix logs. Export is capped to the latest 1000 filtered rows and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      log_name:
+        custom: []
+        name: log_name
+        description: 'Optional log source filter.'
+        required: false
+        example: audit
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      event:
+        custom: []
+        name: event
+        description: 'Optional event/action filter.'
+        required: false
+        example: updated
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      outcome:
+        custom: []
+        name: outcome
+        description: 'Optional outcome filter: `success` or `denied_or_failed`.'
+        required: false
+        example: success
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status_code:
+        custom: []
+        name: status_code
+        description: 'Optional HTTP status code filter.'
+        required: false
+        example: 403
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional text search.'
+        required: false
+        example: kullanici
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      log_name: audit
+      event: updated
+      outcome: success
+      status_code: 403
+      search: kullanici
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      format: pdf
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Activity-log export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/dashboard/credit-risk/export
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export credit-risk participants.'
+      description: 'Requires dashboard visibility for the selected project/period context. Global users export all visible risk rows; scoped users export only participants in projects allowed by their dashboard/project permissions. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter validated against the user dashboard scope.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter validated against the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      format: xlsx
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Credit-risk export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/dashboard/stats
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get admin dashboard statistics.'
+      description: 'Requires at least one dashboard/operational visibility permission: `dashboard.admin.view`, `dashboard.coordinator.view`, `dashboard.staff.view`, `programs.view`, `applications.view`, `financial.view`, `support.view` or `certificates.view`. Global scope returns all projects; scoped users only receive projects allowed by their action+scope permissions. Optional project/period filters are validated through PermissionResolver and completed periods are returned in archive mode.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. The user must be allowed to access this project for one of the dashboard permissions.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. Must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"students":{"active":42},"programs":{"monthly_total":8,"monthly_completed":3,"monthly_upcoming":5},"financials":{"monthly_expense":12500,"expense_change_percent":12.5,"pending_count":2},"pending":{"applications":4,"support":1,"financials":2},"stats_scope":"projects","dashboard_context":{"project_id":1,"period_id":3,"archive_mode":false,"projects":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/dashboard/activity-logs
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel activity logs.'
+      description: 'Requires permission: `logs.view`. Users with global scope can see all activity logs; scoped users see their own logs plus permission matrix logs. The endpoint returns paginated logs, summary counters and filter options for the log screen.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      log_name:
+        custom: []
+        name: log_name
+        description: 'Optional log source filter.'
+        required: false
+        example: audit
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      event:
+        custom: []
+        name: event
+        description: 'Optional event/action filter.'
+        required: false
+        example: updated
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      outcome:
+        custom: []
+        name: outcome
+        description: 'Optional outcome filter: `success` or `denied_or_failed`.'
+        required: false
+        example: success
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status_code:
+        custom: []
+        name: status_code
+        description: 'Optional HTTP status code filter.'
+        required: false
+        example: 403
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional text search in description, event, source, subject and properties.'
+        required: false
+        example: basvuru
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Optional page size between 5 and 100.'
+        required: false
+        example: 25
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      log_name: audit
+      event: updated
+      outcome: success
+      status_code: 403
+      search: basvuru
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      per_page: 25
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"logs":{"data":[]},"summary":{"total":0,"success":0,"failed":0,"sources":[],"events":[]},"filters":{"log_names":[],"events":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/dashboard/activity-logs/export
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel activity logs.'
+      description: 'Requires permission: `logs.export`. Global scope exports all matching logs; scoped users are limited to their own activity plus permission matrix logs. Export is capped to the latest 1000 filtered rows and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      log_name:
+        custom: []
+        name: log_name
+        description: 'Optional log source filter.'
+        required: false
+        example: audit
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      event:
+        custom: []
+        name: event
+        description: 'Optional event/action filter.'
+        required: false
+        example: updated
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      outcome:
+        custom: []
+        name: outcome
+        description: 'Optional outcome filter: `success` or `denied_or_failed`.'
+        required: false
+        example: success
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status_code:
+        custom: []
+        name: status_code
+        description: 'Optional HTTP status code filter.'
+        required: false
+        example: 403
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional text search.'
+        required: false
+        example: kullanici
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      log_name: audit
+      event: updated
+      outcome: success
+      status_code: 403
+      search: kullanici
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      format: pdf
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Activity-log export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/dashboard/credit-risk/export
+    metadata:
+      custom: []
+      groupName: 'Admin Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export credit-risk participants.'
+      description: 'Requires dashboard visibility for the selected project/period context. Global users export all visible risk rows; scoped users export only participants in projects allowed by their dashboard/project permissions. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter validated against the user dashboard scope.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter validated against the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      format: xlsx
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Credit-risk export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

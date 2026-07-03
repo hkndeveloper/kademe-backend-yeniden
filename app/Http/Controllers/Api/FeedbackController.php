@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group Feedback
+ */
 class FeedbackController extends Controller
 {
     use ResolvesProjectPeriodContext;
@@ -28,6 +31,18 @@ class FeedbackController extends Controller
     ) {
     }
 
+    /**
+     * List feedback forms for attended programs.
+     *
+     * Requires permission: `participant.feedback.create`. Returns completed programs where the user has valid attendance, including dynamic feedback questions and submission/credit state.
+     *
+     * @group Feedback
+     * @authenticated
+     *
+     * @response 200 {"questions":[{"id":"rating","type":"rating","required":true}],"programs":[{"id":1,"title":"Liderlik Atolyesi","feedback_submitted":false,"feedback_open":true,"credit_restored":false,"questions":[{"id":"rating","type":"rating"}]}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -97,6 +112,21 @@ class FeedbackController extends Controller
         ]);
     }
 
+    /**
+     * Submit feedback for an attended program.
+     *
+     * Requires permission: `participant.feedback.create`. The program must be completed, targeted to the user role, attended with a valid attendance record, and still inside the feedback deadline. For students, the feedback credit restore is applied once.
+     *
+     * @group Feedback
+     * @authenticated
+     *
+     * @bodyParam program_id integer required Program id. Example: 1
+     * @bodyParam responses object required Feedback answers keyed by question id. Example: {"rating":5,"comment":"Cok faydaliydi"}
+     * @response 201 {"message":"Degerlendirmen alindi ve oturuma ait kredi iadesi uygulandi.","current_credit":100,"anonymous_feedback_id":"fb_abc123"}
+     * @response 403 {"message":"Bu degerlendirme panel turunuz icin acik degil."}
+     * @response 422 {"message":"Degerlendirme formu etkinlik tamamlandiktan sonra acilir."}
+     * @response 422 {"message":"Bu oturum icin degerlendirme zaten gonderilmis."}
+     */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([

@@ -7,6 +7,9 @@ use App\Support\PanelModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * @group Admin Panel
+ */
 class PanelModuleController extends Controller
 {
     public function __construct(private readonly PanelModuleCatalog $panelModuleCatalog)

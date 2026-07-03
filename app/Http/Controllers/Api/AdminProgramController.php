@@ -23,6 +23,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * @group Programs & Attendance
+ */
 class AdminProgramController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -30,6 +33,17 @@ class AdminProgramController extends Controller
 
     public function __construct(private readonly PermissionResolver $permissionResolver, private readonly CreditService $creditService) {}
 
+    /**
+     * List panel programs.
+     *
+     * Requires permission: `programs.view`. Project and period filters are resolved through action+scope; global users see all programs, scoped users only see programs in permitted projects. Exposed under both `/api/admin/programs` and `/api/panel/programs` aliases.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. User must be allowed for `programs.view`. Example: 1
+     * @queryParam period_id integer Optional period filter. Must belong to the selected/allowed project. Example: 3
+     * @response 200 {"programs":[{"id":8,"title":"Haftalik Atolye","project_id":1,"status":"scheduled","attendance_count":12,"feedback_count":4}]}
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function index(Request $request): JsonResponse
     {
         $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
@@ -39,6 +53,18 @@ class AdminProgramController extends Controller
         return response()->json(['programs'=>$q->get()->map(fn(Program $p)=>$this->programPayload($p))->values()]);
     }
 
+    /**
+     * Export panel programs.
+     *
+     * Requires permission: `programs.export`. Project/period context is resolved through action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`. Exposed under `/api/admin/programs/export` and `/api/panel/programs/export`.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     * @response 200 binary Programs export file.
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request,'programs.export');
@@ -50,6 +76,35 @@ class AdminProgramController extends Controller
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','programlar_'.now()->format('Ymd_His'),'Programlar',['ID','Proje','Donem','Program','Yer','Baslangic','Bitis','Durum','Kredi Kesintisi'],$rows);
     }
 
+    /**
+     * Create a panel program.
+     *
+     * Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Program time ranges cannot overlap another non-cancelled program.
+     *
+     * @authenticated
+     * @bodyParam project_id integer required Project ID. Example: 1
+     * @bodyParam period_id integer required Period ID. Example: 3
+     * @bodyParam title string required Program title. Example: Haftalik Atolye
+     * @bodyParam description string Optional description. Example: Uygulama calismasi.
+     * @bodyParam location string Optional location text. Example: Kademe Salon 1
+     * @bodyParam latitude number Optional location latitude. Example: 41.0082
+     * @bodyParam longitude number Optional location longitude. Example: 28.9784
+     * @bodyParam radius_meters integer Optional QR geofence radius between 10 and 5000. Defaults to 100. Example: 150
+     * @bodyParam guest_info object Optional guest/speaker metadata.
+     * @bodyParam start_at date required Start datetime. Example: 2026-07-10 14:00:00
+     * @bodyParam end_at date required End datetime, after or equal to start. Example: 2026-07-10 16:00:00
+     * @bodyParam credit_deduction integer Optional credit deduction amount. Example: 10
+     * @bodyParam application_quota integer Optional program-specific application quota. Example: 30
+     * @bodyParam target_audience string[] Optional audience values: `student`, `alumni`. Example: ["student"]
+     * @bodyParam feedback_form_template_id integer Optional feedback form template ID. Example: 2
+     * @bodyParam status string Optional status: `scheduled`, `active`, `completed` or `cancelled`. Example: scheduled
+     * @bodyParam is_public boolean Optional public site visibility. Example: true
+     * @bodyParam is_featured boolean Optional featured flag. Example: false
+     * @response 201 {"program":{"id":8,"title":"Haftalik Atolye","status":"scheduled"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
+     * @response 423 {"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}
+     */
     public function store(Request $request): JsonResponse
     {
         $v=$this->validatedProgramData($request,true);
@@ -60,6 +115,23 @@ class AdminProgramController extends Controller
         return response()->json(['program'=>$this->programPayload($program->load(['project:id,name','period:id,name']))],201);
     }
 
+    /**
+     * Update a panel program.
+     *
+     * Requires permission: `programs.update` for the program project. If `period_id` changes, completed-period archive lock is checked against the target period. Time ranges cannot overlap another non-cancelled program.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @bodyParam project_id integer Optional project ID. Example: 1
+     * @bodyParam period_id integer Optional period ID. Example: 3
+     * @bodyParam title string Optional program title. Example: Guncellenmis Atolye
+     * @bodyParam start_at date Optional start datetime. Example: 2026-07-10 14:30:00
+     * @bodyParam end_at date Optional end datetime. Example: 2026-07-10 16:30:00
+     * @bodyParam status string Optional status: `scheduled`, `active`, `completed` or `cancelled`. Example: active
+     * @response 200 {"program":{"id":8,"title":"Guncellenmis Atolye","status":"active"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
+     */
     public function update(Request $request,int $id): JsonResponse
     {
         $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
@@ -72,6 +144,18 @@ class AdminProgramController extends Controller
         return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
     }
 
+    /**
+     * Generate or rotate a program QR token.
+     *
+     * Requires permission: `programs.qr.manage` for the program project. The program attendance window must be open; scheduled programs are switched to active when QR is generated. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @bodyParam rotation_seconds integer Optional QR rotation window between 15 and 300 seconds. Defaults to program setting or 30. Example: 30
+     * @response 200 {"qr_token":"prg_8_xxxxx","expires_at":"2026-06-30T14:00:30+03:00","refresh_in_seconds":30}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid.","errors":{"start_at":["QR yoklama sadece program saat araliginda baslatilabilir."]}}
+     */
     public function generateQr(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.qr.manage');
@@ -87,6 +171,17 @@ class AdminProgramController extends Controller
         return response()->json(['qr_token'=>$token,'expires_at'=>$expiresAt->toIso8601String(),'refresh_in_seconds'=>$rotation]);
     }
 
+    /**
+     * Complete a program and reconcile credits.
+     *
+     * Requires permission: `programs.complete` for the program project. Marks the program completed and deducts credit once for active participants according to attendance/credit rules. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @response 200 {"message":"Program tamamlandi.","program":{"id":8,"status":"completed"},"deducted_participant_count":10}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 423 {"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}
+     */
     public function complete(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.complete');
@@ -110,6 +205,16 @@ class AdminProgramController extends Controller
         $request->attributes->set('audit.properties', ['operation'=>'program_complete','project_id'=>$program->project_id,'period_id'=>$program->period_id,'program_id'=>$program->id,'program_title'=>$program->title,'deducted_participant_count'=>$deducted]);
         return response()->json(['message'=>'Program tamamlandi.','program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name'])),'deducted_participant_count'=>$deducted]);
     }
+    /**
+     * List program attendance details.
+     *
+     * Requires permission: `programs.attendance.view` for the program project. Returns participant attendance status, feedback state and credit impact summary for the selected program.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @response 200 {"program":{"id":8,"title":"Haftalik Atolye"},"summary":{"attendance_count":12,"participant_count":20,"absent_count":8,"feedback_count":4},"records":[]}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function attendanceDetails(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.attendance.view');
@@ -127,6 +232,20 @@ class AdminProgramController extends Controller
         ],'records'=>$records]);
     }
 
+    /**
+     * Mark participant attendance manually.
+     *
+     * Requires permission: `programs.attendance.manage` for the program project. Completed periods require archive update permission. For completed programs, credit deduction/restore is reconciled for the participant.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @urlParam participantId integer required Participant ID in the program project/period. Example: 42
+     * @bodyParam is_valid boolean required Whether the participant attended. Example: true
+     * @bodyParam manual_note string Optional manual attendance note. Example: Imza listesiyle dogrulandi.
+     * @response 200 {"message":"Yoklama katildi olarak isaretlendi.","attendance":{"program_id":8,"is_valid":true,"method":"manual"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
+     */
     public function markManualAttendance(Request $request,int $id,int $participantId): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.attendance.manage');
@@ -149,6 +268,17 @@ class AdminProgramController extends Controller
         return response()->json(['message'=>$attendance->is_valid?'Yoklama katildi olarak isaretlendi.':'Yoklama gelmedi olarak isaretlendi.','attendance'=>$attendance]);
     }
 
+    /**
+     * Export program attendance details.
+     *
+     * Requires permission: `programs.attendance.export` for the program project. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: pdf
+     * @response 200 binary Program attendance export file.
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function exportAttendanceDetails(Request $request,int $id)
     {
         $this->abortUnlessAllowed($request,'programs.attendance.export');
@@ -158,12 +288,35 @@ class AdminProgramController extends Controller
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_'.$program->id.'_yoklama_'.now()->format('Ymd_His'),'Program Yoklama Detaylari',['Yoklama ID','Katilimci','E-posta','Durum','Yontem','Feedback','Kredi Kesildi','Kredi Iade','Kayit Zamani'],$rows);
     }
 
+    /**
+     * Get program feedback summary.
+     *
+     * Requires permission: `programs.view`. Project and period filters are resolved through action+scope. Returns aggregate feedback averages, question distributions, project/period breakdowns and recent anonymous comments.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @response 200 {"summary":{"program_count":2,"total_feedback":12,"with_comment":5,"overall_average":4.4},"programs":[],"question_stats":[]}
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function feedbackSummary(Request $request): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.view');
         return response()->json($this->buildFeedbackSummary($request));
     }
 
+    /**
+     * Export program feedback summary.
+     *
+     * Requires permission: `programs.view`. Uses the same project/period action+scope filters as the summary endpoint and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     * @response 200 binary Feedback summary export file.
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function exportFeedbackSummary(Request $request)
     {
         $this->abortUnlessAllowed($request,'programs.view');
@@ -172,6 +325,16 @@ class AdminProgramController extends Controller
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_degerlendirme_ozeti_'.now()->format('Ymd_His'),'Program Degerlendirme Ozeti',['Program ID','Proje','Donem','Program','Degerlendirme','Sayisal Ortalama','Yorumlu Degerlendirme'],$rows);
     }
 
+    /**
+     * Get detailed feedback stats for a program.
+     *
+     * Requires permission: `programs.view` for the program project. Feedback identities are intentionally anonymized; the response includes question definitions, rating/choice distributions, anonymous text responses and public report IDs.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @response 200 {"program":{"id":8,"title":"Haftalik Atolye"},"summary":{"total_feedback":12,"anonymous":true,"identity_redacted":true},"questions":[],"question_stats":[],"responses":[]}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function feedbackStats(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.view');
@@ -207,6 +370,17 @@ class AdminProgramController extends Controller
         return response()->json(['program'=>['id'=>$program->id,'title'=>$program->title,'project'=>$program->project?->name,'period'=>$program->period?->name,'start_at'=>optional($program->start_at)?->toIso8601String(),'status'=>$program->status],'summary'=>['total_feedback'=>$feedbacks->count(),'with_comment'=>$withComment,'overall_average'=>$allRatings->count()>0?round($allRatings->avg(),2):null,'rating_question_count'=>count($ratingQuestions),'choice_question_count'=>count($choiceQuestions),'text_question_count'=>count($commentQuestions),'text_response_count'=>$textCount,'anonymous'=>true,'identity_redacted'=>true,'public_id_enabled'=>Feedback::usesPublicIdColumn()],'questions'=>$questions,'question_stats'=>$questionStats,'text_responses'=>$textResponses,'responses'=>$responses]);
     }
 
+    /**
+     * Export detailed feedback for a program.
+     *
+     * Requires permission: `programs.view` for the program project. Exported rows use anonymous report IDs instead of participant identity and return a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: csv
+     * @response 200 binary Program feedback export file.
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function exportFeedback(Request $request,int $id)
     {
         $this->abortUnlessAllowed($request,'programs.view');
@@ -219,6 +393,16 @@ class AdminProgramController extends Controller
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_'.$program->id.'_feedback_'.now()->format('Ymd_His'),'Program Degerlendirme Sonuclari',$headings,$rows);
     }
 
+    /**
+     * List program photos.
+     *
+     * Requires permission: `programs.view` for the program project. This media endpoint is exposed under the unified `/api/panel/programs/{id}/photos` route.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @response 200 {"photos":[{"id":1,"program_id":8,"caption":"Sahne"}]}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function photos(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.view');
@@ -227,6 +411,19 @@ class AdminProgramController extends Controller
         return response()->json(['photos'=>$program->photos()->get()]);
     }
 
+    /**
+     * Upload a program photo.
+     *
+     * Requires permission: `programs.media.upload` for the program project. Send as `multipart/form-data`. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @bodyParam photo file required Image file, maximum 5 MB.
+     * @bodyParam caption string Optional photo caption. Example: Atolye baslangici
+     * @response 201 {"photo":{"id":1,"program_id":8,"caption":"Atolye baslangici"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
+     */
     public function uploadPhoto(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.media.upload');
@@ -239,6 +436,17 @@ class AdminProgramController extends Controller
         return response()->json(['photo'=>$photo],201);
     }
 
+    /**
+     * Reorder program photos.
+     *
+     * Requires permission: `programs.media.upload` for the program project. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @bodyParam photo_ids integer[] required Ordered photo IDs for the program. Example: [3,1,2]
+     * @response 200 {"photos":[]}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function reorderPhotos(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.media.upload');
@@ -250,6 +458,18 @@ class AdminProgramController extends Controller
         return response()->json(['photos'=>$program->photos()->get()]);
     }
 
+    /**
+     * Update a program photo caption.
+     *
+     * Requires permission: `programs.media.upload` for the program project. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @urlParam photoId integer required Program photo ID. Example: 3
+     * @bodyParam caption string Optional photo caption. Example: Kapanis oturumu
+     * @response 200 {"photo":{"id":3,"caption":"Kapanis oturumu"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function updatePhoto(Request $request,int $id,int $photoId): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.media.upload');
@@ -262,6 +482,17 @@ class AdminProgramController extends Controller
         return response()->json(['photo'=>$photo]);
     }
 
+    /**
+     * Delete a program photo.
+     *
+     * Requires permission: `programs.media.upload` for the program project. Deletes the media file from configured storage and removes the photo row. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @urlParam photoId integer required Program photo ID. Example: 3
+     * @response 200 {"message":"Fotograf silindi."}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function deletePhoto(Request $request,int $id,int $photoId): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.media.upload');
@@ -274,6 +505,18 @@ class AdminProgramController extends Controller
         return response()->json(['message'=>'Fotograf silindi.']);
     }
 
+    /**
+     * Update public visibility for a program.
+     *
+     * Requires permission: `programs.update` for the program project. This panel-only endpoint toggles public listing and featured state without changing the rest of the program payload. Completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @bodyParam is_public boolean Optional public visibility flag. Example: true
+     * @bodyParam is_featured boolean Optional featured flag. Example: false
+     * @response 200 {"program":{"id":8,"is_public":true,"is_featured":false}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function updateVisibility(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.update');

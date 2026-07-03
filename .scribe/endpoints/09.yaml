@@ -1,0 +1,466 @@
+name: Applications
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/applications
+    metadata:
+      custom: []
+      groupName: Applications
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List the authenticated user applications.'
+      description: 'Requires KVKK consent. Returns the current user applications with project, period, program, waitlist, interview, rejection, and dynamic form entry summaries.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"applications":[{"id":1,"status":"pending","waitlist_invitation_active":false,"project":{"id":1,"name":"KADEME"},"form_entries":[{"id":"motivation","label":"Motivasyon","type":"text","value":"Katiliyorum","file":null}]}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"KVKK onayi gereklidir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/applications/{id}'
+    metadata:
+      custom: []
+      groupName: Applications
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get an authenticated user application detail.'
+      description: 'Returns only applications owned by the current user. Requires KVKK consent.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Application id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"application":{"id":1,"status":"pending","project":{"id":1,"name":"KADEME"},"form_entries":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\Application]."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/applications/{id}/waitlist-response'
+    metadata:
+      custom: []
+      groupName: Applications
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Respond to a waitlist invitation.'
+      description: 'Allows the current applicant to accept or reject an active waitlist invitation. Accepting may create or activate the participant record when quota rules allow it.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Application id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      decision:
+        custom: []
+        name: decision
+        description: 'Must be `accept` or `reject`.'
+        required: true
+        example: accept
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      decision: accept
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Yedek liste daveti kabul edildi.","application":{"id":1,"status":"accepted","waitlist_invitation_active":false}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Yedek liste davet suresi doldu.","errors":{"application":["Yedek liste davet suresi doldu."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/applications
+    metadata:
+      custom: []
+      groupName: Applications
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create an authenticated project application.'
+      description: 'Requires KVKK consent. Dynamic application form fields are accepted in `form_data`; file fields must be uploaded as `multipart/form-data` under `form_files[field_id]`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      program_id:
+        custom: []
+        name: program_id
+        description: 'Optional program id.'
+        required: false
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form_data:
+        custom: []
+        name: form_data
+        description: 'Optional dynamic form answers keyed by field id.'
+        required: false
+        example:
+          motivation: 'Projeye katilmak istiyorum'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form_files:
+        custom: []
+        name: form_files
+        description: 'Optional dynamic form files keyed by field id.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      consent_accepted:
+        custom: []
+        name: consent_accepted
+        description: 'Optional consent flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      program_id: 5
+      form_data:
+        motivation: 'Projeye katilmak istiyorum'
+      form_files: []
+      consent_accepted: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/applications/public
+    metadata:
+      custom: []
+      groupName: Applications
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a public project application as a guest applicant.'
+      description: ''
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      program_id:
+        custom: []
+        name: program_id
+        description: 'Optional program id.'
+        required: false
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form_data:
+        custom: []
+        name: form_data
+        description: 'Optional dynamic form answers keyed by field id.'
+        required: false
+        example:
+          motivation: 'Projeye katilmak istiyorum'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form_files:
+        custom: []
+        name: form_files
+        description: 'Optional dynamic form files keyed by field id.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      consent_accepted:
+        custom: []
+        name: consent_accepted
+        description: 'Optional consent flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      applicant:
+        custom: []
+        name: applicant
+        description: ''
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      applicant.name:
+        custom: []
+        name: applicant.name
+        description: 'Applicant first name.'
+        required: true
+        example: Hakan
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      applicant.surname:
+        custom: []
+        name: applicant.surname
+        description: 'Applicant last name.'
+        required: true
+        example: Kekec
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      applicant.email:
+        custom: []
+        name: applicant.email
+        description: 'Applicant email.'
+        required: true
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      applicant.phone:
+        custom: []
+        name: applicant.phone
+        description: 'Optional applicant phone.'
+        required: false
+        example: '05551234567'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      program_id: 5
+      form_data:
+        motivation: 'Projeye katilmak istiyorum'
+      form_files: []
+      consent_accepted: true
+      applicant:
+        name: Hakan
+        surname: Kekec
+        email: hakan@example.com
+        phone: '05551234567'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending","form_data":{"motivation":"Projeye katilmak istiyorum"}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The applicant.email field must be a valid email address.","errors":{"applicant.email":["The applicant.email field must be a valid email address."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null

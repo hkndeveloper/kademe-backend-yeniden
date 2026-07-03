@@ -1,0 +1,4277 @@
+name: 'Announcements & Inbox'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/announcements
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List announcements visible to the current recipient.'
+      description: 'Requires permission: `participant.inbox.view`. Filters announcements by the current user role, participant projects/periods, publish window, expiry window, target units and optional category.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"announcements":[{"id":1,"title":"Program duyurusu","content":"Duyuru metni","category":"general","project":{"id":1,"name":"KADEME"}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/inbox/messages
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List unified inbox messages.'
+      description: 'Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project/global scope. Project filters must be inside the merged participant/project permission scope.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter for announcements.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      from:
+        custom: []
+        name: from
+        description: 'date Optional start date filter.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      to:
+        custom: []
+        name: to
+        description: 'date Optional end date filter.'
+        required: false
+        example: '2026-12-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Optional message type. Allowed values: announcement, opportunity, forum_post.'
+        required: false
+        example: announcement
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      unread_only:
+        custom: []
+        name: unread_only
+        description: 'Optional only unread messages.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      starred_only:
+        custom: []
+        name: starred_only
+        description: 'Optional only starred messages.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      pinned_only:
+        custom: []
+        name: pinned_only
+        description: 'Optional only pinned messages.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      category: general
+      from: '2026-01-01'
+      to: '2026-12-31'
+      type: announcement
+      unread_only: true
+      starred_only: false
+      pinned_only: false
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: ''
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      from:
+        custom: []
+        name: from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:50'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      to:
+        custom: []
+        name: to
+        description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: forum_post
+        type: string
+        enumValues:
+          - announcement
+          - opportunity
+          - forum_post
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      unread_only:
+        custom: []
+        name: unread_only
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      starred_only:
+        custom: []
+        name: starred_only
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      pinned_only:
+        custom: []
+        name: pinned_only
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      category: mqeopfuudtdsufvyvddqa
+      from: '2026-07-02T10:54:50'
+      to: '2107-07-31'
+      type: forum_post
+      unread_only: true
+      starred_only: false
+      pinned_only: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"messages":[{"type":"announcement","source_id":1,"title":"Duyuru","content":"Metin","state":{"is_read":false,"is_starred":false,"is_pinned":false}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje inbox filtresi icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/inbox/messages/state
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update unified inbox message state.'
+      description: 'Updates read, starred and pinned state for a visible announcement, alumni opportunity or forum post. Visibility is rechecked server-side using participant project/period rules or panel `announcements.view` scope before creating/updating the state row.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      source_type:
+        custom: []
+        name: source_type
+        description: 'Fully qualified source model class. Allowed: App\\Models\\Announcement, App\\Models\\AlumniOpportunity, App\\Models\\ForumPost.'
+        required: true
+        example: App\\Models\\Announcement
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      source_id:
+        custom: []
+        name: source_id
+        description: 'Source record id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_read:
+        custom: []
+        name: is_read
+        description: 'Optional read state.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      is_starred:
+        custom: []
+        name: is_starred
+        description: 'Optional starred state.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      is_pinned:
+        custom: []
+        name: is_pinned
+        description: 'Optional pinned state.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      source_type: App\\Models\\Announcement
+      source_id: 1
+      is_read: true
+      is_starred: false
+      is_pinned: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Inbox durumu guncellendi.","state":{"source_type":"App\\Models\\Announcement","source_id":1,"is_read":true,"is_starred":false,"is_pinned":true}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu mesaj kaydi icin islem yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Desteklenmeyen source_type."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/announcements/send-sms
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Send a standalone SMS announcement.'
+      description: 'Requires permission: `announcements.send_sms`. Project and unit targets are validated against caller scope. Non-global senders can target participants in manageable projects, staff in allowed units, selected accessible users, or themselves.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      message:
+        custom: []
+        name: message
+        description: 'SMS message, max 160 characters.'
+        required: true
+        example: 'Toplanti saat 10:00'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      user_ids:
+        custom: []
+        name: user_ids
+        description: 'Optional direct user IDs.'
+        required: false
+        example:
+          - 12
+          - 13
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      message: 'Toplanti saat 10:00'
+      target_roles:
+        - student
+      target_units:
+        - program
+      project_id: 1
+      user_ids:
+        - 12
+        - 13
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"SMS gonderimi tamamlandi.","sent_to":12}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Secilen kullanicilarin bir kismi erisim kapsaminiz disinda."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/announcements/send-email
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Send a standalone email announcement.'
+      description: 'Requires permission: `announcements.send_email`. Project, unit and direct user targets are validated with the same target resolver as SMS. Optional attachment is stored through `MediaStorage` and passed to the notification service.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      subject:
+        custom: []
+        name: subject
+        description: 'Email subject.'
+        required: true
+        example: 'Program duyurusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      body:
+        custom: []
+        name: body
+        description: 'Email body.'
+        required: true
+        example: 'Merhaba, yeni program duyurusu ektedir.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      user_ids:
+        custom: []
+        name: user_ids
+        description: 'Optional direct user IDs.'
+        required: false
+        example:
+          - 12
+          - 13
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      attachment:
+        custom: []
+        name: attachment
+        description: 'Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      subject: 'Program duyurusu'
+      body: 'Merhaba, yeni program duyurusu ektedir.'
+      target_roles:
+        - student
+      target_units:
+        - program
+      project_id: 1
+      user_ids:
+        - 12
+        - 13
+    fileParameters:
+      attachment: null
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-posta gonderimi tamamlandi.","sent_to":12}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-posta gonderimi basarisiz veya alici e-postasi bulunamadi.","sent_to":0}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/announcements/communication-logs
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List announcement communication logs.'
+      description: 'Requires permission: `announcements.view`. Global users can see all email/SMS logs; project-scoped users see logs they sent or logs in accessible projects. Supports type, status, project, sender, search and date filters.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      type:
+        custom: []
+        name: type
+        description: 'Optional channel filter. Allowed values: email, sms.'
+        required: false
+        example: email
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: sent
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'Optional sender user ID.'
+        required: false
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional subject/content search.'
+        required: false
+        example: program
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date. Must be after or equal to date_from.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Optional page size between 1 and 100. Defaults to 20.'
+        required: false
+        example: 20
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      type: email
+      status: sent
+      project_id: 1
+      sender_id: 8
+      search: program
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      per_page: 20
+    bodyParameters:
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: email
+        type: string
+        enumValues:
+          - email
+          - sms
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Must not be greater than 50 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'The <code>id</code> of an existing record in the users table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:51'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Must be at least 1. Must not be greater than 100.'
+        required: false
+        example: 13
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      type: email
+      status: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      sender_id: 17
+      search: mqeopfuudtdsufvyvddqa
+      date_from: '2026-07-02T10:54:51'
+      date_to: '2107-07-31'
+      per_page: 13
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"logs":{"data":[{"id":1,"type":"email","recipients_count":20,"attachment_download_url":"/panel/announcements/communication-logs/1/attachment"}],"current_page":1}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/announcements/communication-logs/export
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export announcement communication logs.'
+      description: 'Requires permission: `announcements.view`. Applies the same communication log scope and filters as the list endpoint and exports through the shared admin export responder.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      type:
+        custom: []
+        name: type
+        description: 'Optional channel filter. Allowed values: email, sms.'
+        required: false
+        example: email
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: sent
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'Optional sender user ID.'
+        required: false
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional subject/content search.'
+        required: false
+        example: program
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      type: email
+      status: sent
+      project_id: 1
+      sender_id: 8
+      search: program
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      format: xlsx
+    bodyParameters:
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: sms
+        type: string
+        enumValues:
+          - email
+          - sms
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Must not be greater than 50 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'The <code>id</code> of an existing record in the users table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:51'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      type: sms
+      status: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      sender_id: 17
+      search: mqeopfuudtdsufvyvddqa
+      date_from: '2026-07-02T10:54:51'
+      date_to: '2107-07-31'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Communication logs export file stream"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/announcements/communication-logs/{id}/attachment'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Download a communication log attachment.'
+      description: 'Requires permission: `announcements.view`. The caller can download an attachment if they sent the log, have global scope, or can access the log project. Depending on storage configuration the response is a JSON direct URL or streamed file download.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Communication log ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download_url":"https://storage.example.com/announcement_attachments/file.pdf"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Binary attachment file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu ek dosyayi indirme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Ek dosya storage uzerinde bulunamadi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/announcements
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel announcements.'
+      description: 'Requires permission: `announcements.view`. Global scope can list all announcements; project-scoped users see announcements in manageable projects plus their own global announcements. `period_id` resolves and validates the owning project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. Requires access to the project for `announcements.view`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. The period project is used as the announcement project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+      project_id: 1
+      period_id: 3
+    bodyParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      category: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"announcements":{"data":[{"id":1,"title":"Toplanti","project":{"id":1,"name":"KADEME"}}],"current_page":1}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje kapsaminda islem yapamazsiniz."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/announcements/export
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel announcements.'
+      description: 'Requires permission: `announcements.export`. Applies the same manageable announcement scope and filters as the list endpoint, then exports through the shared admin export responder.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        required: false
+        example: csv
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+      project_id: 1
+      period_id: 3
+      format: csv
+    bodyParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      category: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Announcements export file stream"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/announcements
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a panel announcement.'
+      description: 'Requires permission: `announcements.create`. Project and period values are checked against the caller project scope; completed periods require archive update permission. Target roles, target units and direct user IDs are resolved through the sender scope. Optional `send_sms` and `send_email` additionally require their own permissions and create communication logs through the notification service.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Announcement title.'
+        required: true
+        example: 'Program duyurusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      content:
+        custom: []
+        name: content
+        description: 'Announcement content.'
+        required: true
+        example: 'Yarin toplantimiz vardir.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles. Allowed values: super_admin, coordinator, staff, student, alumni.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units. Allowed values: media, operations, program, finance, official_affairs.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID; sets project_id from the period.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      published_at:
+        custom: []
+        name: published_at
+        description: 'Optional publish time.'
+        required: false
+        example: '2026-07-01 09:00:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      expires_at:
+        custom: []
+        name: expires_at
+        description: 'Optional expiry time.'
+        required: false
+        example: '2026-07-31 23:59:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      send_sms:
+        custom: []
+        name: send_sms
+        description: 'Optional send SMS immediately. Requires `announcements.send_sms`.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      send_email:
+        custom: []
+        name: send_email
+        description: 'Optional send email immediately. Requires `announcements.send_email`.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      email_attachment:
+        custom: []
+        name: email_attachment
+        description: 'Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Program duyurusu'
+      content: 'Yarin toplantimiz vardir.'
+      category: general
+      target_roles:
+        - student
+      target_units:
+        - program
+      project_id: 1
+      period_id: 3
+      published_at: '2026-07-01 09:00:00'
+      expires_at: '2026-07-31 23:59:00'
+      send_sms: false
+      send_email: true
+    fileParameters:
+      email_attachment: null
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Duyuru olusturuldu.","announcement":{"id":1,"title":"Program duyurusu"},"target_count":25,"email_sent_to":20,"sms_sent_to":0}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu birim hedefi icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/announcements/{id}'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get panel announcement details.'
+      description: 'Requires permission: `announcements.view` and access to the announcement. Global users can view all; project-scoped users can view manageable project announcements or their own global announcements.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Announcement ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"announcement":{"id":1,"title":"Program duyurusu","project":{"id":1,"name":"KADEME"}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu duyuru icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/announcements/{id}'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a panel announcement.'
+      description: 'Requires permission: `announcements.update` and access to the announcement. Completed periods require archive update permission. Project changes are checked against the caller project scope; removing the project link is only allowed with global scope. Target units are validated against the caller unit targets.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Announcement ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Optional title.'
+        required: false
+        example: 'Guncel duyuru'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      content:
+        custom: []
+        name: content
+        description: 'Optional content.'
+        required: false
+        example: 'Guncellenen duyuru metni.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles.'
+        required: false
+        example:
+          - student
+          - alumni
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID or null.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID or null.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      published_at:
+        custom: []
+        name: published_at
+        description: 'Optional publish time.'
+        required: false
+        example: '2026-07-01 09:00:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      expires_at:
+        custom: []
+        name: expires_at
+        description: 'Optional expiry time.'
+        required: false
+        example: '2026-07-31 23:59:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Guncel duyuru'
+      content: 'Guncellenen duyuru metni.'
+      category: general
+      target_roles:
+        - student
+        - alumni
+      target_units:
+        - program
+      project_id: 1
+      period_id: 3
+      published_at: '2026-07-01 09:00:00'
+      expires_at: '2026-07-31 23:59:00'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Duyuru guncellendi.","announcement":{"id":1,"title":"Guncel duyuru"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/announcements/{id}'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a panel announcement.'
+      description: 'Requires permission: `announcements.delete` and access to the announcement. Completed periods require archive update permission before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Announcement ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Duyuru silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu duyuru icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/inbox/messages
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List unified inbox messages.'
+      description: 'Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project/global scope. Project filters must be inside the merged participant/project permission scope.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter for announcements.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      from:
+        custom: []
+        name: from
+        description: 'date Optional start date filter.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      to:
+        custom: []
+        name: to
+        description: 'date Optional end date filter.'
+        required: false
+        example: '2026-12-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Optional message type. Allowed values: announcement, opportunity, forum_post.'
+        required: false
+        example: announcement
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      unread_only:
+        custom: []
+        name: unread_only
+        description: 'Optional only unread messages.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      starred_only:
+        custom: []
+        name: starred_only
+        description: 'Optional only starred messages.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      pinned_only:
+        custom: []
+        name: pinned_only
+        description: 'Optional only pinned messages.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      category: general
+      from: '2026-01-01'
+      to: '2026-12-31'
+      type: announcement
+      unread_only: true
+      starred_only: false
+      pinned_only: false
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: ''
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      from:
+        custom: []
+        name: from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:51'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      to:
+        custom: []
+        name: to
+        description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: opportunity
+        type: string
+        enumValues:
+          - announcement
+          - opportunity
+          - forum_post
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      unread_only:
+        custom: []
+        name: unread_only
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      starred_only:
+        custom: []
+        name: starred_only
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      pinned_only:
+        custom: []
+        name: pinned_only
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      category: mqeopfuudtdsufvyvddqa
+      from: '2026-07-02T10:54:51'
+      to: '2107-07-31'
+      type: opportunity
+      unread_only: false
+      starred_only: true
+      pinned_only: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"messages":[{"type":"announcement","source_id":1,"title":"Duyuru","content":"Metin","state":{"is_read":false,"is_starred":false,"is_pinned":false}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje inbox filtresi icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/admin/inbox/messages/state
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update unified inbox message state.'
+      description: 'Updates read, starred and pinned state for a visible announcement, alumni opportunity or forum post. Visibility is rechecked server-side using participant project/period rules or panel `announcements.view` scope before creating/updating the state row.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      source_type:
+        custom: []
+        name: source_type
+        description: 'Fully qualified source model class. Allowed: App\\Models\\Announcement, App\\Models\\AlumniOpportunity, App\\Models\\ForumPost.'
+        required: true
+        example: App\\Models\\Announcement
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      source_id:
+        custom: []
+        name: source_id
+        description: 'Source record id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_read:
+        custom: []
+        name: is_read
+        description: 'Optional read state.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      is_starred:
+        custom: []
+        name: is_starred
+        description: 'Optional starred state.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      is_pinned:
+        custom: []
+        name: is_pinned
+        description: 'Optional pinned state.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      source_type: App\\Models\\Announcement
+      source_id: 1
+      is_read: true
+      is_starred: false
+      is_pinned: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Inbox durumu guncellendi.","state":{"source_type":"App\\Models\\Announcement","source_id":1,"is_read":true,"is_starred":false,"is_pinned":true}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu mesaj kaydi icin islem yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Desteklenmeyen source_type."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/announcements/send-sms
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Send a standalone SMS announcement.'
+      description: 'Requires permission: `announcements.send_sms`. Project and unit targets are validated against caller scope. Non-global senders can target participants in manageable projects, staff in allowed units, selected accessible users, or themselves.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      message:
+        custom: []
+        name: message
+        description: 'SMS message, max 160 characters.'
+        required: true
+        example: 'Toplanti saat 10:00'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      user_ids:
+        custom: []
+        name: user_ids
+        description: 'Optional direct user IDs.'
+        required: false
+        example:
+          - 12
+          - 13
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      message: 'Toplanti saat 10:00'
+      target_roles:
+        - student
+      target_units:
+        - program
+      project_id: 1
+      user_ids:
+        - 12
+        - 13
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"SMS gonderimi tamamlandi.","sent_to":12}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Secilen kullanicilarin bir kismi erisim kapsaminiz disinda."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/announcements/send-email
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Send a standalone email announcement.'
+      description: 'Requires permission: `announcements.send_email`. Project, unit and direct user targets are validated with the same target resolver as SMS. Optional attachment is stored through `MediaStorage` and passed to the notification service.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      subject:
+        custom: []
+        name: subject
+        description: 'Email subject.'
+        required: true
+        example: 'Program duyurusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      body:
+        custom: []
+        name: body
+        description: 'Email body.'
+        required: true
+        example: 'Merhaba, yeni program duyurusu ektedir.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      user_ids:
+        custom: []
+        name: user_ids
+        description: 'Optional direct user IDs.'
+        required: false
+        example:
+          - 12
+          - 13
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      attachment:
+        custom: []
+        name: attachment
+        description: 'Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      subject: 'Program duyurusu'
+      body: 'Merhaba, yeni program duyurusu ektedir.'
+      target_roles:
+        - student
+      target_units:
+        - program
+      project_id: 1
+      user_ids:
+        - 12
+        - 13
+    fileParameters:
+      attachment: null
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-posta gonderimi tamamlandi.","sent_to":12}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-posta gonderimi basarisiz veya alici e-postasi bulunamadi.","sent_to":0}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/announcements/communication-logs
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List announcement communication logs.'
+      description: 'Requires permission: `announcements.view`. Global users can see all email/SMS logs; project-scoped users see logs they sent or logs in accessible projects. Supports type, status, project, sender, search and date filters.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      type:
+        custom: []
+        name: type
+        description: 'Optional channel filter. Allowed values: email, sms.'
+        required: false
+        example: email
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: sent
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'Optional sender user ID.'
+        required: false
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional subject/content search.'
+        required: false
+        example: program
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date. Must be after or equal to date_from.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Optional page size between 1 and 100. Defaults to 20.'
+        required: false
+        example: 20
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      type: email
+      status: sent
+      project_id: 1
+      sender_id: 8
+      search: program
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      per_page: 20
+    bodyParameters:
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: sms
+        type: string
+        enumValues:
+          - email
+          - sms
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Must not be greater than 50 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'The <code>id</code> of an existing record in the users table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:52'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Must be at least 1. Must not be greater than 100.'
+        required: false
+        example: 13
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      type: sms
+      status: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      sender_id: 17
+      search: mqeopfuudtdsufvyvddqa
+      date_from: '2026-07-02T10:54:52'
+      date_to: '2107-07-31'
+      per_page: 13
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"logs":{"data":[{"id":1,"type":"email","recipients_count":20,"attachment_download_url":"/panel/announcements/communication-logs/1/attachment"}],"current_page":1}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/announcements/communication-logs/export
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export announcement communication logs.'
+      description: 'Requires permission: `announcements.view`. Applies the same communication log scope and filters as the list endpoint and exports through the shared admin export responder.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      type:
+        custom: []
+        name: type
+        description: 'Optional channel filter. Allowed values: email, sms.'
+        required: false
+        example: email
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: sent
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'Optional sender user ID.'
+        required: false
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional subject/content search.'
+        required: false
+        example: program
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional start date.'
+        required: false
+        example: '2026-06-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional end date.'
+        required: false
+        example: '2026-06-30'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      type: email
+      status: sent
+      project_id: 1
+      sender_id: 8
+      search: program
+      date_from: '2026-06-01'
+      date_to: '2026-06-30'
+      format: xlsx
+    bodyParameters:
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: email
+        type: string
+        enumValues:
+          - email
+          - sms
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Must not be greater than 50 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      sender_id:
+        custom: []
+        name: sender_id
+        description: 'The <code>id</code> of an existing record in the users table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:52'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      type: email
+      status: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      sender_id: 17
+      search: mqeopfuudtdsufvyvddqa
+      date_from: '2026-07-02T10:54:52'
+      date_to: '2107-07-31'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Communication logs export file stream"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/announcements/communication-logs/{id}/attachment'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Download a communication log attachment.'
+      description: 'Requires permission: `announcements.view`. The caller can download an attachment if they sent the log, have global scope, or can access the log project. Depending on storage configuration the response is a JSON direct URL or streamed file download.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Communication log ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download_url":"https://storage.example.com/announcement_attachments/file.pdf"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Binary attachment file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu ek dosyayi indirme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Ek dosya storage uzerinde bulunamadi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/announcements
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel announcements.'
+      description: 'Requires permission: `announcements.view`. Global scope can list all announcements; project-scoped users see announcements in manageable projects plus their own global announcements. `period_id` resolves and validates the owning project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. Requires access to the project for `announcements.view`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. The period project is used as the announcement project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+      project_id: 1
+      period_id: 3
+    bodyParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      category: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"announcements":{"data":[{"id":1,"title":"Toplanti","project":{"id":1,"name":"KADEME"}}],"current_page":1}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje kapsaminda islem yapamazsiniz."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/announcements/export
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel announcements.'
+      description: 'Requires permission: `announcements.export`. Applies the same manageable announcement scope and filters as the list endpoint, then exports through the shared admin export responder.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        required: false
+        example: csv
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+      project_id: 1
+      period_id: 3
+      format: csv
+    bodyParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      category: vmqeopfuudtdsufvyvddq
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Announcements export file stream"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/announcements
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a panel announcement.'
+      description: 'Requires permission: `announcements.create`. Project and period values are checked against the caller project scope; completed periods require archive update permission. Target roles, target units and direct user IDs are resolved through the sender scope. Optional `send_sms` and `send_email` additionally require their own permissions and create communication logs through the notification service.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Announcement title.'
+        required: true
+        example: 'Program duyurusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      content:
+        custom: []
+        name: content
+        description: 'Announcement content.'
+        required: true
+        example: 'Yarin toplantimiz vardir.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles. Allowed values: super_admin, coordinator, staff, student, alumni.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units. Allowed values: media, operations, program, finance, official_affairs.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID; sets project_id from the period.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      published_at:
+        custom: []
+        name: published_at
+        description: 'Optional publish time.'
+        required: false
+        example: '2026-07-01 09:00:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      expires_at:
+        custom: []
+        name: expires_at
+        description: 'Optional expiry time.'
+        required: false
+        example: '2026-07-31 23:59:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      send_sms:
+        custom: []
+        name: send_sms
+        description: 'Optional send SMS immediately. Requires `announcements.send_sms`.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      send_email:
+        custom: []
+        name: send_email
+        description: 'Optional send email immediately. Requires `announcements.send_email`.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      email_attachment:
+        custom: []
+        name: email_attachment
+        description: 'Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Program duyurusu'
+      content: 'Yarin toplantimiz vardir.'
+      category: general
+      target_roles:
+        - student
+      target_units:
+        - program
+      project_id: 1
+      period_id: 3
+      published_at: '2026-07-01 09:00:00'
+      expires_at: '2026-07-31 23:59:00'
+      send_sms: false
+      send_email: true
+    fileParameters:
+      email_attachment: null
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Duyuru olusturuldu.","announcement":{"id":1,"title":"Program duyurusu"},"target_count":25,"email_sent_to":20,"sms_sent_to":0}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu birim hedefi icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/announcements/{id}'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get panel announcement details.'
+      description: 'Requires permission: `announcements.view` and access to the announcement. Global users can view all; project-scoped users can view manageable project announcements or their own global announcements.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Announcement ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"announcement":{"id":1,"title":"Program duyurusu","project":{"id":1,"name":"KADEME"}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu duyuru icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/announcements/{id}'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a panel announcement.'
+      description: 'Requires permission: `announcements.update` and access to the announcement. Completed periods require archive update permission. Project changes are checked against the caller project scope; removing the project link is only allowed with global scope. Target units are validated against the caller unit targets.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Announcement ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Optional title.'
+        required: false
+        example: 'Guncel duyuru'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      content:
+        custom: []
+        name: content
+        description: 'Optional content.'
+        required: false
+        example: 'Guncellenen duyuru metni.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      target_roles:
+        custom: []
+        name: target_roles
+        description: 'Optional target roles.'
+        required: false
+        example:
+          - student
+          - alumni
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_units:
+        custom: []
+        name: target_units
+        description: 'Optional target units.'
+        required: false
+        example:
+          - program
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID or null.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID or null.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      published_at:
+        custom: []
+        name: published_at
+        description: 'Optional publish time.'
+        required: false
+        example: '2026-07-01 09:00:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      expires_at:
+        custom: []
+        name: expires_at
+        description: 'Optional expiry time.'
+        required: false
+        example: '2026-07-31 23:59:00'
+        type: datetime
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Guncel duyuru'
+      content: 'Guncellenen duyuru metni.'
+      category: general
+      target_roles:
+        - student
+        - alumni
+      target_units:
+        - program
+      project_id: 1
+      period_id: 3
+      published_at: '2026-07-01 09:00:00'
+      expires_at: '2026-07-31 23:59:00'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Duyuru guncellendi.","announcement":{"id":1,"title":"Guncel duyuru"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/announcements/{id}'
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a panel announcement.'
+      description: 'Requires permission: `announcements.delete` and access to the announcement. Completed periods require archive update permission before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Announcement ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Duyuru silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu duyuru icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/inbox/messages
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List unified inbox messages.'
+      description: 'Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project/global scope. Project filters must be inside the merged participant/project permission scope.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter for announcements.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      from:
+        custom: []
+        name: from
+        description: 'date Optional start date filter.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      to:
+        custom: []
+        name: to
+        description: 'date Optional end date filter.'
+        required: false
+        example: '2026-12-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Optional message type. Allowed values: announcement, opportunity, forum_post.'
+        required: false
+        example: announcement
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      unread_only:
+        custom: []
+        name: unread_only
+        description: 'Optional only unread messages.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      starred_only:
+        custom: []
+        name: starred_only
+        description: 'Optional only starred messages.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      pinned_only:
+        custom: []
+        name: pinned_only
+        description: 'Optional only pinned messages.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      category: general
+      from: '2026-01-01'
+      to: '2026-12-31'
+      type: announcement
+      unread_only: true
+      starred_only: false
+      pinned_only: false
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: ''
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: mqeopfuudtdsufvyvddqa
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      from:
+        custom: []
+        name: from
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-07-02T10:54:52'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      to:
+        custom: []
+        name: to
+        description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
+        required: false
+        example: '2107-07-31'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: ''
+        required: false
+        example: opportunity
+        type: string
+        enumValues:
+          - announcement
+          - opportunity
+          - forum_post
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      unread_only:
+        custom: []
+        name: unread_only
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      starred_only:
+        custom: []
+        name: starred_only
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      pinned_only:
+        custom: []
+        name: pinned_only
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      category: mqeopfuudtdsufvyvddqa
+      from: '2026-07-02T10:54:52'
+      to: '2107-07-31'
+      type: opportunity
+      unread_only: false
+      starred_only: true
+      pinned_only: false
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"messages":[{"type":"announcement","source_id":1,"title":"Duyuru","content":"Metin","state":{"is_read":false,"is_starred":false,"is_pinned":false}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje inbox filtresi icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/panel/inbox/messages/state
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update unified inbox message state.'
+      description: 'Updates read, starred and pinned state for a visible announcement, alumni opportunity or forum post. Visibility is rechecked server-side using participant project/period rules or panel `announcements.view` scope before creating/updating the state row.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      source_type:
+        custom: []
+        name: source_type
+        description: 'Fully qualified source model class. Allowed: App\\Models\\Announcement, App\\Models\\AlumniOpportunity, App\\Models\\ForumPost.'
+        required: true
+        example: App\\Models\\Announcement
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      source_id:
+        custom: []
+        name: source_id
+        description: 'Source record id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_read:
+        custom: []
+        name: is_read
+        description: 'Optional read state.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      is_starred:
+        custom: []
+        name: is_starred
+        description: 'Optional starred state.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      is_pinned:
+        custom: []
+        name: is_pinned
+        description: 'Optional pinned state.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      source_type: App\\Models\\Announcement
+      source_id: 1
+      is_read: true
+      is_starred: false
+      is_pinned: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Inbox durumu guncellendi.","state":{"source_type":"App\\Models\\Announcement","source_id":1,"is_read":true,"is_starred":false,"is_pinned":true}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu mesaj kaydi icin islem yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Desteklenmeyen source_type."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/staff/announcements
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List staff-visible announcements.'
+      description: 'Requires permission: `announcements.view`. Returns active announcements visible to the current staff user by role and target unit, with optional category filtering. Expired and future announcements are hidden.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"announcements":{"data":[{"id":1,"title":"Toplanti","category":"general","project":{"id":1,"name":"KADEME"}}],"current_page":1}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/staff/announcements/export
+    metadata:
+      custom: []
+      groupName: 'Announcements & Inbox'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export staff-visible announcements.'
+      description: 'Requires permission: `announcements.export`. Applies the same staff recipient visibility as `myAnnouncements` and exports through the shared admin export responder.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: general
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      category: general
+      format: xlsx
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Staff announcements export file stream"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

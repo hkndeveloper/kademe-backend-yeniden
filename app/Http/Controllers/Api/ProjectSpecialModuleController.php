@@ -23,6 +23,9 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * @group Project Special Modules
+ */
 class ProjectSpecialModuleController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -78,6 +81,18 @@ class ProjectSpecialModuleController extends Controller
         return $access;
     }
 
+    /**
+     * Get project special module workspace.
+     *
+     * Requires at least one project-scoped module permission among internships, mentors, Eurodesk or rewards. The project must support the requested module family through `ProjectSpecialModuleCatalog`; unsupported families are hidden from the access matrix. Exposed under `/api/admin/projects/{id}/special-modules` and `/api/panel/projects/{id}/special-modules`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @queryParam period_id integer Optional period filter. Must belong to the project when provided. Example: 3
+     * @response 200 {"project":{"id":1,"name":"Kademe+"},"access":{"projects.rewards.view":true},"applicable_modules":["reward_tiers","participants_by_module"],"participants":[],"kademe_modules":[]}
+     * @response 403 {"message":"Bu proje modulleri icin yetkiniz bulunmuyor."}
+     * @response 404 {"message":"Bu proje turu bu ozel modulu desteklemiyor."}
+     */
     public function index(Request $request, int $projectId): JsonResponse
     {
         $project = Project::query()->findOrFail($projectId);
@@ -280,6 +295,30 @@ class ProjectSpecialModuleController extends Controller
         return $base;
     }
 
+    /**
+     * Create a KADEME+ project module.
+     *
+     * Requires permission: `projects.rewards.manage` for the project and a project type that supports KADEME+ module workflow. Optional period must belong to the project and completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @bodyParam title string required Module title. Example: Liderlik Atolyesi
+     * @bodyParam period_id integer Optional period ID. Example: 3
+     * @bodyParam description string Optional module description.
+     * @bodyParam sort_order integer Optional display order. Example: 1
+     * @bodyParam is_active boolean Optional active flag. Example: true
+     * @bodyParam application_open boolean Optional student enrollment flag. Example: true
+     * @bodyParam requires_consent boolean Optional consent requirement. Example: true
+     * @bodyParam consent_checkbox_label string Optional consent label.
+     * @bodyParam warning_text string Optional warning text.
+     * @bodyParam requires_coordinator_approval boolean Optional review requirement. Example: false
+     * @bodyParam outcomes string[] Optional outcome bullets. Example: ["Takim calismasi"]
+     * @bodyParam instructors object[] Optional instructor cards.
+     * @bodyParam faq_items object[] Optional FAQ items.
+     * @response 201 {"message":"KADEME+ modulu kaydedildi.","kademe_module":{"id":5,"title":"Liderlik Atolyesi"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Bu proje turu KADEME+ modullerini desteklemiyor."}
+     */
     public function storeKademeModule(Request $request, int $projectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -309,6 +348,23 @@ class ProjectSpecialModuleController extends Controller
         ], 201);
     }
 
+    /**
+     * Update a KADEME+ project module.
+     *
+     * Requires permission: `projects.rewards.manage` for the project and KADEME+ workflow support. Existing and new period scopes are checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @urlParam item integer required KADEME+ module ID. Example: 5
+     * @bodyParam title string Optional module title. Example: Guncel Liderlik Atolyesi
+     * @bodyParam period_id integer Optional period ID belonging to the project. Example: 3
+     * @bodyParam description string Optional module description.
+     * @bodyParam is_active boolean Optional active flag. Example: true
+     * @bodyParam application_open boolean Optional enrollment flag. Example: false
+     * @response 200 {"message":"KADEME+ modulu guncellendi.","kademe_module":{"id":5,"title":"Guncel Liderlik Atolyesi"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Secilen donem bu projeye ait degil."}
+     */
     public function updateKademeModule(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -332,6 +388,17 @@ class ProjectSpecialModuleController extends Controller
         ]);
     }
 
+    /**
+     * Delete a KADEME+ project module.
+     *
+     * Requires permission: `projects.rewards.manage` for the project and KADEME+ workflow support. The module period is checked for archive lock before deletion.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @urlParam item integer required KADEME+ module ID. Example: 5
+     * @response 200 {"message":"KADEME+ modulu silindi."}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
     public function destroyKademeModule(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -343,6 +410,20 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'KADEME+ modulu silindi.']);
     }
 
+    /**
+     * Review a KADEME+ module enrollment.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and support for `participants_by_module`. The enrollment must belong to a module in the selected project; completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @urlParam enrollmentId integer required Enrollment ID. Example: 12
+     * @bodyParam status string required Review status: `pending`, `approved` or `rejected`. Example: approved
+     * @bodyParam note string Optional reviewer note. Example: Uygun goruldu.
+     * @response 200 {"message":"Modul kaydi guncellendi.","enrollment":{"id":12,"status":"approved"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
+     */
     public function updateKademeModuleEnrollment(Request $request, int $projectId, int $enrollmentId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -398,6 +479,23 @@ class ProjectSpecialModuleController extends Controller
         ]);
     }
 
+    /**
+     * Create an internship record.
+     *
+     * Requires permission: `projects.internships.manage`, project access and project support for `internships`. Participant must belong to the project; participant period is checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @bodyParam participant_id integer required Participant ID in the project. Example: 42
+     * @bodyParam company_name string required Company name. Example: ACME A.S.
+     * @bodyParam position string required Position title. Example: Stajyer
+     * @bodyParam start_date date required Start date. Example: 2026-07-01
+     * @bodyParam end_date date Optional end date. Example: 2026-08-30
+     * @bodyParam description string Optional description.
+     * @bodyParam document_path string Optional document path or URL.
+     * @response 201 {"message":"Staj bilgisi kaydedildi.","internship":{"id":7,"company_name":"ACME A.S."}}
+     * @response 422 {"message":"Secilen katilimci bu projeye ait degil."}
+     */
     public function storeInternship(Request $request, int $projectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.internships.manage');
@@ -422,6 +520,22 @@ class ProjectSpecialModuleController extends Controller
         ], 201);
     }
 
+    /**
+     * Update an internship record.
+     *
+     * Requires permission: `projects.internships.manage`, project access and project support for `internships`. The internship must belong to a participant in the selected project.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @urlParam item integer required Internship ID. Example: 7
+     * @bodyParam company_name string required Company name. Example: ACME A.S.
+     * @bodyParam position string required Position title. Example: Junior Analyst
+     * @bodyParam start_date date required Start date. Example: 2026-07-01
+     * @bodyParam end_date date Optional end date. Example: 2026-08-30
+     * @bodyParam description string Optional description.
+     * @bodyParam document_path string Optional document path or URL.
+     * @response 200 {"message":"Staj bilgisi guncellendi.","internship":{"id":7}}
+     */
     public function updateInternship(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.internships.manage');
@@ -445,6 +559,16 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Staj bilgisi guncellendi.', 'internship' => $internship->fresh('participant.user:id,name,surname,email')]);
     }
 
+    /**
+     * Delete an internship record.
+     *
+     * Requires permission: `projects.internships.manage`, project access and project support for `internships`. The participant period is checked for archive lock before deletion.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @urlParam item integer required Internship ID. Example: 7
+     * @response 200 {"message":"Staj bilgisi silindi."}
+     */
     public function destroyInternship(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.internships.manage');
@@ -459,6 +583,19 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Staj bilgisi silindi.']);
     }
 
+    /**
+     * Create a project mentor.
+     *
+     * Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 2
+     * @bodyParam name string required Mentor name. Example: Ayse Kaya
+     * @bodyParam bio string Optional mentor bio.
+     * @bodyParam expertise string Optional expertise. Example: Kariyer Planlama
+     * @bodyParam photo_path string Optional photo path or URL.
+     * @response 201 {"message":"Mentor kaydedildi.","mentor":{"id":4,"name":"Ayse Kaya"}}
+     */
     public function storeMentor(Request $request, int $projectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.mentors.manage');
@@ -476,6 +613,20 @@ class ProjectSpecialModuleController extends Controller
         ], 201);
     }
 
+    /**
+     * Update a project mentor.
+     *
+     * Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 2
+     * @urlParam item integer required Mentor ID. Example: 4
+     * @bodyParam name string required Mentor name. Example: Ayse Kaya
+     * @bodyParam bio string Optional mentor bio.
+     * @bodyParam expertise string Optional expertise.
+     * @bodyParam photo_path string Optional photo path or URL.
+     * @response 200 {"message":"Mentor guncellendi.","mentor":{"id":4}}
+     */
     public function updateMentor(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.mentors.manage');
@@ -491,6 +642,16 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Mentor guncellendi.', 'mentor' => $mentor->fresh()]);
     }
 
+    /**
+     * Delete a project mentor.
+     *
+     * Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 2
+     * @urlParam item integer required Mentor ID. Example: 4
+     * @response 200 {"message":"Mentor silindi."}
+     */
     public function destroyMentor(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.mentors.manage');
@@ -504,6 +665,20 @@ class ProjectSpecialModuleController extends Controller
     // Mentor-Katilimci eslestirme (Pergel)
     // -------------------------------------------------------
 
+    /**
+     * Assign a mentor to a participant.
+     *
+     * Requires permission: `projects.mentors.manage`, project access and project support for `mentors`. Participant and mentor must belong to the project; optional period must belong to the project and match the participant period.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 2
+     * @urlParam mentorId integer required Mentor ID. Example: 4
+     * @bodyParam participant_id integer required Participant ID. Example: 42
+     * @bodyParam period_id integer Optional period ID. Example: 3
+     * @bodyParam note string Optional assignment note. Example: Ilk gorusme planlandi.
+     * @response 200 {"message":"Katilimci mentor ile eslendi."}
+     * @response 422 {"message":"Secilen katilimci bu doneme ait degil."}
+     */
     public function assignMentorToParticipant(Request $request, int $projectId, int $mentorId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.mentors.manage');
@@ -549,6 +724,17 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Katilimci mentor ile eslendi.']);
     }
 
+    /**
+     * Remove a mentor assignment from a participant.
+     *
+     * Requires permission: `projects.mentors.manage`, project access and project support for `mentors`. Participant period is checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 2
+     * @urlParam mentorId integer required Mentor ID. Example: 4
+     * @urlParam participantId integer required Participant ID. Example: 42
+     * @response 200 {"message":"Katilimci mentor eslestirmesi kaldirildi."}
+     */
     public function unassignMentorFromParticipant(Request $request, int $projectId, int $mentorId, int $participantId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.mentors.manage');
@@ -563,6 +749,17 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Katilimci mentor eslestirmesi kaldirildi.']);
     }
 
+    /**
+     * List participants assigned to a mentor.
+     *
+     * Requires permission: `projects.mentors.view`, project access and project support for `mentors`. Optional period filter must belong to the project.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 2
+     * @urlParam mentorId integer required Mentor ID. Example: 4
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @response 200 {"mentor":{"id":4,"name":"Ayse Kaya"},"participants":[]}
+     */
     public function mentorParticipants(Request $request, int $projectId, int $mentorId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.mentors.view');
@@ -617,6 +814,22 @@ class ProjectSpecialModuleController extends Controller
             'countries' => $countries->all(),
         ];
     }
+    /**
+     * Create a Eurodesk project record.
+     *
+     * Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. Optional period must belong to the project and completed periods require archive update permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 6
+     * @bodyParam period_id integer Optional period ID. Example: 3
+     * @bodyParam title string required Eurodesk project title. Example: Youth Exchange
+     * @bodyParam partner_organizations string[] Optional partner organization names.
+     * @bodyParam grant_amount number Optional grant amount. Example: 25000
+     * @bodyParam grant_status string required Grant status: `applied`, `approved`, `rejected` or `completed`. Example: applied
+     * @bodyParam start_date date Optional start date. Example: 2026-07-01
+     * @bodyParam end_date date Optional end date. Example: 2026-09-01
+     * @response 201 {"message":"Eurodesk proje bilgisi kaydedildi.","eurodesk_project":{"id":9,"title":"Youth Exchange"}}
+     */
     public function storeEurodeskProject(Request $request, int $projectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -631,6 +844,18 @@ class ProjectSpecialModuleController extends Controller
         ], 201);
     }
 
+    /**
+     * Update a Eurodesk project record.
+     *
+     * Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. Existing and target period scopes are checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 6
+     * @urlParam item integer required Eurodesk project ID. Example: 9
+     * @bodyParam title string required Eurodesk project title. Example: Youth Exchange 2026
+     * @bodyParam grant_status string required Grant status: `applied`, `approved`, `rejected` or `completed`. Example: approved
+     * @response 200 {"message":"Eurodesk proje bilgisi guncellendi.","eurodesk_project":{"id":9}}
+     */
     public function updateEurodeskProject(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -645,6 +870,16 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Eurodesk proje bilgisi guncellendi.', 'eurodesk_project' => $eurodeskProject->fresh(['partnerships', 'period:id,name,status'])]);
     }
 
+    /**
+     * Delete a Eurodesk project record.
+     *
+     * Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The record period is checked for archive lock before deletion.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 6
+     * @urlParam item integer required Eurodesk project ID. Example: 9
+     * @response 200 {"message":"Eurodesk proje bilgisi silindi."}
+     */
     public function destroyEurodeskProject(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -660,6 +895,19 @@ class ProjectSpecialModuleController extends Controller
     // Eurodesk Partnership CRUD
     // -------------------------------------------------------
 
+    /**
+     * Create a Eurodesk partnership.
+     *
+     * Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The parent Eurodesk project must belong to the selected project.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 6
+     * @urlParam eurodeskProjectId integer required Eurodesk project ID. Example: 9
+     * @bodyParam organization_name string required Organization name. Example: Youth NGO
+     * @bodyParam country string Optional country. Example: Germany
+     * @bodyParam contact_info string Optional contact details.
+     * @response 201 {"message":"Ortaklik kaydedildi.","partnership":{"id":3,"organization_name":"Youth NGO"}}
+     */
     public function storeEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -678,6 +926,20 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Ortaklik kaydedildi.', 'partnership' => $partnership], 201);
     }
 
+    /**
+     * Update a Eurodesk partnership.
+     *
+     * Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The partnership must belong to the parent Eurodesk project.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 6
+     * @urlParam eurodeskProjectId integer required Eurodesk project ID. Example: 9
+     * @urlParam partnershipId integer required Partnership ID. Example: 3
+     * @bodyParam organization_name string required Organization name. Example: Youth NGO
+     * @bodyParam country string Optional country. Example: Germany
+     * @bodyParam contact_info string Optional contact details.
+     * @response 200 {"message":"Ortaklik guncellendi.","partnership":{"id":3}}
+     */
     public function updateEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId, int $partnershipId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -698,6 +960,17 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Ortaklik guncellendi.', 'partnership' => $partnership->fresh()]);
     }
 
+    /**
+     * Delete a Eurodesk partnership.
+     *
+     * Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 6
+     * @urlParam eurodeskProjectId integer required Eurodesk project ID. Example: 9
+     * @urlParam partnershipId integer required Partnership ID. Example: 3
+     * @response 200 {"message":"Ortaklik silindi."}
+     */
     public function destroyEurodeskPartnership(Request $request, int $projectId, int $eurodeskProjectId, int $partnershipId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.eurodesk.manage');
@@ -758,6 +1031,20 @@ class ProjectSpecialModuleController extends Controller
             'deliverer' => $award->deliverer ? trim($award->deliverer->name.' '.$award->deliverer->surname) : null,
         ];
     }
+    /**
+     * Create a reward tier.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 5
+     * @bodyParam name string required Tier name. Example: Altin Kademe
+     * @bodyParam description string Optional description.
+     * @bodyParam min_badges integer required Minimum badge count. Example: 3
+     * @bodyParam min_credits integer required Minimum credit amount. Example: 90
+     * @bodyParam reward_description string required Reward description. Example: Hediye kutusu
+     * @response 201 {"message":"Hediye kademesi kaydedildi.","reward_tier":{"id":2,"name":"Altin Kademe"}}
+     */
     public function storeRewardTier(Request $request, int $projectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -776,6 +1063,20 @@ class ProjectSpecialModuleController extends Controller
         ], 201);
     }
 
+    /**
+     * Update a reward tier.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Only project-owned reward tiers are updated through this endpoint.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 5
+     * @urlParam item integer required Reward tier ID. Example: 2
+     * @bodyParam name string required Tier name. Example: Altin Kademe
+     * @bodyParam min_badges integer required Minimum badge count. Example: 3
+     * @bodyParam min_credits integer required Minimum credit amount. Example: 90
+     * @bodyParam reward_description string required Reward description. Example: Hediye kutusu
+     * @response 200 {"message":"Hediye kademesi guncellendi.","reward_tier":{"id":2}}
+     */
     public function updateRewardTier(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -792,6 +1093,16 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Hediye kademesi guncellendi.', 'reward_tier' => $tier->fresh()]);
     }
 
+    /**
+     * Delete a reward tier.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 5
+     * @urlParam item integer required Reward tier ID. Example: 2
+     * @response 200 {"message":"Hediye kademesi silindi."}
+     */
     public function destroyRewardTier(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -801,6 +1112,22 @@ class ProjectSpecialModuleController extends Controller
         return response()->json(['message' => 'Hediye kademesi silindi.']);
     }
 
+    /**
+     * Create a reward award for a participant.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant must belong to the project; optional tier must be global or project-owned. Participant period is checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 5
+     * @bodyParam participant_id integer required Participant ID in the project. Example: 42
+     * @bodyParam reward_tier_id integer Optional reward tier ID. Example: 2
+     * @bodyParam reward_name string required Award name. Example: Hediye Kutusu
+     * @bodyParam status string Optional status: `planned`, `given` or `cancelled`. Defaults to given. Example: planned
+     * @bodyParam awarded_at date Optional award date. Example: 2026-06-30
+     * @bodyParam note string Optional note.
+     * @response 201 {"message":"Hediye kaydi olusturuldu.","reward_award":{"id":10,"status":"planned"}}
+     * @response 422 {"message":"Secilen hediye kademesi bu proje icin uygun degil."}
+     */
     public function storeRewardAward(Request $request, int $projectId): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -848,6 +1175,16 @@ class ProjectSpecialModuleController extends Controller
         ], 201);
     }
 
+    /**
+     * Mark a reward award as delivered.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant period is checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 5
+     * @urlParam item integer required Reward award ID. Example: 10
+     * @response 200 {"message":"Hediye teslim edildi olarak isaretlendi.","award":{"id":10,"status":"given"}}
+     */
     public function markRewardDelivered(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
@@ -866,6 +1203,16 @@ class ProjectSpecialModuleController extends Controller
         ]);
     }
 
+    /**
+     * Delete a reward award.
+     *
+     * Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant period is checked for archive lock.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 5
+     * @urlParam item integer required Reward award ID. Example: 10
+     * @response 200 {"message":"Hediye kaydi silindi."}
+     */
     public function destroyRewardAward(Request $request, int $projectId, int $id): JsonResponse
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');

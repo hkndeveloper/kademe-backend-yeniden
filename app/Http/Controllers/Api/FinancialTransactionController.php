@@ -15,6 +15,9 @@ use App\Support\ProjectPeriodContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
+/**
+ * @group Financials
+ */
 class FinancialTransactionController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -144,8 +147,25 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * GET /admin/financials
-     * Tüm finansal işlemleri listele (filtrelenebilir).
+     * List financial transactions.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials` and `/panel/financials`. Requires `financial.view`; users with global scope see all matching transactions, while scoped users are limited to the project ids resolved by the action+scope matrix. `project_id` and `period_id` are validated through project-period context, so archive/period restrictions remain aligned with the panel.
+     *
+     * Returns paginated transactions plus total amount, category totals, project totals, and status totals for dashboard cards/charts.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter; scoped by `financial.view`. Example: 1
+     * @queryParam period_id integer Optional period filter; must belong to the selected/allowed project. Example: 3
+     * @queryParam status string Optional status filter. Example: pending
+     * @queryParam category string Optional category filter. Example: travel
+     * @queryParam type string Optional transaction type: expense or payment. Example: expense
+     * @queryParam payee string Optional payee, spending unit, invoice no, or accounting code search. Example: Otel
+     * @queryParam date_from date Optional submitted date lower bound. Example: 2026-01-01
+     * @queryParam date_to date Optional submitted date upper bound. Example: 2026-01-31
+     * @response 200 {"transactions":{"data":[{"id":1,"type":"expense","category":"travel","amount":"1250.00","status":"pending"}]},"total_amount":"1250.00","category_stats":[],"project_stats":[],"status_stats":[]}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function index(Request $request)
     {
@@ -212,8 +232,30 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * POST /admin/financials  (Koordinatör yükler)
-     * POST /coordinator/financials
+     * Create a financial transaction.
+     *
+     * Panel/admin and coordinator endpoint exposed under `/admin/financials`, `/panel/financials`, and `/coordinator/financials`. Requires `financial.create`. If `project_id` is supplied, the actor must have create scope for that project; creating a projectless financial transaction requires global `financial.create` scope. If `period_id` is supplied, it must belong to the selected project and the period must be writable.
+     *
+     * Send as `multipart/form-data` when uploading an invoice. Created transactions start as `pending` and are audit logged as `financial.created`.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @bodyParam project_id integer Optional project id. Required for non-global scoped users. Example: 1
+     * @bodyParam period_id integer Optional period id belonging to the selected project. Example: 3
+     * @bodyParam type string required Transaction type, one of `expense` or `payment`. Example: expense
+     * @bodyParam category string required Transaction category, max 80 chars. Example: travel
+     * @bodyParam spending_unit string Optional spending unit/cost center. Example: Operasyon
+     * @bodyParam payee_name string required Person or company to be paid. Example: ABC Turizm
+     * @bodyParam amount number required Amount, minimum 0.01. Example: 1250.50
+     * @bodyParam invoice_no string Optional invoice number. Example: INV-2026-001
+     * @bodyParam payment_date date Optional planned or actual payment date. Example: 2026-02-01
+     * @bodyParam payment_method string Optional payment method. Example: bank_transfer
+     * @bodyParam accounting_code string Optional accounting code. Example: 770.01
+     * @bodyParam invoice file Optional invoice file; pdf, jpg, jpeg, png, max 10MB.
+     * @response 201 {"message":"Islem basariyla kaydedildi.","transaction":{"id":1,"status":"pending","amount":"1250.50"}}
+     * @response 403 {"message":"Projesiz mali islem icin global kapsam gerekir."}
+     * @response 422 {"message":"Secilen donem bu projeye ait degil."}
      */
     public function store(Request $request)
     {
@@ -284,7 +326,17 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * GET /admin/financials/{id}
+     * Show a financial transaction.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.view` access to the transaction project; projectless records require the permission itself. Includes project, period, submitter, and approver summary data.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @response 200 {"transaction":{"id":1,"type":"expense","category":"travel","status":"pending","project":{"id":1,"name":"KADEME"}}}
+     * @response 403 {"message":"Bu isleme erisim yetkiniz yok."}
+     * @response 404 {"message":"No query results for model"}
      */
     public function show(Request $request, int $id)
     {
@@ -305,7 +357,17 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * PUT /admin/financials/{id}/approve  (Üst Admin onaylar)
+     * Approve a financial transaction.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/{id}/approve` and `/panel/financials/{id}/approve`. Requires `financial.approve` and access to the transaction project. The related period must be writable and only `pending` transactions can be approved. Status changes are audit logged as `financial.approved`.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @response 200 {"message":"Islem onaylandi.","transaction":{"id":1,"status":"approved"}}
+     * @response 403 {"message":"Bu islem icin onay yetkiniz yok."}
+     * @response 422 {"message":"Bu islem zaten islenmis."}
      */
     public function approve(Request $request, int $id)
     {
@@ -338,7 +400,17 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * PUT /admin/financials/{id}/reject  (Üst Admin reddeder)
+     * Reject a financial transaction.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/{id}/reject` and `/panel/financials/{id}/reject`. Requires `financial.reject` and access to the transaction project. The related period must be writable and only `pending` transactions can be rejected. Status changes are audit logged as `financial.rejected`.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @response 200 {"message":"Islem reddedildi.","transaction":{"id":1,"status":"rejected"}}
+     * @response 403 {"message":"Bu islem icin red yetkiniz yok."}
+     * @response 422 {"message":"Bu islem zaten islenmis."}
      */
     public function reject(Request $request, int $id)
     {
@@ -368,7 +440,17 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * PUT /admin/financials/{id}/pay  (Ödendi olarak işaretle)
+     * Mark a financial transaction as paid.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/{id}/pay` and `/panel/financials/{id}/pay`. Requires `financial.mark_paid` and access to the transaction project. The related period must be writable and only `approved` transactions can be marked as paid. If `payment_date` is empty, the controller sets it to today. Status changes are audit logged as `financial.paid`.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @response 200 {"message":"Odeme tamamlandi.","transaction":{"id":1,"status":"paid"}}
+     * @response 403 {"message":"Bu islem icin odeme yetkiniz yok."}
+     * @response 422 {"message":"Sadece onaylanan islemler odenmis olarak isaretlenebilir."}
      */
     public function markPaid(Request $request, int $id)
     {
@@ -397,7 +479,17 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * DELETE /admin/financials/{id}
+     * Delete a pending financial transaction.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.delete` and access to the transaction project. The related period must be writable and only `pending` transactions can be deleted. Attached invoice files are removed from storage and the deletion is audit logged as `financial.deleted`.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @response 200 {"message":"Islem silindi."}
+     * @response 403 {"message":"Bu islem icin silme yetkiniz yok."}
+     * @response 422 {"message":"Sadece bekleyen islemler silinebilir."}
      */
     public function destroy(Request $request, int $id)
     {
@@ -426,7 +518,19 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * GET /admin/financials/{id}/invoice  (Fatura PDF indir)
+     * Download a financial invoice.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/{id}/invoice` and `/panel/financials/{id}/invoice`. Requires `financial.invoice.download` and access to the transaction project. If `direct=true` and public/direct downloads are configured, returns a `download_url`; otherwise streams the stored file with its MIME type.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @queryParam direct boolean Optional. Return direct storage URL when configured. Example: true
+     * @response 200 {"download_url":"https://storage.example.com/invoices/file.pdf"}
+     * @response 200 {"download":"Binary invoice file stream"}
+     * @response 403 {"message":"Bu fatura icin erisim yetkiniz yok."}
+     * @response 404 {"message":"Fatura bulunamadi."}
      */
     public function downloadInvoice(Request $request, int $id)
     {
@@ -471,7 +575,24 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * GET /admin/financials/export  (CSV/Excel çıktı)
+     * Export financial transactions.
+     *
+     * Panel/admin endpoint exposed under `/admin/financials/export` and `/panel/financials/export`. Requires `financial.export`; users with global scope export all matching transactions, while scoped users are limited to project ids resolved by the action+scope matrix. Project and period filters are validated through project-period context. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter; scoped by `financial.export`. Example: 1
+     * @queryParam period_id integer Optional period filter; must belong to the selected/allowed project. Example: 3
+     * @queryParam status string Optional status filter. Example: paid
+     * @queryParam category string Optional category filter. Example: travel
+     * @queryParam type string Optional transaction type: expense or payment. Example: expense
+     * @queryParam payee string Optional payee, spending unit, invoice no, or accounting code search. Example: ABC
+     * @queryParam date_from date Optional submitted date lower bound. Example: 2026-01-01
+     * @queryParam date_to date Optional submitted date upper bound. Example: 2026-01-31
+     * @queryParam format string Optional export format. Example: xlsx
+     * @response 200 {"download":"Export file stream"}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function export(Request $request)
     {
@@ -548,7 +669,19 @@ class FinancialTransactionController extends Controller
     }
 
     /**
-     * GET /coordinator/financials  (Koordinatör kendi projelerini görür)
+     * List my coordinator financial transactions.
+     *
+     * Coordinator endpoint exposed under `/coordinator/financials`. Requires `financial.view`; results are limited to transactions submitted by the authenticated user and to project ids available through `financial.view` scope. Returns paginated records, category totals, and the current page total amount.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @queryParam status string Optional status filter. Example: pending
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam date_from date Optional submitted date lower bound. Example: 2026-01-01
+     * @queryParam date_to date Optional submitted date upper bound. Example: 2026-01-31
+     * @response 200 {"transactions":{"data":[{"id":1,"status":"pending","amount":"1250.00"}]},"category_stats":[],"total_amount":"1250.00"}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function myFinancials(Request $request)
     {
@@ -582,6 +715,26 @@ class FinancialTransactionController extends Controller
         ]);
     }
 
+    /**
+     * Export my coordinator financial transactions.
+     *
+     * Coordinator endpoint exposed under `/coordinator/financials/export`. Requires `financial.export`; results are limited to transactions submitted by the authenticated user and to project ids available through `financial.export` scope. Supports the shared `csv`, `xlsx`, or `pdf` export responder when enabled.
+     *
+     * @group Financials
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter inside coordinator export scope. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam status string Optional status filter. Example: approved
+     * @queryParam category string Optional category filter. Example: travel
+     * @queryParam type string Optional transaction type: expense or payment. Example: expense
+     * @queryParam payee string Optional payee, spending unit, invoice no, or accounting code search. Example: ABC
+     * @queryParam date_from date Optional submitted date lower bound. Example: 2026-01-01
+     * @queryParam date_to date Optional submitted date upper bound. Example: 2026-01-31
+     * @queryParam format string Optional export format. Example: csv
+     * @response 200 {"download":"Export file stream"}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function exportMyFinancials(Request $request)
     {
         $this->abortUnlessAllowed($request, 'financial.export');

@@ -17,6 +17,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Assignments
+ */
 class AssignmentController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -105,7 +108,16 @@ class AssignmentController extends Controller
     }
 
     /**
-     * Öğrencinin aktif ödevlerini ve teslim durumlarını listeler
+     * List participant assignments and submissions.
+     *
+     * Requires permission: `participant.assignments.view`. Returns assignments from projects/periods where the current user is an active or alumni participant, including the current user submissions.
+     *
+     * @group Assignments
+     * @authenticated
+     *
+     * @response 200 {"assignments":[{"id":1,"title":"Hafta 1 Odevi","due_date":"2026-07-01","submissions":[{"id":1,"status":"submitted","download_url":"/assignment-submissions/1/download"}]}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function index(Request $request)
     {
@@ -144,7 +156,21 @@ class AssignmentController extends Controller
     }
 
     /**
-     * Ödev Teslimi (Gönderme)
+     * Submit or update an assignment submission.
+     *
+     * Requires permission: `participant.assignments.submit`. The current user must participate in the assignment project and period. Send as `multipart/form-data` when uploading `file`; existing submissions are updated.
+     *
+     * @group Assignments
+     * @authenticated
+     *
+     * @urlParam id integer required Assignment id. Example: 1
+     * @bodyParam title string Optional submission title. Example: Odevi tamamladim
+     * @bodyParam description string required Submission description. Example: Calismam ekte yer almaktadir.
+     * @bodyParam file_path string Optional external file path. Example: https://example.com/submission.pdf
+     * @bodyParam file file Optional uploaded file, max 20MB.
+     * @response 201 {"message":"Odeviniz basariyla sisteme yuklendi.","submission":{"id":1,"status":"submitted"}}
+     * @response 200 {"message":"Odev tesliminiz guncellendi.","submission":{"id":1,"status":"submitted"}}
+     * @response 403 {"message":"Bu odev icin teslim yetkiniz bulunmuyor."}
      */
     public function submit(Request $request, $id)
     {
@@ -241,6 +267,19 @@ class AssignmentController extends Controller
         ], 201);
     }
 
+    /**
+     * Download my assignment submission file.
+     *
+     * Requires permission: `participant.assignments.view`. The submission must belong to the authenticated user. Returns a direct download URL when configured, otherwise streams the file.
+     *
+     * @group Assignments
+     * @authenticated
+     *
+     * @urlParam id integer required Submission id. Example: 1
+     * @response 200 {"download_url":"https://storage.example.com/assignment-submissions/file.pdf"}
+     * @response 200 {"download":"Binary submission file stream"}
+     * @response 404 {"message":"Teslim dosyasi bulunamadi."}
+     */
     public function downloadSubmission(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $submission = AssignmentSubmission::query()

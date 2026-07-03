@@ -15,6 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
+/**
+ * @group Certificates
+ */
 class AdminCertificateController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -76,7 +79,20 @@ class AdminCertificateController extends Controller
     }
 
     /**
-     * Tüm sertifikaları listele. (Admin paneli için)
+     * List panel certificates.
+     *
+     * Panel/admin endpoint exposed under `/admin/certificates` and `/panel/certificates`. Uses `certificates.view` through project-period context: global scope sees all project certificates, while scoped users are limited to allowed project ids. Optional `project_id` and `period_id` are validated against the action+scope matrix.
+     *
+     * Returns paginated certificate records with user, project, period, verification code, stored path, and public download URL.
+     *
+     * @group Certificates
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter; scoped by `certificates.view`. Example: 1
+     * @queryParam period_id integer Optional period filter; must belong to the selected/allowed project. Example: 3
+     * @queryParam search string Optional recipient name, surname, email, or verification code search. Example: ABC123
+     * @response 200 {"certificates":{"data":[{"id":1,"type":"participation","verification_code":"ABC123","download_url":"https://api.example.com/api/certificates/ABC123/download","user":{"id":5,"name":"Ayse"}}]}}
+     * @response 403 {"message":"Bu islem icin yetkiniz yok."}
      */
     public function index(Request $request)
     {
@@ -125,6 +141,21 @@ class AdminCertificateController extends Controller
         ]);
     }
 
+    /**
+     * Export panel certificates.
+     *
+     * Panel/admin endpoint exposed under `/admin/certificates/export` and `/panel/certificates/export`. Uses `certificates.export` through project-period context: global scope exports all matching certificates, while scoped users are limited to allowed project ids. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
+     *
+     * @group Certificates
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter; scoped by `certificates.export`. Example: 1
+     * @queryParam period_id integer Optional period filter; must belong to the selected/allowed project. Example: 3
+     * @queryParam search string Optional recipient name, surname, email, or verification code search. Example: hakan@example.com
+     * @queryParam format string Optional export format. Example: xlsx
+     * @response 200 {"download":"Export file stream"}
+     * @response 403 {"message":"Bu islem icin yetkiniz yok."}
+     */
     public function export(Request $request)
     {
         $validated = $request->validate([
@@ -177,7 +208,26 @@ class AdminCertificateController extends Controller
     }
 
     /**
-     * Yeni sertifika oluştur. (Admin)
+     * Create a certificate.
+     *
+     * Panel/admin endpoint exposed under `/admin/certificates` and `/panel/certificates`. Requires `certificates.create` and create access to the selected project. `period_id`, when provided, must belong to the project and must be writable; completed periods require archive update permission through the shared period lock logic.
+     *
+     * The `type` field is normalized from Turkish/English labels into `participation`, `graduation`, or `achievement`. Duplicate certificates for the same user, project, period, and type are rejected. If no file/path is supplied, the backend generates a certificate PDF, assigns a verification code, stores it, audit logs `certificate.created`, and emails the recipient when an email exists.
+     *
+     * @group Certificates
+     * @authenticated
+     *
+     * @bodyParam user_id integer required Recipient user id. Example: 5
+     * @bodyParam project_id integer required Project id; scoped by `certificates.create`. Example: 1
+     * @bodyParam period_id integer Optional period id belonging to the selected project. Example: 3
+     * @bodyParam type string required Certificate type: participation, graduation, achievement. Turkish aliases such as katilim, mezuniyet, basari are normalized. Example: participation
+     * @bodyParam certificate_path string Optional existing storage path or URL. Example: certificates/manual.pdf
+     * @bodyParam file_path string Optional alias for certificate_path. Example: certificates/manual.pdf
+     * @bodyParam certificate_file file Optional certificate file; pdf, jpg, jpeg, png, max 20MB.
+     * @response 201 {"message":"Sertifika basariyla olusturuldu.","certificate":{"id":1,"type":"participation","verification_code":"ABC123"}}
+     * @response 400 {"message":"Bu kullaniciya bu projeden zaten bu turde bir sertifika verilmis."}
+     * @response 403 {"message":"Bu projede sertifika olusturma yetkiniz yok."}
+     * @response 422 {"message":"Secilen donem bu projeye ait degil."}
      */
     public function store(Request $request)
     {
@@ -265,7 +315,17 @@ class AdminCertificateController extends Controller
     }
 
     /**
-     * Sertifikayı sil / iptal et. (Admin)
+     * Delete a certificate.
+     *
+     * Panel/admin endpoint exposed under `/admin/certificates/{id}` and `/panel/certificates/{id}`. Requires `certificates.delete` and delete access to the certificate project. The related period must be writable; completed periods require archive update permission. The certificate file is removed from storage and the operation is audit logged as `certificate.deleted`.
+     *
+     * @group Certificates
+     * @authenticated
+     *
+     * @urlParam id integer required Certificate id. Example: 1
+     * @response 200 {"message":"Sertifika basariyla iptal edildi/silindi."}
+     * @response 403 {"message":"Bu sertifikayi silme yetkiniz yok."}
+     * @response 423 {"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}
      */
     public function destroy(Request $request, int $id)
     {

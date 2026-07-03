@@ -10,6 +10,9 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * @group Alumni Opportunities
+ */
 class AlumniOpportunityController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -76,6 +79,18 @@ class AlumniOpportunityController extends Controller
         });
     }
 
+    /**
+     * List alumni opportunities visible to the current user.
+     *
+     * Requires permission: `alumni.opportunities.view`. Returns published and non-expired opportunities matching the current user role and participant project scope.
+     *
+     * @group Alumni Opportunities
+     * @authenticated
+     *
+     * @response 200 {"opportunities":[{"id":1,"title":"Staj Firsati","kind":"internship","summary":"Ozet","link_url":"https://example.com","project":{"id":1,"name":"KADEME"}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function recipientIndex(Request $request): JsonResponse
     {
         $user = $request->user();

@@ -107,6 +107,7 @@ return [
         ['name' => 'manage requests', 'label' => 'Talep Yonetimi', 'group' => 'Operasyon'],
         ['name' => 'manage support', 'label' => 'Destek Merkezi', 'group' => 'Operasyon'],
         ['name' => 'manage staff', 'label' => 'Personel Islemleri', 'group' => 'Operasyon'],
+        ['name' => 'manage trainers', 'label' => 'Egitmen Bilgileri', 'group' => 'Yonetim'],
         ['name' => 'manage announcements', 'label' => 'Duyuru Gonderimi', 'group' => 'Iletisim'],
         ['name' => 'manage content', 'label' => 'Icerik Yonetimi', 'group' => 'Iletisim'],
         ['name' => 'manage settings', 'label' => 'Sistem Ayarlari', 'group' => 'Sistem'],
@@ -150,6 +151,8 @@ return [
             'projects.student_cv.view',
             'projects.attendance.view',
             'projects.attendance.export',
+        ],
+        'Project Special Modules' => [
             'projects.internships.view',
             'projects.internships.manage',
             'projects.mentors.view',
@@ -244,6 +247,15 @@ return [
             'staff.leave.approve',
             'staff.leave.reject',
             'staff.export',
+        ],
+        'Trainers' => [
+            'trainers.view',
+            'trainers.create',
+            'trainers.update',
+            'trainers.delete',
+            'trainers.comment',
+            'trainers.email',
+            'trainers.export',
         ],
         'Announcements' => [
             'announcements.view',
@@ -438,6 +450,15 @@ return [
             'staff.leave.approve',
             'staff.leave.reject',
             'staff.export',
+        ],
+        'manage trainers' => [
+            'trainers.view',
+            'trainers.create',
+            'trainers.update',
+            'trainers.delete',
+            'trainers.comment',
+            'trainers.email',
+            'trainers.export',
         ],
         'request staff leave' => [
             'staff.leave.request',

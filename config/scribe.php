@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\KademeOpenApiSchemaGenerator;
 use Knuckles\Scribe\Config\AuthIn;
 use Knuckles\Scribe\Config\Defaults;
 use Knuckles\Scribe\Extracting\Strategies;
@@ -12,7 +13,7 @@ if (! class_exists(Defaults::class)) {
     // config() yukleme siralamasinda donguye girmesin: env() kullan (sadece Scribe yokken, prod Docker)
     return [
         'title' => (string) (env('APP_NAME', 'Laravel')) . ' API',
-        'description' => '',
+        'description' => 'KADEME backend API dokumantasyonu. Public, mobil katilimci ve tek panel endpointleri OpenAPI/Swagger uyumlu olarak bu dokumanda toplanir.',
         'base_url' => (string) (env('APP_URL', 'http://localhost')),
     ];
 }
@@ -24,15 +25,40 @@ return [
     'title' => config('app.name').' API Documentation',
 
     // A short description of your API. Will be included in the docs webpage, Postman collection and OpenAPI spec.
-    'description' => '',
+    'description' => 'KADEME backend API dokumantasyonu. Public, mobil katilimci ve tek panel endpointleri OpenAPI/Swagger uyumlu olarak bu dokumanda toplanir.',
 
     // Text to place in the "Introduction" section, right after the `description`. Markdown and HTML are supported.
     'intro_text' => <<<'INTRO'
-            This documentation aims to provide all the information you need to work with our API.
+KADEME API dokumantasyonu mobil uygulama, public web arayuzu ve tek panel entegrasyonlari icin hazirlanir.
 
-            <aside>As you scroll, you'll see code examples for working with the API in different programming languages in the dark area to the right (or as part of the content on mobile).
-            You can switch the language used with the tabs at the top right (or from the nav menu at the top left on mobile).</aside>
-        INTRO,
+Endpointler uc ana guvenlik seviyesinde ele alinir:
+
+- Public endpointler token gerektirmez.
+- Authenticated endpointler `Authorization: Bearer {TOKEN}` header'i gerektirir.
+- Panel ve proje bazli endpointlerde tokena ek olarak rol, action+scope yetkisi, proje/birim/kendi kaydi gibi backend kontrolleri uygulanir.
+
+Genel header kullanimi:
+
+```http
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {TOKEN}
+```
+
+Dosya yukleme endpointleri `multipart/form-data`, indirme/export endpointleri ise binary response veya gecici download URL'i donebilir.
+
+Ortak response ve hata modelleri OpenAPI `components.schemas` bolumunde toplanir. Sik kullanilanlar:
+
+- `SuccessMessage`: Standart basarili islem mesaji.
+- `PaginatedResponse`: Laravel pagination icin `data`, `links`, `meta` yapisi.
+- `ValidationError`: 422 validasyon hatalari; `message` ve alan bazli `errors`.
+- `UnauthorizedError`: 401 token yok, suresi dolmus veya gecersiz.
+- `ForbiddenError`: 403 rol, action+scope, proje/birim/self erisimi, KVKK veya sifre kurulumu engeli.
+- `NotFoundError`: 404 kayit veya dosya bulunamadi.
+- `KvkkRequiredError`, `PasswordSetupPendingError`, `BlacklistError`, `ArchiveLockedError`: KADEME'ye ozel erisim/hata durumlari.
+
+Sik kullanilan `User`, `Project`, `Application`, `Program`, `Attendance`, `Certificate`, `SupportTicket`, `ServiceRequest`, `Announcement`, `Trainer`, `FinancialTransaction` ve `ActivityLog` semalari da OpenAPI components altinda bulunur. Endpoint response ornekleri yine ilgili endpointte kalir; components bolumu mobilci icin ortak sozlesme referansidir.
+INTRO,
 
     // The base URL displayed in the docs.
     // If you're using `laravel` type, you can set this to a dynamic string, like '{{ config("app.tenant_url") }}' to get a dynamic base URL.
@@ -78,7 +104,7 @@ return [
 
     'laravel' => [
         // Whether to automatically create a docs route for you to view your generated docs. You can still set up routing manually.
-        'add_routes' => true,
+        'add_routes' => filter_var(env('SCRIBE_DOCS_ADD_ROUTES', true), FILTER_VALIDATE_BOOLEAN),
 
         // URL path to use for the docs endpoint (if `add_routes` is true).
         // By default, `/docs` opens the HTML page, `/docs.postman` opens the Postman collection, and `/docs.openapi` the OpenAPI spec.
@@ -90,7 +116,7 @@ return [
         'assets_directory' => null,
 
         // Middleware to attach to the docs endpoint (if `add_routes` is true).
-        'middleware' => [],
+        'middleware' => array_values(array_filter(array_map('trim', explode(',', (string) env('SCRIBE_DOCS_MIDDLEWARE', ''))))),
     ],
 
     'external' => [
@@ -100,7 +126,7 @@ return [
     'try_it_out' => [
         // Add a Try It Out button to your endpoints so consumers can test endpoints right from their browser.
         // Don't forget to enable CORS headers for your endpoints.
-        'enabled' => true,
+        'enabled' => filter_var(env('SCRIBE_TRY_IT_OUT_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
 
         // The base URL to use in the API tester. Leave as null to be the same as the displayed URL (`scribe.base_url`).
         'base_url' => null,
@@ -115,17 +141,17 @@ return [
     // How is your API authenticated? This information will be used in the displayed docs, generated examples and response calls.
     'auth' => [
         // Set this to true if ANY endpoints in your API use authentication.
-        'enabled' => false,
+        'enabled' => true,
 
         // Set this to true if your API should be authenticated by default. If so, you must also set `enabled` (above) to true.
         // You can then use @unauthenticated or @authenticated on individual endpoints to change their status from the default.
-        'default' => false,
+        'default' => true,
 
         // Where is the auth value meant to be sent in a request?
         'in' => AuthIn::BEARER->value,
 
         // The name of the auth parameter (e.g. token, key, apiKey) or header (e.g. Authorization, Api-Key).
-        'name' => 'key',
+        'name' => 'Authorization',
 
         // The value of the parameter to be used by Scribe to authenticate response calls.
         // This will NOT be included in the generated documentation. If empty, Scribe will use a random value.
@@ -133,10 +159,10 @@ return [
 
         // Placeholder your users will see for the auth parameter in the example requests.
         // Set this to null if you want Scribe to use a random value as placeholder instead.
-        'placeholder' => '{YOUR_AUTH_KEY}',
+        'placeholder' => '{YOUR_ACCESS_TOKEN}',
 
         // Any extra authentication-related info for your users. Markdown and HTML are supported.
-        'extra_info' => 'You can retrieve your token by visiting your dashboard and clicking <b>Generate API token</b>.',
+        'extra_info' => 'Token almak icin /api/auth/login endpointini kullanin. Donen access_token degeri sonraki isteklerde Authorization: Bearer {TOKEN} seklinde gonderilir. Token tek basina tum endpointlere erisim vermez; rol, action+scope, KVKK, sifre kurulumu ve proje/birim/kayit erisimi backend tarafinda ayrica kontrol edilir.',
     ],
 
     // Example requests for each endpoint will be shown in each of these languages.
@@ -178,7 +204,9 @@ return [
 
         // Additional generators to use when generating the OpenAPI spec.
         // Should extend `Knuckles\Scribe\Writing\OpenApiSpecGenerators\OpenApiGenerator`.
-        'generators' => [],
+        'generators' => [
+            KademeOpenApiSchemaGenerator::class,
+        ],
     ],
 
     'groups' => [
@@ -189,7 +217,52 @@ return [
         // You can override this by listing the groups, subgroups and endpoints here in the order you want them.
         // See https://scribe.knuckles.wtf/blog/laravel-v4#easier-sorting and https://scribe.knuckles.wtf/laravel/reference/config#order for details
         // Note: does not work for `external` docs types
-        'order' => [],
+        'order' => [
+            'Health',
+            'Public Content',
+            'Projects',
+            'Certificates',
+            'Newsletter',
+            'Contact',
+            'Auth',
+            'User',
+            'Participant Dashboard',
+            'Applications',
+            'Programs & Attendance',
+            'Participant Content',
+            'Assignments',
+            'Digital Bohca',
+            'Feedback',
+            'Forum',
+            'KPD',
+            'Requests',
+            'Support',
+            'Volunteer',
+            'Alumni Opportunities',
+            'Announcements & Inbox',
+            'Social Sharing',
+            'Admin Dashboard',
+            'Admin Applications',
+            'Admin Panel',
+            'Participants',
+            'Projects',
+            'Project Special Modules',
+            'Project Family Modules',
+            'Periods',
+            'Credits & Rewards',
+            'Financials',
+            'Users',
+            'Permissions Matrix',
+            'Staff',
+            'Trainers',
+            'Content Management',
+            'Site Settings',
+            'Files & Exports',
+            'Chatbot',
+            'Calendar',
+            'Personality Tests',
+            'Motivation',
+        ],
     ],
 
     // Custom logo path. This will be used as the value of the src attribute for the <img> tag,
@@ -245,7 +318,17 @@ return [
         'responses' => configureStrategy(
             Defaults::RESPONSES_STRATEGIES,
             Strategies\Responses\ResponseCalls::withSettings(
-                only: ['GET *'],
+                only: [
+                    'GET api/ping',
+                    'GET api/blogs*',
+                    'GET api/faqs',
+                    'GET api/activities*',
+                    'GET api/projects*',
+                    'GET api/site-config',
+                    'GET api/homepage',
+                    'GET api/motivation/current',
+                    'GET api/certificates/verify/*',
+                ],
                 // Recommended: disable debug mode in response calls to avoid error stack traces in responses
                 config: [
                     'app.debug' => false,

@@ -11,6 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @group Social Sharing
+ */
 class SocialSharingController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -28,11 +31,21 @@ class SocialSharingController extends Controller
     }
 
     /**
-     * POST /admin/social-sharing/post
+     * Send content to the social sharing webhook.
      *
-     * Sosyal medya otomasyon webhook'una (Buffer / Make.com / Zapier vb.)
-     * belirlenmiş içeriği gönderir.
-     * Admin/koordinatör izni gerektirir.
+     * Requires global permission scope for `content.blog.update` or `announcements.create`. The backend posts the payload to the configured social media webhook URL.
+     *
+     * @group Social Sharing
+     * @authenticated
+     *
+     * @bodyParam text string required Content text, max 2000 characters. Example: Yeni duyurumuz yayinda.
+     * @bodyParam url string Optional target URL. Example: https://kademe.example.com/blog/yeni-duyuru
+     * @bodyParam image_url string Optional image URL. Example: https://kademe.example.com/image.jpg
+     * @bodyParam platforms string[] Optional platform list. Example: ["instagram","linkedin"]
+     * @response 200 {"message":"Icerik sosyal medya platformlarina gonderildi.","shared":true,"http_code":200}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Sosyal medya webhook URL tanimli degil. Admin > Site Ayarlari > Sosyal Medya bolumunden tanimlayabilirsiniz.","shared":false}
+     * @response 502 {"message":"Webhook gonderilemedi: timeout","shared":false}
      */
     public function post(Request $request): JsonResponse
     {

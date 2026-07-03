@@ -1,0 +1,1007 @@
+name: 'Participant Dashboard'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/dashboard/summary
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get participant dashboard summary.'
+      description: 'Requires permission: `participant.dashboard.view`. Returns active or alumni participations, recent credit history, KADEME+ badge data, monthly titles, and total score.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"participations":[{"id":1,"status":"active","credit":100}],"recent_credit_history":[{"amount":10,"type":"bonus"}],"earned_badges":[{"id":1,"name":"Liderlik"}],"monthly_titles":["Ayin Pergellisi"],"total_score":100,"profile_badge_frame":"gold"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/dashboard/projects
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List the current participant projects.'
+      description: 'Requires permission: `participant.projects.view`. Alumni users may also see graduated participations.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"projects":[{"id":1,"name":"KADEME","slug":"kademe","type":"kademe_plus","participation_status":"active","graduation_status":null,"period":{"id":1,"name":"2026","status":"active"}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/dashboard/digital-cv
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get digital CV source data.'
+      description: 'Requires permission: `participant.cv.manage`. Returns editable saved draft data plus approved KADEME projects, badges, certificates, and credit history that can be shown in the mobile CV builder.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"profile":{"full_name":"Hakan Kekec","email":"hakan@example.com","summary":"Kariyer hedefim sosyal etki."},"saved_draft":{"form":{"fullName":"Hakan Kekec"}},"approved":{"title":"KADEME Onayli Dijital CV","total_credit":100,"completed_project_count":1,"badge_count":2,"certificate_count":1},"projects":[],"badges":[],"certificates":[],"credit_history":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/dashboard/digital-cv
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Save digital CV draft data.'
+      description: 'Requires permission: `participant.cv.manage`. Stores the editable CV builder payload under the user profile. The approved KADEME data is not overwritten by this endpoint.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      form:
+        custom: []
+        name: form
+        description: 'CV form payload.'
+        required: true
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      form.fullName:
+        custom: []
+        name: form.fullName
+        description: 'Optional displayed full name.'
+        required: false
+        example: 'Hakan Kekec'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form.email:
+        custom: []
+        name: form.email
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: kunde.eloisa@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.phone:
+        custom: []
+        name: form.phone
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: hfqcoynlazghdtqtqxbaj
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.location:
+        custom: []
+        name: form.location
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: wbpilpmufinllwloauydl
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.summary:
+        custom: []
+        name: form.summary
+        description: 'Optional profile summary.'
+        required: false
+        example: 'Sosyal etki odakli calismalar yapiyorum.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form.university:
+        custom: []
+        name: form.university
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: znkygloigmkwxphlvazjr
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.department:
+        custom: []
+        name: form.department
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: cnfbaqywuxhgjjmzuxjub
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.classYear:
+        custom: []
+        name: form.classYear
+        description: 'Must not be greater than 100 characters.'
+        required: false
+        example: qouzswiwxtrkimfcatbxs
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.linkedin:
+        custom: []
+        name: form.linkedin
+        description: 'Must not be greater than 500 characters.'
+        required: false
+        example: pzmrazsroyjpxmqesedyg
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.github:
+        custom: []
+        name: form.github
+        description: 'Must not be greater than 500 characters.'
+        required: false
+        example: henqcopwvownkbamlnfng
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.instagram:
+        custom: []
+        name: form.instagram
+        description: 'Must not be greater than 500 characters.'
+        required: false
+        example: efbeilfzsyuxoezbdtabp
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.skills:
+        custom: []
+        name: form.skills
+        description: 'Optional skills text.'
+        required: false
+        example: 'Liderlik, iletisim, proje yonetimi'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      form.languages:
+        custom: []
+        name: form.languages
+        description: 'Must not be greater than 2000 characters.'
+        required: false
+        example: cwsestcouxpqsydkigioy
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.experience:
+        custom: []
+        name: form.experience
+        description: 'Optional experience rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.education:
+        custom: []
+        name: form.education
+        description: 'Optional education rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.projects:
+        custom: []
+        name: form.projects
+        description: 'Optional project rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      form.certificates:
+        custom: []
+        name: form.certificates
+        description: 'Optional certificate rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.experience[].id':
+        custom: []
+        name: 'form.experience[].id'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: oyprjkfdjsneawgaavuiw
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.experience[].title':
+        custom: []
+        name: 'form.experience[].title'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: lezlcraoooxrrjhbduowt
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.experience[].subtitle':
+        custom: []
+        name: 'form.experience[].subtitle'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: baqrrtgxiuvujtzcirpln
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.experience[].date':
+        custom: []
+        name: 'form.experience[].date'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: fqsaymxpayeblqozckazp
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.experience[].description':
+        custom: []
+        name: 'form.experience[].description'
+        description: 'Must not be greater than 5000 characters.'
+        required: false
+        example: 'Quidem commodi quia vel accusamus quam.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.education[].id':
+        custom: []
+        name: 'form.education[].id'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: uzgpjfumffsmqnmbekhso
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.education[].title':
+        custom: []
+        name: 'form.education[].title'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: bzoqisjmbiuqxdnvttnwp
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.education[].subtitle':
+        custom: []
+        name: 'form.education[].subtitle'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: jqkxxmutyzaadbjkbosus
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.education[].date':
+        custom: []
+        name: 'form.education[].date'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: obdoqhlrecwgwnfrnqkqz
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.education[].description':
+        custom: []
+        name: 'form.education[].description'
+        description: 'Must not be greater than 5000 characters.'
+        required: false
+        example: 'Ipsum esse consectetur deleniti aut voluptatibus dicta.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.projects[].id':
+        custom: []
+        name: 'form.projects[].id'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: jkacxowxjfjhqnumftkwb
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.projects[].title':
+        custom: []
+        name: 'form.projects[].title'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: fqsgaywjxhjqovkxzlval
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.projects[].subtitle':
+        custom: []
+        name: 'form.projects[].subtitle'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: yuwppfckszbujxazwsrqg
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.projects[].date':
+        custom: []
+        name: 'form.projects[].date'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: zomzeowirvzubjxoeqxih
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.projects[].description':
+        custom: []
+        name: 'form.projects[].description'
+        description: 'Must not be greater than 5000 characters.'
+        required: false
+        example: 'Eaque numquam provident ratione quis.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.certificates[].id':
+        custom: []
+        name: 'form.certificates[].id'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: giswmddoraronrpbzlovd
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.certificates[].title':
+        custom: []
+        name: 'form.certificates[].title'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: mbhrpyvkublvfopexlama
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.certificates[].subtitle':
+        custom: []
+        name: 'form.certificates[].subtitle'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: dlsacjsrgesfcxzbqmrck
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.certificates[].date':
+        custom: []
+        name: 'form.certificates[].date'
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: wedjrwdsuajoeoqmqffvh
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'form.certificates[].description':
+        custom: []
+        name: 'form.certificates[].description'
+        description: 'Must not be greater than 5000 characters.'
+        required: false
+        example: 'Doloribus perferendis aut id voluptas quo tempora.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      form:
+        fullName: 'Hakan Kekec'
+        email: kunde.eloisa@example.com
+        phone: hfqcoynlazghdtqtqxbaj
+        location: wbpilpmufinllwloauydl
+        summary: 'Sosyal etki odakli calismalar yapiyorum.'
+        university: znkygloigmkwxphlvazjr
+        department: cnfbaqywuxhgjjmzuxjub
+        classYear: qouzswiwxtrkimfcatbxs
+        linkedin: pzmrazsroyjpxmqesedyg
+        github: henqcopwvownkbamlnfng
+        instagram: efbeilfzsyuxoezbdtabp
+        skills: 'Liderlik, iletisim, proje yonetimi'
+        languages: cwsestcouxpqsydkigioy
+        experience:
+          -
+            id: oyprjkfdjsneawgaavuiw
+            title: lezlcraoooxrrjhbduowt
+            subtitle: baqrrtgxiuvujtzcirpln
+            date: fqsaymxpayeblqozckazp
+            description: 'Quidem commodi quia vel accusamus quam.'
+        education:
+          -
+            id: uzgpjfumffsmqnmbekhso
+            title: bzoqisjmbiuqxdnvttnwp
+            subtitle: jqkxxmutyzaadbjkbosus
+            date: obdoqhlrecwgwnfrnqkqz
+            description: 'Ipsum esse consectetur deleniti aut voluptatibus dicta.'
+        projects:
+          -
+            id: jkacxowxjfjhqnumftkwb
+            title: fqsgaywjxhjqovkxzlval
+            subtitle: yuwppfckszbujxazwsrqg
+            date: zomzeowirvzubjxoeqxih
+            description: 'Eaque numquam provident ratione quis.'
+        certificates:
+          -
+            id: giswmddoraronrpbzlovd
+            title: mbhrpyvkublvfopexlama
+            subtitle: dlsacjsrgesfcxzbqmrck
+            date: wedjrwdsuajoeoqmqffvh
+            description: 'Doloribus perferendis aut id voluptas quo tempora.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Dijital CV taslagi kaydedildi.","saved_draft":{"form":{"fullName":"Hakan Kekec"},"saved_at":"2026-06-30T12:00:00+03:00"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The form field is required.","errors":{"form":["The form field is required."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/dashboard/digital-cv/pdf
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Generate a digital CV PDF.'
+      description: 'Requires permission: `participant.cv.manage`. Accepts the CV builder payload and returns a downloadable PDF response.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      form:
+        custom: []
+        name: form
+        description: 'CV form payload.'
+        required: true
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      approved:
+        custom: []
+        name: approved
+        description: 'Optional approved KADEME summary data.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      projects:
+        custom: []
+        name: projects
+        description: 'Optional approved project rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      badges:
+        custom: []
+        name: badges
+        description: 'Optional badge rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      certificates:
+        custom: []
+        name: certificates
+        description: 'Optional certificate rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      credit_history:
+        custom: []
+        name: credit_history
+        description: 'Optional credit rows.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      form: []
+      approved: []
+      projects:
+        - []
+      badges:
+        - []
+      certificates:
+        - []
+      credit_history:
+        - []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Binary PDF stream named {full-name}-kademe-cv.pdf"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The form field is required.","errors":{"form":["The form field is required."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/dashboard/project-specials
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List participant project special modules.'
+      description: 'Requires permission: `participant.projects.view`. Returns only modules that belong to projects where the current user is a participant or alumni participant.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"projects":[{"project":{"id":1,"name":"KADEME","type":"kademe_plus"},"participation":{"id":1,"status":"active","credit":100},"modules":["reward_tiers","participants_by_module"],"reward_progress":{"badge_count":2,"credit":100,"eligible_count":1}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/dashboard/projects/{projectId}/kademe-modules/{moduleId}/enroll'
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Enroll in a KADEME project module.'
+      description: 'Requires permission: `participant.projects.view`. The user must be a participant of the project and, when required, must accept module terms.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      projectId:
+        custom: []
+        name: projectId
+        description: 'Project id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      moduleId:
+        custom: []
+        name: moduleId
+        description: 'Module id.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      projectId: 1
+      moduleId: 10
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      accepted_terms:
+        custom: []
+        name: accepted_terms
+        description: 'Optional, required when the module requires consent.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      accepted_terms: true
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Basvurunuz koordinator onayina iletildi.","enrollment":{"id":1,"status":"pending","consented_at":"2026-06-30T12:00:00+03:00"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu projenin katilimcisi degilsiniz."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu modul icin basvuru su an kapali."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/dashboard/projects/{projectId}/badge-leaderboard'
+    metadata:
+      custom: []
+      groupName: 'Participant Dashboard'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get KADEME badge leaderboard for a project.'
+      description: 'Requires permission: `participant.projects.view`. The viewer must be a participant of the project. Returns top 50 rows and the viewer row.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      projectId:
+        custom: []
+        name: projectId
+        description: 'Project id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      projectId: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"leaderboard":[{"rank":1,"user_id":1,"display_name":"Hakan Kekec","badge_count":5,"profile_badge_frame":"gold"}],"me":{"rank":1,"user_id":1,"display_name":"Hakan Kekec","badge_count":5}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu siralamayi gorme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Not Found"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

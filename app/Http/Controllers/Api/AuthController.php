@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * @group Auth
+ */
 class AuthController extends Controller
 {
     private function authenticatedUserPayload(User $user): array
@@ -84,7 +87,22 @@ class AuthController extends Controller
     }
 
     /**
-     * Kullanıcı Kayıt (Register)
+     * Register a new student user.
+     *
+     * @group Auth
+     * @unauthenticated
+     *
+     * Creates an active student account, assigns the `student` role, creates an empty profile, and returns a Sanctum bearer token.
+     *
+     * @bodyParam name string required First name. Example: Hakan
+     * @bodyParam surname string required Last name. Example: Kekec
+     * @bodyParam email string required Unique email address. Example: hakan@example.com
+     * @bodyParam password string required Minimum 8 characters, must be confirmed. Example: secret123
+     * @bodyParam password_confirmation string required Password confirmation. Example: secret123
+     * @bodyParam tc_no string required Turkish identity number, 11 characters. Example: 12345678901
+     * @bodyParam phone string required Phone number. Example: 05551234567
+     * @response 201 {"message":"Kayit basarili.","access_token":"1|plainTextToken","token_type":"Bearer","user":{"id":1,"name":"Hakan","surname":"Kekec","email":"hakan@example.com","role":"student","status":"active","effective_permissions":[],"permission_scopes":{}}}
+     * @response 422 {"message":"The email has already been taken.","errors":{"email":["The email has already been taken."],"password":["The password field confirmation does not match."]}}
      */
     public function register(Request $request)
     {
@@ -132,7 +150,19 @@ class AuthController extends Controller
     }
 
     /**
-     * Kullanıcı Giriş (Login)
+     * Login and receive an access token.
+     *
+     * @group Auth
+     * @unauthenticated
+     *
+     * Returns the bearer token and the resolved authorization payload. The returned `effective_permissions`, `permission_scopes`, and `authorization_context` fields help clients decide which panel/mobile features to show; backend authorization is still enforced on every protected endpoint.
+     *
+     * @bodyParam email string required User email. Example: hakan@example.com
+     * @bodyParam password string required User password. Example: secret123
+     * @response 200 {"message":"Giris basarili.","access_token":"1|plainTextToken","token_type":"Bearer","user":{"id":1,"name":"Hakan","surname":"Kekec","email":"hakan@example.com","role":"student","status":"active","effective_permissions":["participant.dashboard.view"],"permission_scopes":{"participant.dashboard.view":{"scope_type":"self","scope_payload":[]}},"authorization_context":{"manageable_project_ids":[]}}}
+     * @response 403 {"message":"Hesabiniz aktif degil veya pasif duruma alinmis."}
+     * @response 403 {"message":"Sifrenizi henuz belirlemediniz. E-postaniza gonderilen baglanti ile sifre olusturun; gelmediyse \"Sifremi unuttum\" ile yeni baglanti isteyin.","must_change_password":true,"error":"password_setup_required"}
+     * @response 422 {"message":"The given data was invalid.","errors":{"email":["E-posta adresi veya sifre hatali."]}}
      */
     public function login(Request $request)
     {
@@ -198,7 +228,15 @@ class AuthController extends Controller
     }
 
     /**
-     * Oturumu Kapat (Logout)
+     * Logout the current token.
+     *
+     * @group Auth
+     * @authenticated
+     *
+     * Deletes only the current Sanctum token.
+     *
+     * @response 200 {"message":"Cikis yapildi."}
+     * @response 401 {"message":"Unauthenticated."}
      */
     public function logout(Request $request)
     {
@@ -211,7 +249,15 @@ class AuthController extends Controller
     }
 
     /**
-     * Aktif Kullanıcı Bilgileri (Me)
+     * Get the authenticated user.
+     *
+     * @group Auth
+     * @authenticated
+     *
+     * Returns the current user with profile, roles, and staff profile relations where available.
+     *
+     * @response 200 {"user":{"id":1,"name":"Hakan","surname":"Kekec","email":"hakan@example.com","role":"student","status":"active","profile":{},"roles":[{"id":4,"name":"student"}]}}
+     * @response 401 {"message":"Unauthenticated."}
      */
     public function me(Request $request)
     {
@@ -225,7 +271,16 @@ class AuthController extends Controller
     }
 
     /**
-     * Sifre sifirlama baglantisi (genel + yonetici olusturulan hesaplar).
+     * Send a password reset link.
+     *
+     * @group Auth
+     * @unauthenticated
+     *
+     * Sends a Laravel password reset email when the address is known. The endpoint responds generically for the public flow.
+     *
+     * @bodyParam email string required User email. Example: hakan@example.com
+     * @response 200 {"message":"E-posta adresinize sifre belirleme baglantisi gonderdik. Gelmiyorsa spam klasorunu kontrol edin."}
+     * @response 422 {"message":"The email field must be a valid email address.","errors":{"email":["The email field must be a valid email address."]}}
      */
     public function forgotPassword(Request $request)
     {
@@ -246,7 +301,20 @@ class AuthController extends Controller
     }
 
     /**
-     * E-posta token ile yeni sifre (Laravel password_reset_tokens).
+     * Reset password with email token.
+     *
+     * @group Auth
+     * @unauthenticated
+     *
+     * Resets the password, clears `must_change_password`, and invalidates existing tokens.
+     *
+     * @bodyParam token string required Password reset token.
+     * @bodyParam email string required User email. Example: hakan@example.com
+     * @bodyParam password string required Minimum 8 characters, must be confirmed. Example: newsecret123
+     * @bodyParam password_confirmation string required Password confirmation. Example: newsecret123
+     * @response 200 {"message":"Sifreniz guncellendi. Giris yapabilirsiniz."}
+     * @response 422 {"message":"Baglanti gecersiz veya suresi dolmus. Yeni baglanti icin sifremi unuttum kullanin."}
+     * @response 422 {"message":"The password field confirmation does not match.","errors":{"password":["The password field confirmation does not match."]}}
      */
     public function resetPassword(Request $request)
     {

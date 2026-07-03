@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Admin Applications
+ */
 class AdminApplicationController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -187,6 +190,20 @@ class AdminApplicationController extends Controller
         };
     }
 
+    /**
+     * Export panel applications.
+     *
+     * Requires permission: `applications.export`. Project and period filters are resolved through action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`. The same method is exposed under `/api/admin/applications/export` and `/api/panel/applications/export` aliases.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam status string Optional application status filter. Example: accepted
+     * @queryParam search string Optional applicant search. Example: ayse
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     * @response 200 binary Applications export file.
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function export(Request $request)
     {
         $validated = $request->validate([
@@ -248,6 +265,19 @@ class AdminApplicationController extends Controller
         );
     }
 
+    /**
+     * List applications for staff view.
+     *
+     * Requires permission: `applications.view`. This staff alias uses the same project/period action+scope resolver, so staff users only see applications in their permitted projects.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam status string Optional application status filter. Example: pending
+     * @queryParam search string Optional applicant search. Example: hakan
+     * @response 200 {"applications":{"data":[]}}
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function staffIndex(Request $request)
     {
         $validated = $request->validate([
@@ -286,6 +316,20 @@ class AdminApplicationController extends Controller
         ]);
     }
 
+    /**
+     * Export applications for staff view.
+     *
+     * Requires permission: `applications.export`. This staff alias uses the same project/period action+scope resolver and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam status string Optional application status filter. Example: accepted
+     * @queryParam search string Optional applicant search. Example: ayse
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: csv
+     * @response 200 binary Staff applications export file.
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
+     */
     public function staffExport(Request $request)
     {
         $validated = $request->validate([
@@ -346,6 +390,20 @@ class AdminApplicationController extends Controller
         );
     }
 
+    /**
+     * Update an application status from staff view.
+     *
+     * Requires permission: `applications.update_status`. The staff alias first checks the application project against the staff user permitted project IDs, then delegates to the standard status update workflow.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @bodyParam status string required New status. Example: rejected
+     * @bodyParam interview_at date Optional future interview date when needed. Example: 2026-07-10 14:30:00
+     * @bodyParam rejection_reason string Optional rejection reason. Example: Belgeler eksik.
+     * @bodyParam evaluation_note string Optional internal evaluation note. Example: Tekrar basvurabilir.
+     * @response 200 {"message":"Basvuru durumu basariyla guncellendi.","application":{"id":12,"status":"rejected"}}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     */
     public function staffUpdateStatus(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'applications.update_status');
@@ -359,7 +417,18 @@ class AdminApplicationController extends Controller
     }
 
     /**
-     * Projeye ait tüm başvuruları getirir
+     * List panel applications.
+     *
+     * Requires permission: `applications.view`. Project and period filters are resolved through action+scope, so global users can list all projects while scoped users only see applications in allowed projects. The same method is exposed under `/api/admin/applications` and `/api/panel/applications` aliases.
+     *
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. User must be allowed for `applications.view`. Example: 1
+     * @queryParam period_id integer Optional period filter. Must belong to the selected/allowed project. Example: 3
+     * @queryParam status string Optional application status filter. Example: pending
+     * @queryParam search string Optional applicant/project search. Example: hakan
+     * @queryParam per_page integer Optional page size between 1 and 100. Example: 20
+     * @response 200 {"applications":{"data":[{"id":12,"status":"pending","waitlist_order":null,"user":{"id":30,"name":"Hakan"},"project":{"id":1,"name":"Kademe"},"available_statuses":["accepted","rejected","waitlisted"],"workflow":{"has_interview":false,"next_step":"final_decision"}}]}}
+     * @response 403 {"message":"Bu proje icin yetkiniz yok."}
      */
     public function index(Request $request)
     {
@@ -415,6 +484,19 @@ class AdminApplicationController extends Controller
         ]);
     }
 
+    /**
+     * Download an application form file.
+     *
+     * Requires permission: `applications.view` and project access for the application project. If direct public downloads are configured, the endpoint returns a JSON `download_url`; otherwise it streams the stored file.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @urlParam field string required Dynamic form field key containing the uploaded file. Example: cv_file
+     * @response 200 {"download_url":"https://cdn.example.com/applications/cv.pdf"}
+     * @response 200 binary Application form file stream.
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 404 {"message":"Basvuru dosyasi bulunamadi."}
+     */
     public function downloadFormFile(Request $request, int $id, string $field): JsonResponse|StreamedResponse
     {
         $this->abortUnlessAllowed($request, 'applications.view');
@@ -446,7 +528,20 @@ class AdminApplicationController extends Controller
     }
 
     /**
-     * Başvuru Durumunu Güncelleme (Kabul/Red/Yedek vb.)
+     * Update an application status.
+     *
+     * Requires permission: `applications.update_status` and project access for the application project. Status transitions are validated against the project interview workflow, capacity rules and completed-period archive lock. Accepting an application can create/update the participant record and send the password setup/reset email.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @bodyParam status string required New status: `accepted`, `rejected`, `waitlisted`, `interview_planned`, `interview_passed` or `interview_failed`. Example: accepted
+     * @bodyParam interview_at date Optional future interview date. Required when planning an interview and no date already exists. Example: 2026-07-10 14:30:00
+     * @bodyParam rejection_reason string Optional rejection reason. Example: Kontenjan dolu.
+     * @bodyParam evaluation_note string Optional internal evaluation note. Example: Uygun aday.
+     * @response 200 {"message":"Basvuru durumu basariyla guncellendi.","application":{"id":12,"status":"accepted"}}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid.","errors":{"status":["Bu basvuru akisi icin secilen durum gecislerine izin verilmiyor."]}}
+     * @response 423 {"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}
      */
     public function updateStatus(Request $request, $id)
     {
@@ -561,7 +656,16 @@ class AdminApplicationController extends Controller
     }
 
     /**
-     * PUT /admin/applications/{id}/interview — Mülakat Tarihi Planla
+     * Plan an application interview.
+     *
+     * Requires permission: `applications.plan_interview` and project access for the application project. Only projects with interview workflow enabled can use this endpoint, and completed periods require archive override permission.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @bodyParam interview_at date required Future interview date. Example: 2026-07-10 14:30:00
+     * @response 200 {"message":"Mulakat tarihi basariyla planlandi.","application":{"id":12,"status":"interview_planned","interview_at":"2026-07-10T14:30:00+03:00"}}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Bu proje mulakatli basvuru akisi kullanmiyor."}
      */
     public function planInterview(Request $request, $id)
     {
@@ -607,7 +711,16 @@ class AdminApplicationController extends Controller
     }
 
     /**
-     * POST /admin/applications/{id}/waitlist — Yedeğe Al
+     * Move an application to the waitlist.
+     *
+     * Requires permission: `applications.waitlist.manage` and project access for the application project. The endpoint validates the current workflow state, period archive lock and assigns the next waitlist order when needed.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @bodyParam evaluation_note string Optional internal waitlist note. Example: Kontenjan acilinca davet edilecek.
+     * @response 200 {"message":"Basvuru yedege alindi.","application":{"id":12,"status":"waitlisted","waitlist_order":4}}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The given data was invalid."}
      */
     public function addToWaitlist(Request $request, $id)
     {
@@ -648,6 +761,18 @@ class AdminApplicationController extends Controller
         ]);
     }
 
+    /**
+     * Update waitlist order for an application.
+     *
+     * Requires permission: `applications.waitlist.manage` and project access for the application project. Only applications currently in `waitlisted` status can be reordered.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @bodyParam waitlist_order integer required New waitlist order, minimum 1. Example: 2
+     * @response 200 {"message":"Yedek liste sirasi guncellendi.","application":{"id":12,"waitlist_order":2}}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Sadece yedek listedeki basvurular siralanabilir."}
+     */
     public function updateWaitlistOrder(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
@@ -672,6 +797,18 @@ class AdminApplicationController extends Controller
         ]);
     }
 
+    /**
+     * Send a waitlist invitation.
+     *
+     * Requires permission: `applications.waitlist.manage` and project access for the application project. Only waitlisted applications can be invited; quota and active invitation rules are enforced by the waitlist service.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID. Example: 12
+     * @bodyParam expires_at date Optional invitation expiry date. Defaults to three days from now. Example: 2026-07-03 23:59:00
+     * @response 200 {"message":"Yedek liste daveti gonderildi.","application":{"id":12,"status":"waitlisted","waitlist_invited_at":"2026-06-30T12:00:00+03:00"}}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Sadece yedek listedeki basvurular davet edilebilir."}
+     */
     public function inviteFromWaitlist(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
@@ -701,6 +838,17 @@ class AdminApplicationController extends Controller
         ]);
     }
 
+    /**
+     * Refresh overdue waitlist invitations.
+     *
+     * Requires permission: `applications.waitlist.manage` and project access for the application project. The endpoint expires overdue waitlist invitations and invites the next eligible application if a seat is available.
+     *
+     * @authenticated
+     * @urlParam id integer required Application ID used as the waitlist context. Example: 12
+     * @response 200 {"message":"Yedek davet sureleri guncellendi.","expired_count":1,"auto_invited_application_id":15}
+     * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Sadece yedek listedeki basvurular icin yenileme yapilabilir."}
+     */
     public function refreshWaitlistInvitations(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'applications.waitlist.manage');

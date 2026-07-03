@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
+use App\Models\Badge;
 use App\Models\Certificate;
+use App\Models\CreditLog;
 use App\Models\Participant;
 use App\Models\Project;
 use App\Models\User;
@@ -17,8 +19,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Spatie\Permission\Models\Role;
 
+/**
+ * @group Participants
+ */
 class CoordinatorParticipantController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -275,15 +281,7 @@ class CoordinatorParticipantController extends Controller
 
     public function cv(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'projects.student_cv.view');
-
-        $participant = Participant::with([
-            'project:id,name',
-            'user:id,name,surname',
-            'user.profile:id,user_id,digital_cv_data,linkedin_url,github_url',
-        ])->findOrFail($id);
-
-        $this->abortUnlessProjectAllowed($request, 'projects.student_cv.view', (int) $participant->project_id);
+        $participant = $this->participantForCv($request, $id);
 
         return response()->json([
             'participant' => [
@@ -306,6 +304,192 @@ class CoordinatorParticipantController extends Controller
         ]);
     }
 
+    public function cvPdf(Request $request, int $id)
+    {
+        $participant = $this->participantForCv($request, $id);
+        $payload = $this->digitalCvPdfPayload($participant);
+
+        abort_if($payload['form'] === [], 404, 'Kayitli CV verisi bulunamadi.');
+
+        $fullName = trim((string) ($payload['form']['fullName'] ?? 'KADEME Dijital CV')) ?: 'KADEME Dijital CV';
+        $fileName = str($fullName)->lower()->replaceMatches('/[^a-z0-9]+/i', '-')->trim('-')->value() ?: 'kademe-dijital-cv';
+
+        $request->attributes->set('audit.subject', $participant);
+        $request->attributes->set('audit.event', 'participants.cv.downloaded');
+        $request->attributes->set('audit.description', 'participants.cv.downloaded');
+        $request->attributes->set('audit.properties', [
+            'participant_id' => $participant->id,
+            'project_id' => $participant->project_id,
+            'user_id' => $participant->user_id,
+        ]);
+
+        return Pdf::loadView('pdf.digital-cv', [
+            'form' => $payload['form'],
+            'approved' => $payload['approved'],
+            'projects' => $payload['projects'],
+            'badges' => $payload['badges'],
+            'certificates' => $payload['certificates'],
+            'creditHistory' => $payload['credit_history'],
+            'generatedAt' => now()->format('d.m.Y H:i'),
+        ])->setPaper('a4')->download($fileName.'-kademe-cv.pdf');
+    }
+
+    private function participantForCv(Request $request, int $id): Participant
+    {
+        $this->abortUnlessAllowed($request, 'projects.student_cv.view');
+
+        $participant = Participant::with([
+            'project:id,name,slug,type,short_description,description',
+            'period:id,name',
+            'user:id,name,surname,email,phone,university,department,class_year,hometown',
+            'user.profile:id,user_id,digital_cv_data,linkedin_url,github_url,instagram_url,motivation_message',
+        ])->findOrFail($id);
+
+        $this->abortUnlessProjectAllowed($request, 'projects.student_cv.view', (int) $participant->project_id);
+
+        return $participant;
+    }
+
+    private function digitalCvPdfPayload(Participant $participant): array
+    {
+        $user = $participant->user;
+        $profile = $user?->profile;
+        $savedData = is_array($profile?->digital_cv_data) ? $profile->digital_cv_data : [];
+        $form = $this->normalizeDigitalCvForm($participant, $savedData);
+
+        if ($form === []) {
+            return [
+                'form' => [],
+                'approved' => [],
+                'projects' => [],
+                'badges' => [],
+                'certificates' => [],
+                'credit_history' => [],
+            ];
+        }
+
+        $participations = Participant::query()
+            ->where('user_id', $participant->user_id)
+            ->with(['project:id,name,slug,type,short_description,description', 'period:id,name'])
+            ->orderByDesc('graduated_at')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $certificates = Certificate::query()
+            ->where('user_id', $participant->user_id)
+            ->with(['project:id,name,slug', 'period:id,name'])
+            ->orderByDesc('issued_at')
+            ->get();
+
+        $badges = $user ? $user->badges()->with('project:id,name,slug')->orderByDesc('user_badges.awarded_at')->get() : collect();
+
+        $creditHistory = CreditLog::query()
+            ->where('user_id', $participant->user_id)
+            ->with(['project:id,name,slug', 'program:id,title'])
+            ->orderByDesc('created_at')
+            ->take(25)
+            ->get();
+
+        return [
+            'form' => $form,
+            'approved' => [
+                'title' => 'KADEME Onayli Dijital CV',
+                'generated_at' => now()->toIso8601String(),
+                'total_credit' => (int) $participations->sum('credit'),
+                'completed_project_count' => $participations
+                    ->filter(fn (Participant $item) => in_array($item->graduation_status, ['completed', 'graduated'], true) || $item->graduated_at !== null)
+                    ->count(),
+                'badge_count' => $badges->count(),
+                'certificate_count' => $certificates->count(),
+            ],
+            'projects' => $participations
+                ->filter(fn (Participant $item) => $item->project !== null)
+                ->map(fn (Participant $item) => [
+                    'id' => $item->project->id,
+                    'name' => $item->project->name,
+                    'type' => $item->project->type,
+                    'description' => $item->project->short_description ?: $item->project->description,
+                    'period' => $item->period?->name,
+                    'status' => $item->status,
+                    'graduation_status' => $item->graduation_status,
+                    'credit' => (int) $item->credit,
+                    'enrolled_at' => optional($item->enrolled_at)?->toIso8601String(),
+                    'graduated_at' => optional($item->graduated_at)?->toIso8601String(),
+                ])
+                ->values()
+                ->all(),
+            'badges' => $badges->map(fn (Badge $badge) => [
+                'id' => $badge->id,
+                'name' => $badge->name,
+                'description' => $badge->description,
+                'tier' => $badge->tier,
+                'title_label' => $badge->title_label,
+                'project' => $badge->project?->name,
+                'awarded_at' => optional($badge->pivot?->awarded_at)?->toIso8601String(),
+            ])->values()->all(),
+            'certificates' => $certificates->map(fn (Certificate $certificate) => [
+                'id' => $certificate->id,
+                'type' => $certificate->type,
+                'project' => $certificate->project?->name,
+                'period' => $certificate->period?->name,
+                'verification_code' => $certificate->verification_code,
+                'issued_at' => optional($certificate->issued_at)?->toIso8601String(),
+            ])->values()->all(),
+            'credit_history' => $creditHistory->map(fn (CreditLog $log) => [
+                'amount' => (int) $log->amount,
+                'type' => $log->type,
+                'reason' => $log->reason,
+                'project' => $log->project?->name,
+                'program' => $log->program?->title,
+                'created_at' => optional($log->created_at)?->toIso8601String(),
+            ])->values()->all(),
+        ];
+    }
+
+    private function normalizeDigitalCvForm(Participant $participant, array $savedData): array
+    {
+        if ($savedData === []) {
+            return [];
+        }
+
+        $form = is_array($savedData['form'] ?? null) ? $savedData['form'] : $savedData;
+        $user = $participant->user;
+        $profile = $user?->profile;
+
+        $normalized = array_merge([
+            'fullName' => trim(($user?->name ?? '').' '.($user?->surname ?? '')),
+            'email' => $user?->email,
+            'phone' => $user?->phone,
+            'location' => $user?->hometown,
+            'university' => $user?->university,
+            'department' => $user?->department,
+            'classYear' => $user?->class_year,
+            'summary' => $profile?->motivation_message,
+            'linkedin' => $profile?->linkedin_url,
+            'github' => $profile?->github_url,
+            'instagram' => $profile?->instagram_url,
+            'skills' => null,
+            'languages' => null,
+            'experience' => [],
+            'education' => [],
+            'projects' => [],
+            'certificates' => [],
+        ], $form);
+
+        foreach (['experience', 'education', 'projects', 'certificates'] as $key) {
+            $normalized[$key] = is_array($normalized[$key] ?? null) ? $normalized[$key] : [];
+        }
+
+        return collect($normalized)
+            ->filter(function ($value) {
+                if (is_array($value)) {
+                    return $value !== [];
+                }
+
+                return $value !== null && $value !== '';
+            })
+            ->all();
+    }
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'projects.participants.view');

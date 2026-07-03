@@ -21,6 +21,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group KPD
+ */
 class AdminKpdController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -287,6 +290,18 @@ class AdminKpdController extends Controller
         return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
+    /**
+     * Get KPD panel form options.
+     *
+     * Returns scoped counselee options for the selected KPD permission. `kpd.appointments.manage` also returns active counselor and room options. Global scope can see every project that supports `kpd_appointments`; project scope is intersected with the user permissions.
+     *
+     * @group KPD
+     * @queryParam permission string Optional permission key. Allowed values: `kpd.reports.create`, `kpd.appointments.manage`. Defaults to `kpd.reports.create`. Example: kpd.appointments.manage
+     * @response 200 {"counselees":[{"id":12,"name":"Zeynep","surname":"Kara","email":"zeynep@example.com","role":"student","periods":[{"id":3,"name":"2026 Bahar","status":"active"}]}],"counselors":[{"id":2,"name":"Ayse","surname":"Yilmaz","role":"coordinator"}],"rooms":[{"id":1,"name":"KPD Odasi","description":"Online gorusme"}]}
+     * @response 403 {"message":"KPD islemleri icin KPD projesi kapsaminda yetki gerekir."}
+     * @response 422 {"message":"Gecersiz KPD yetki anahtari."}
+     */
+
     public function options(Request $request): JsonResponse
     {
         $permission = (string) $request->query('permission', 'kpd.reports.create');
@@ -309,8 +324,17 @@ class AdminKpdController extends Controller
     }
 
     /**
-     * Tüm KPD Randevularını Listele
+     * List KPD appointments for the panel.
+     *
+     * Requires permission: `kpd.appointments.view`. Global scope returns all KPD project appointments; project-scoped access only returns counselees who participate in an accessible KPD project. Optional `period_id` must belong to an accessible KPD project. Users with `kpd.appointments.manage` also receive counselee, counselor and room form options.
+     *
+     * @group KPD
+     * @queryParam period_id integer Optional period filter. The period must belong to an accessible KPD project. Example: 3
+     * @response 200 {"appointments":{"data":[{"id":10,"status":"scheduled","start_at":"2026-07-01T10:00:00.000000Z","counselee":{"id":12,"name":"Zeynep","surname":"Kara"},"counselor":{"id":2,"name":"Ayse","surname":"Yilmaz"},"room":{"id":1,"name":"KPD Odasi"}}],"current_page":1},"room_schedule":[{"id":1,"name":"KPD Odasi","appointment_count":1,"next_appointment_at":"2026-07-01T10:00:00+00:00","appointments":[{"id":10,"status":"scheduled"}]}]}
+     * @response 403 {"message":"KPD islemleri icin KPD projesi kapsaminda yetki gerekir."}
+     * @response 422 {"message":"Secilen donem icin kpd.appointments.view yetkiniz yok."}
      */
+
     public function index(Request $request)
     {
         $projectIds = $this->accessibleKpdProjectIds($request, 'kpd.appointments.view');
@@ -339,6 +363,17 @@ class AdminKpdController extends Controller
         return response()->json($payload);
     }
 
+    /**
+     * List KPD reports for the panel.
+     *
+     * Requires permission: `kpd.reports.view`. Global scope can list reports for every KPD project; project scope is limited to users participating in accessible KPD projects. `period_id` is validated against the accessible KPD project list.
+     *
+     * @group KPD
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @response 200 {"reports":{"data":[{"id":8,"user_id":12,"period_id":3,"counselor_id":2,"title":"Gorusme Raporu","download_url":"/panel/kpd/reports/8/download","created_at":"2026-06-30T12:00:00+00:00"}],"current_page":1}}
+     * @response 403 {"message":"KPD islemleri icin KPD projesi kapsaminda yetki gerekir."}
+     */
+
     public function reports(Request $request): JsonResponse
     {
         $projectIds = $this->accessibleKpdProjectIds($request, 'kpd.reports.view');
@@ -356,6 +391,20 @@ class AdminKpdController extends Controller
 
         return response()->json(['reports' => $reports]);
     }
+
+    /**
+     * Upload a KPD report for a counselee.
+     *
+     * Requires permission: `kpd.reports.create`. The selected user must be in the caller accessible KPD project scope unless the caller has global scope. Optional period must belong to the selected user and completed periods require archive update permission. The uploaded file is stored through `MediaStorage` and an email notification is sent when the user has an email address.
+     *
+     * @group KPD
+     * @bodyParam user_id integer required Counselee user ID. Example: 12
+     * @bodyParam period_id integer Optional period ID for the report. Example: 3
+     * @bodyParam title string required Report title. Max 255 characters. Example: Ilk Gorusme Raporu
+     * @bodyParam file file required Report file. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 20 MB.
+     * @response 201 {"message":"KPD raporu yuklendi.","report":{"id":8,"title":"Ilk Gorusme Raporu","download_url":"/panel/kpd/reports/8/download"}}
+     * @response 422 {"message":"Secilen kullanici erisilebilir KPD projesine ait degil."}
+     */
 
     public function storeReport(Request $request): JsonResponse
     {
@@ -398,6 +447,18 @@ class AdminKpdController extends Controller
         ], 201);
     }
 
+    /**
+     * Download a KPD report from the panel.
+     *
+     * Requires permission: `kpd.reports.view`. Project-scoped users can only download reports of counselees in accessible KPD projects. Depending on storage configuration, the response is either a JSON direct URL or a streamed file download.
+     *
+     * @group KPD
+     * @urlParam id integer required KPD report ID. Example: 8
+     * @response 200 {"download_url":"https://storage.example.com/kpd-reports/report.pdf"}
+     * @response 200 {"download":"Binary KPD report file stream"}
+     * @response 404 {"message":"Rapor dosyasi storage uzerinde bulunamadi."}
+     */
+
     public function downloadReport(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $projectIds = $this->accessibleKpdProjectIds($request, 'kpd.reports.view');
@@ -410,6 +471,17 @@ class AdminKpdController extends Controller
 
         return $this->streamReport($report);
     }
+
+    /**
+     * Delete a KPD report.
+     *
+     * Requires permission: `kpd.reports.delete`. Project-scoped users can delete only reports for accessible KPD project counselees. Reports linked to completed periods also require archive update permission before the stored file and database row are removed.
+     *
+     * @group KPD
+     * @urlParam id integer required KPD report ID. Example: 8
+     * @response 200 {"message":"KPD raporu silindi."}
+     * @response 403 {"message":"Bu donem arsivlenmis oldugu icin guncelleme yetkisi gerekir."}
+     */
 
     public function destroyReport(Request $request, int $id): JsonResponse
     {
@@ -428,8 +500,22 @@ class AdminKpdController extends Controller
     }
 
     /**
-     * Yeni Randevu Oluştur
+     * Create a KPD appointment from the panel.
+     *
+     * Requires permission: `kpd.appointments.manage`. The counselee must be in the caller accessible KPD project scope unless the caller has global scope. Optional period must belong to the counselee and completed periods require archive update permission. The selected room, counselor and counselee cannot have overlapping non-cancelled appointments.
+     *
+     * @group KPD
+     * @bodyParam counselor_id integer required Active coordinator/staff/admin counselor ID. Example: 2
+     * @bodyParam counselee_id integer required Student or alumni user ID in KPD scope. Example: 12
+     * @bodyParam period_id integer Optional period ID. Example: 3
+     * @bodyParam room_id integer required KPD room ID. Example: 1
+     * @bodyParam start_at datetime required Appointment start time. Example: 2026-07-01 10:00:00
+     * @bodyParam end_at datetime required Appointment end time; must be after start_at. Example: 2026-07-01 10:45:00
+     * @bodyParam notes string Optional internal notes. Example: Ilk gorusme
+     * @response 201 {"message":"Randevu basariyla olusturuldu.","appointment":{"id":10,"status":"scheduled","room_id":1}}
+     * @response 422 {"message":"Secilen zaman araliginda oda, danisman veya danisan icin cakisma var."}
      */
+
     public function store(Request $request)
     {
         $this->accessibleKpdProjectIds($request, 'kpd.appointments.manage');
@@ -483,6 +569,18 @@ class AdminKpdController extends Controller
             'appointment' => $appointment,
         ], 201);
     }
+
+    /**
+     * Update a KPD appointment status.
+     *
+     * Requires permission: `kpd.appointments.manage`. Project-scoped users can update only appointments whose counselee belongs to accessible KPD projects. Completed periods require archive update permission. Status changes notify the counselor and counselee by email when addresses are available.
+     *
+     * @group KPD
+     * @urlParam id integer required KPD appointment ID. Example: 10
+     * @bodyParam status string required New status. Allowed values: scheduled, completed, cancelled, no_show. Example: completed
+     * @response 200 {"message":"Randevu durumu guncellendi.","appointment":{"id":10,"status":"completed"}}
+     * @response 422 {"message":"The selected status is invalid."}
+     */
 
     public function updateStatus(Request $request, int $id): JsonResponse
     {

@@ -165,4 +165,49 @@ class UnifiedPanelAliasTest extends TestCase
             ->assertOk()
             ->assertJsonPath('transactions.data.0.payee_name', 'Global Null Project Vendor');
     }
-}
+    public function test_panel_audit_log_sanitizes_sensitive_query_values(): void
+    {
+        $this->actingSuperAdmin();
+
+        $this->getJson('/api/panel/periods?token=secret-token&search=donem')->assertOk();
+
+        $log = Activity::query()
+            ->where('log_name', 'admin_actions')
+            ->where('description', 'like', 'admin_action.get.%periods%')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($log);
+        $properties = $log->properties->toArray();
+        $this->assertSame('[redacted]', data_get($properties, 'query.token'));
+        $this->assertSame('donem', data_get($properties, 'query.search'));
+        $this->assertNotEmpty(data_get($properties, 'request_id'));
+        $this->assertIsInt(data_get($properties, 'duration_ms'));
+    }
+
+    public function test_panel_activity_logs_are_paginated_and_filterable(): void
+    {
+        $this->actingSuperAdmin();
+
+        Activity::query()->create([
+            'log_name' => 'admin_actions',
+            'description' => 'admin_action.filtered.success',
+            'event' => 'updated',
+            'properties' => ['outcome' => 'success', 'status_code' => 200, 'path' => 'api/panel/example'],
+        ]);
+        Activity::query()->create([
+            'log_name' => 'admin_actions',
+            'description' => 'admin_action.filtered.failed',
+            'event' => 'deleted',
+            'properties' => ['outcome' => 'denied_or_failed', 'status_code' => 403, 'path' => 'api/panel/example'],
+        ]);
+
+        $response = $this->getJson('/api/panel/dashboard/activity-logs?log_name=admin_actions&event=updated&outcome=success&per_page=5')
+            ->assertOk();
+
+        $response->assertJsonPath('logs.total', 1);
+        $response->assertJsonPath('logs.data.0.description', 'admin_action.filtered.success');
+        $response->assertJsonPath('summary.total', 1);
+        $this->assertContains('admin_actions', $response->json('filters.log_names'));
+        $this->assertContains('updated', $response->json('filters.events'));
+    }}

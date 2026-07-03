@@ -7,12 +7,17 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class AuditAdminActions
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $startedAt = microtime(true);
+        $requestId = (string) Str::uuid();
+        $request->attributes->set('audit.request_id', $requestId);
+
         $response = $next($request);
 
         $user = $request->user();
@@ -41,11 +46,14 @@ class AuditAdminActions
                 'route_name' => $request->route()?->getName(),
                 'ip_address' => $request->ip(),
                 'user_agent' => (string) $request->userAgent(),
+                'request_id' => $requestId,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'permission_checked' => $request->attributes->get('audit.permission_checked'),
                 'permission_any_checked' => $request->attributes->get('audit.permission_any_checked'),
                 'permission_scope' => $request->attributes->get('audit.permission_scope'),
                 'route_parameters' => $this->sanitizeRouteParameters($request),
-                'query' => $request->query(),
+                'query' => $this->sanitizeArray($request->query()),
+                'query_keys' => array_values(array_keys($request->query())),
             ];
 
             $domainProperties = $request->attributes->get('audit.properties');
@@ -81,7 +89,8 @@ class AuditAdminActions
             }
 
             $logger->log($request->attributes->get('audit.description') ?: $this->buildDescription($request, $statusCode));
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            report($exception);
             // Audit log hatasi ana is akisini kesmemeli.
         }
 
@@ -135,6 +144,33 @@ class AuditAdminActions
     }
 
     /**
+     * @param array<string, mixed> $items
+     * @return array<string, mixed>
+     */
+    private function sanitizeArray(array $items): array
+    {
+        $sensitiveKeys = ['password', 'password_confirmation', 'token', 'current_password', 'authorization', 'api_key', 'secret'];
+        $out = [];
+
+        foreach ($items as $key => $value) {
+            $normalizedKey = Str::lower((string) $key);
+            if (collect($sensitiveKeys)->contains(fn (string $needle) => str_contains($normalizedKey, $needle))) {
+                $out[$key] = '[redacted]';
+                continue;
+            }
+
+            if (is_array($value)) {
+                $out[$key] = $this->sanitizeArray($value);
+                continue;
+            }
+
+            $out[$key] = is_scalar($value) || $value === null ? $value : '[unsupported]';
+        }
+
+        return $out;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function sanitizeRouteParameters(Request $request): array
@@ -152,7 +188,7 @@ class AuditAdminActions
                 continue;
             }
 
-            $out[$key] = $value;
+            $out[$key] = $this->sanitizeArray([$key => $value])[$key] ?? null;
         }
 
         return $out;

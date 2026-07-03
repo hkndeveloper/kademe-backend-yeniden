@@ -1,0 +1,56 @@
+name: 'Participant Content'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/certificates
+    metadata:
+      custom: []
+      groupName: 'Participant Content'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List authenticated user certificates.'
+      description: 'Participant/mobile endpoint. The route requires `participant.certificates.view` and the controller returns only certificates owned by the authenticated user. Each item includes verification code, project/period metadata, direct file URL when enabled, and the public download URL.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"certificates":[{"id":1,"type":"participation","verification_code":"ABC123","issued_at":"2026-01-01T00:00:00.000000Z","download_url":"https://api.example.com/api/certificates/ABC123/download","project":{"id":1,"name":"KADEME","slug":"kademe"}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

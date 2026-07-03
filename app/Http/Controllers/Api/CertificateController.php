@@ -10,10 +10,22 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Certificates
+ */
 class CertificateController extends Controller
 {
     /**
-     * Authenticated user's certificates.
+     * List authenticated user certificates.
+     *
+     * Participant/mobile endpoint. The route requires `participant.certificates.view` and the controller returns only certificates owned by the authenticated user. Each item includes verification code, project/period metadata, direct file URL when enabled, and the public download URL.
+     *
+     * @group Participant Content
+     * @authenticated
+     *
+     * @response 200 {"certificates":[{"id":1,"type":"participation","verification_code":"ABC123","issued_at":"2026-01-01T00:00:00.000000Z","download_url":"https://api.example.com/api/certificates/ABC123/download","project":{"id":1,"name":"KADEME","slug":"kademe"}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function index(Request $request)
     {
@@ -28,7 +40,16 @@ class CertificateController extends Controller
     }
 
     /**
-     * Public certificate verification.
+     * Verify a certificate by code.
+     *
+     * Public endpoint used by web/mobile certificate verification screens. No bearer token is required. The response confirms validity and returns public certificate metadata plus recipient name/surname; it does not require panel permissions.
+     *
+     * @group Certificates
+     * @unauthenticated
+     *
+     * @urlParam verificationCode string required Certificate verification code. Example: ABC123
+     * @response 200 {"valid":true,"certificate":{"id":1,"type":"participation","verification_code":"ABC123","issued_at":"2026-01-01T00:00:00.000000Z"},"recipient":{"name":"Hakan","surname":"Kekec"}}
+     * @response 404 {"message":"No query results for model [App\\Models\\Certificate]."}
      */
     public function verify(string $verificationCode)
     {
@@ -46,6 +67,20 @@ class CertificateController extends Controller
         ]);
     }
 
+    /**
+     * Download a certificate file by code.
+     *
+     * Public endpoint used after verification. No bearer token is required. Returns a storage direct URL when direct/public downloads are configured; otherwise streams the certificate file. Generated certificates are typically stored under the certificate media disk path.
+     *
+     * @group Certificates
+     * @unauthenticated
+     *
+     * @urlParam verificationCode string required Certificate verification code. Example: ABC123
+     * @response 200 {"download_url":"https://storage.example.com/certificates/abc123.pdf"}
+     * @response 200 {"download":"Binary certificate file stream"}
+     * @response 404 {"message":"Sertifika dosyasi bulunamadi."}
+     * @response 404 {"message":"Sertifika dosyasi storage uzerinde bulunamadi."}
+     */
     public function download(string $verificationCode): JsonResponse|StreamedResponse
     {
         $certificate = Certificate::query()

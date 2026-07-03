@@ -1,0 +1,473 @@
+name: 'Site Settings'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/site-settings
+    metadata:
+      custom: []
+      groupName: 'Site Settings'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get panel site settings.'
+      description: 'Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.view` or `content.site_settings.update`. Returns normalized settings with defaults merged, stored media URLs normalized through the media storage layer, and computed homepage counters for preview screens.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"settings":{"general":{"site_name":"KADEME"},"contact":{"contact_email":"info@kademe.org"},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/admin/site-settings
+    metadata:
+      custom: []
+      groupName: 'Site Settings'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update panel site settings.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.update` or `content.site_settings.update`. Accepts grouped settings for public site configuration, stores scalar values as strings and arrays as JSON, normalizes the response with defaults, and clears the short-lived public homepage cache.
+
+        Supported top-level groups are `general`, `contact`, `social_media`, `navigation`, `homepage`, `about`, `blog_page`, and `faq_page`. Unknown nested keys inside accepted groups are stored as provided, so mobile/web clients should send the full intended group shape when replacing complex arrays such as navigation links or homepage blocks.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      settings:
+        custom: []
+        name: settings
+        description: 'Grouped site settings payload.'
+        required: true
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      settings.general:
+        custom: []
+        name: settings.general
+        description: 'Optional general labels.'
+        required: false
+        example:
+          site_name: KADEME
+          site_tagline: 'Gelecegin Liderlik Okulu'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.contact:
+        custom: []
+        name: settings.contact
+        description: 'Optional contact settings.'
+        required: false
+        example:
+          contact_email: info@kademe.org
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.social_media:
+        custom: []
+        name: settings.social_media
+        description: 'Optional social/media/webhook settings.'
+        required: false
+        example:
+          instagram_url: 'https://instagram.com/kademe'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.navigation:
+        custom: []
+        name: settings.navigation
+        description: 'Optional header/footer navigation arrays.'
+        required: false
+        example:
+          header_links:
+            -
+              label: 'Ana Sayfa'
+              href: /
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.homepage:
+        custom: []
+        name: settings.homepage
+        description: 'Optional homepage configuration.'
+        required: false
+        example:
+          stats_mode: auto
+          block_order:
+            - hero
+            - projects
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.about:
+        custom: []
+        name: settings.about
+        description: 'Optional about page copy.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      settings.blog_page:
+        custom: []
+        name: settings.blog_page
+        description: 'Optional blog page copy.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      settings.faq_page:
+        custom: []
+        name: settings.faq_page
+        description: 'Optional FAQ page copy.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      settings:
+        general:
+          site_name: KADEME
+          site_tagline: 'Gelecegin Liderlik Okulu'
+        contact:
+          contact_email: info@kademe.org
+        social_media:
+          instagram_url: 'https://instagram.com/kademe'
+        navigation:
+          header_links:
+            -
+              label: 'Ana Sayfa'
+              href: /
+        homepage:
+          stats_mode: auto
+          block_order:
+            - hero
+            - projects
+        about: []
+        blog_page: []
+        faq_page: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Site ayarlari guncellendi.","settings":{"general":{"site_name":"KADEME"}},"computed_homepage_stats":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The settings field is required."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/site-settings
+    metadata:
+      custom: []
+      groupName: 'Site Settings'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get panel site settings.'
+      description: 'Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.view` or `content.site_settings.update`. Returns normalized settings with defaults merged, stored media URLs normalized through the media storage layer, and computed homepage counters for preview screens.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"settings":{"general":{"site_name":"KADEME"},"contact":{"contact_email":"info@kademe.org"},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/panel/site-settings
+    metadata:
+      custom: []
+      groupName: 'Site Settings'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update panel site settings.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.update` or `content.site_settings.update`. Accepts grouped settings for public site configuration, stores scalar values as strings and arrays as JSON, normalizes the response with defaults, and clears the short-lived public homepage cache.
+
+        Supported top-level groups are `general`, `contact`, `social_media`, `navigation`, `homepage`, `about`, `blog_page`, and `faq_page`. Unknown nested keys inside accepted groups are stored as provided, so mobile/web clients should send the full intended group shape when replacing complex arrays such as navigation links or homepage blocks.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      settings:
+        custom: []
+        name: settings
+        description: 'Grouped site settings payload.'
+        required: true
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      settings.general:
+        custom: []
+        name: settings.general
+        description: 'Optional general labels.'
+        required: false
+        example:
+          site_name: KADEME
+          site_tagline: 'Gelecegin Liderlik Okulu'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.contact:
+        custom: []
+        name: settings.contact
+        description: 'Optional contact settings.'
+        required: false
+        example:
+          contact_email: info@kademe.org
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.social_media:
+        custom: []
+        name: settings.social_media
+        description: 'Optional social/media/webhook settings.'
+        required: false
+        example:
+          instagram_url: 'https://instagram.com/kademe'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.navigation:
+        custom: []
+        name: settings.navigation
+        description: 'Optional header/footer navigation arrays.'
+        required: false
+        example:
+          header_links:
+            -
+              label: 'Ana Sayfa'
+              href: /
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.homepage:
+        custom: []
+        name: settings.homepage
+        description: 'Optional homepage configuration.'
+        required: false
+        example:
+          stats_mode: auto
+          block_order:
+            - hero
+            - projects
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      settings.about:
+        custom: []
+        name: settings.about
+        description: 'Optional about page copy.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      settings.blog_page:
+        custom: []
+        name: settings.blog_page
+        description: 'Optional blog page copy.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      settings.faq_page:
+        custom: []
+        name: settings.faq_page
+        description: 'Optional FAQ page copy.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      settings:
+        general:
+          site_name: KADEME
+          site_tagline: 'Gelecegin Liderlik Okulu'
+        contact:
+          contact_email: info@kademe.org
+        social_media:
+          instagram_url: 'https://instagram.com/kademe'
+        navigation:
+          header_links:
+            -
+              label: 'Ana Sayfa'
+              href: /
+        homepage:
+          stats_mode: auto
+          block_order:
+            - hero
+            - projects
+        about: []
+        blog_page: []
+        faq_page: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Site ayarlari guncellendi.","settings":{"general":{"site_name":"KADEME"}},"computed_homepage_stats":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The settings field is required."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

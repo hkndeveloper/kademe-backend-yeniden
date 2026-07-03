@@ -18,6 +18,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 
+/**
+ * @group Users
+ */
 class UserController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -27,13 +30,15 @@ class UserController extends Controller
     ) {}
 
     /**
-     * GET /admin/users
-     * Kullanici listesi.
+     * Get panel user creation options.
+     *
+     * Requires permission: `users.create` with global `all` scope. Returns the Spatie roles that can be used when creating student/alumni users from the panel. Exposed under both `/api/admin/users/create-options` and `/api/panel/users/create-options`.
+     *
+     * @group Users
+     * @response 200 {"roles":[{"name":"student","label":"Ogrenci"},{"name":"alumni","label":"Mezun"}]}
+     * @response 403 {"message":"Kullanici olusturmak icin tum sistem kapsami gerekir."}
      */
-    /**
-     * GET /admin/users/create-options
-     * Yeni kullanici formu icin Spatie rol listesi (users.create + global kapsam).
-     */
+
     public function createOptions(Request $request)
     {
         $this->abortUnlessAllowed($request, 'users.create');
@@ -57,9 +62,22 @@ class UserController extends Controller
     }
 
     /**
-     * POST /admin/users
-     * Panelden kullanici olusturma. Sifre bos ise guclu rastgele sifre uretilir (yanitta bir kez doner).
+     * Create a student or alumni user from the panel.
+     *
+     * Requires permission: `users.create` with global `all` scope. Creates an active student/alumni account, syncs the selected Spatie role, creates an empty participant profile, marks the password as pending change and sends the password reset/setup email.
+     *
+     * @group Users
+     * @bodyParam name string required User first name. Example: Ayse
+     * @bodyParam surname string required User surname. Example: Yilmaz
+     * @bodyParam email string required Unique email address. Example: ayse@example.com
+     * @bodyParam phone string Optional phone number. Max 20 characters. Example: 05550000000
+     * @bodyParam tc_no string Optional Turkish identity number, exactly 11 characters. Example: 12345678901
+     * @bodyParam role string required Role name. Allowed values: student, alumni. Example: student
+     * @response 201 {"message":"Kullanici olusturuldu. Sifre belirleme baglantisi e-posta ile gonderildi.","user":{"id":55,"email":"ayse@example.com","role":"student","status":"active"},"reset_email_status":"passwords.sent"}
+     * @response 403 {"message":"Kullanici olusturmak icin tum sistem kapsami gerekir."}
+     * @response 422 {"message":"The email has already been taken."}
      */
+
     public function storeUser(Request $request)
     {
         $this->abortUnlessAllowed($request, 'users.create');
@@ -115,6 +133,20 @@ class UserController extends Controller
         ], 201);
     }
 
+    /**
+     * List student and alumni users.
+     *
+     * Requires permission: `users.view`. The query is filtered by `PermissionResolver::applyUserScope`, so `all`, `own_unit`, `self` or other supported user scopes determine which student/alumni rows are visible. Soft-deleted users are excluded.
+     *
+     * @group Users
+     * @queryParam role string Optional role filter. Allowed values: student, alumni. Example: student
+     * @queryParam status string Optional status filter. `inactive` is normalized to `passive`; `banned` is normalized to `blacklisted`. Example: active
+     * @queryParam search string Optional name, surname, email or phone search. Example: ayse
+     * @queryParam university string Optional university search. Example: Istanbul
+     * @response 200 {"users":{"data":[{"id":55,"name":"Ayse","surname":"Yilmaz","email":"ayse@example.com","role":"student","status":"active"}],"current_page":1}}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
+
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'users.view');
@@ -152,15 +184,24 @@ class UserController extends Controller
     }
 
     /**
-     * GET /admin/users/{id}
+     * Get panel user details.
+     *
+     * Requires permission: `users.view` and `PermissionResolver::canAccessUser` for the target student/alumni user. Returns profile, participations, applications, attendance, certificates, coordinated/assigned project metadata, documents, credit score and absence count.
+     *
+     * @group Users
+     * @urlParam id integer required Student/alumni user ID. Example: 55
+     * @response 200 {"user":{"id":55,"name":"Ayse","surname":"Yilmaz","role":"student","participations":[{"id":7,"project":{"id":1,"name":"KADEME"}}]},"documents":[],"credit_score":12,"absent_count":1}
+     * @response 403 {"message":"Bu kullaniciyi goruntuleme yetkiniz bulunmuyor."}
+     * @response 404 {"message":"No query results for model [App\\Models\\User] 55"}
      */
+
     public function showUser(int $id)
     {
         $user = User::with([
             'profile',
             'staffProfile',
             'participations.project:id,name',
-            'applications.applicationForm.project:id,name',
+            'applications.form.project:id,name',
             'attendances.program:id,title,start_at',
             'certificates.project:id,name',
             'coordinatedProjects:id,name',
@@ -189,9 +230,19 @@ class UserController extends Controller
     }
 
     /**
-     * PUT /admin/users/{id}
-     * Kullanici rolunu ve statusunu gunceller.
+     * Update a student or alumni user.
+     *
+     * Requires `users.update` for status-only changes and `users.assign_role` when `role` is present. Role assignment additionally requires global `all` scope. Target access is checked with `PermissionResolver::canAccessUser`; status aliases are normalized before saving.
+     *
+     * @group Users
+     * @urlParam id integer required Student/alumni user ID. Example: 55
+     * @bodyParam role string Optional new role. Allowed values: student, alumni. Requires `users.assign_role` with global scope. Example: alumni
+     * @bodyParam status string Optional status. Allowed values: active, passive, blacklisted, alumni, inactive, banned. Example: passive
+     * @response 200 {"message":"Kullanici guncellendi.","user":{"id":55,"role":"alumni","status":"passive"}}
+     * @response 403 {"message":"Rol atama islemi icin tum sistem kapsami gerekir."}
+     * @response 422 {"message":"The selected status is invalid."}
      */
+
     public function updateUser(Request $request, int $id)
     {
         $needsRoleUpdate = $request->has('role');
@@ -243,9 +294,19 @@ class UserController extends Controller
     }
 
     /**
-     * PUT /admin/users/{id}/coordinated-projects
-     * Koordinatorun yonettigi projeleri project_coordinators uzerinden senkronize eder.
+     * Sync coordinator managed projects.
+     *
+     * Requires permission: `users.assign_role` with global `all` scope. The target user must be a coordinator and accessible to the caller; project IDs are synced through the coordinator-project relation.
+     *
+     * @group Users
+     * @urlParam id integer required Coordinator user ID. Example: 8
+     * @bodyParam project_ids array required Project IDs to assign. Send an empty array to clear assignments. Example: [1,2]
+     * @bodyParam project_ids.* integer Project ID. Example: 1
+     * @response 200 {"message":"Koordinator projeleri guncellendi.","coordinated_projects":[{"id":1,"name":"Diplomasi360"}]}
+     * @response 403 {"message":"Koordinator proje atamasi icin tum sistem kapsami gerekir."}
+     * @response 422 {"message":"Yalnizca koordinator hesaplarina proje atanabilir."}
      */
+
     public function syncCoordinatedProjects(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'users.assign_role');
@@ -277,9 +338,19 @@ class UserController extends Controller
     }
 
     /**
-     * GET /admin/users/export
-     * Kullanici listesini CSV olarak disa aktar.
+     * Export student and alumni users.
+     *
+     * Requires permission: `users.export`. The export query is filtered with the same user scope behavior as the list endpoint and supports CSV, Excel/XLSX, PDF and Word/DOCX through the shared admin export responder.
+     *
+     * @group Users
+     * @queryParam role string Optional role filter. Example: student
+     * @queryParam status string Optional status filter. Example: active
+     * @queryParam search string Optional name, surname, email or phone search. Example: ayse
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: xlsx
+     * @response 200 {"download":"User export file stream"}
+     * @response 403 {"message":"This action is unauthorized."}
      */
+
     public function exportUsers(Request $request)
     {
         $this->abortUnlessAllowed($request, 'users.export');
@@ -332,7 +403,16 @@ class UserController extends Controller
     }
 
     /**
-     * Kullanici profil bilgilerini getirir.
+     * Get the authenticated user profile.
+     *
+     * Requires a valid Sanctum token, completed password setup, and KVKK consent. Returns the current user with the related profile record.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @response 200 {"user":{"id":1,"name":"Hakan","surname":"Kekec","email":"hakan@example.com","phone":"05551234567","role":"student","status":"active","profile":{"motivation_message":"Kariyer hedefim sosyal etki uretmek."}}}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"KVKK onayi gereklidir."}
      */
     public function getProfile(Request $request)
     {
@@ -342,7 +422,27 @@ class UserController extends Controller
     }
 
     /**
-     * Kullanici profil bilgilerini gunceller.
+     * Update the authenticated user profile.
+     *
+     * Requires KVKK consent. Updates editable account fields and the related profile/social fields for the current student or alumni user.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @bodyParam phone string Optional phone number. Example: 05551234567
+     * @bodyParam address string Optional address. Example: Istanbul
+     * @bodyParam birth_date date Optional birth date. Example: 2000-01-01
+     * @bodyParam university string Optional university. Example: Istanbul Universitesi
+     * @bodyParam department string Optional department. Example: Bilgisayar Muhendisligi
+     * @bodyParam class_year string Optional class year. Example: 3
+     * @bodyParam hometown string Optional hometown. Example: Istanbul
+     * @bodyParam motivation_message string Optional profile summary/motivation text. Example: Sosyal etki odakli projelerde yer almak istiyorum.
+     * @bodyParam linkedin_url string Optional LinkedIn URL. Example: https://linkedin.com/in/hakan
+     * @bodyParam github_url string Optional GitHub URL. Example: https://github.com/hakan
+     * @bodyParam instagram_url string Optional Instagram URL. Example: https://instagram.com/hakan
+     * @response 200 {"message":"Profil basariyla guncellendi.","user":{"id":1,"phone":"05551234567","profile":{"linkedin_url":"https://linkedin.com/in/hakan"}}}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 422 {"message":"The birth date field must be a valid date.","errors":{"birth_date":["The birth date field must be a valid date."]}}
      */
     public function updateProfile(Request $request)
     {
@@ -379,7 +479,19 @@ class UserController extends Controller
     }
 
     /**
-     * Sifre degistirme.
+     * Change the authenticated user password.
+     *
+     * Requires KVKK consent and current password confirmation. Also clears `must_change_password` when successful.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @bodyParam current_password string required Current password. Example: secret123
+     * @bodyParam password string required New password, minimum 8 characters, must be confirmed. Example: newsecret123
+     * @bodyParam password_confirmation string required New password confirmation. Example: newsecret123
+     * @response 200 {"message":"Sifreniz basariyla degistirildi."}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 422 {"message":"The given data was invalid.","errors":{"current_password":["Mevcut sifreniz hatali."]}}
      */
     public function changePassword(Request $request)
     {
@@ -407,7 +519,16 @@ class UserController extends Controller
     }
 
     /**
-     * KVKK onayini kaydet.
+     * Confirm KVKK consent for the authenticated user.
+     *
+     * This endpoint is intentionally available before the KVKK middleware gate. After consent, protected participant endpoints can be used.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @response 200 {"message":"KVKK aydinlatma metni basariyla onaylandi."}
+     * @response 400 {"message":"KVKK onayi zaten verilmis."}
+     * @response 401 {"message":"Unauthenticated."}
      */
     public function consentKvkk(Request $request)
     {
@@ -426,6 +547,19 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * Request KVKK right-to-be-forgotten review.
+     *
+     * Creates a pending forget/anonymization request for the current user. The actual anonymization is reviewed from the authorized panel flow.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @bodyParam request_note string Optional explanation for the reviewer. Example: Hesabimin silinmesini talep ediyorum.
+     * @response 201 {"message":"Unutulma hakki talebiniz alindi. Inceleme sonrasinda sonuc bilgilendirilecektir.","forget_request":{"id":1,"status":"pending","request_note":"Hesabimin silinmesini talep ediyorum."}}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 422 {"message":"Bu hesap icin bekleyen bir unutulma talebi zaten mevcut."}
+     */
     public function requestKvkkForget(Request $request)
     {
         $validated = $request->validate([
@@ -466,6 +600,17 @@ class UserController extends Controller
         ], 201);
     }
 
+    /**
+     * List KVKK forget requests for the panel.
+     *
+     * Requires permission: `users.view` with global `all` scope. Returns pending/completed/rejected right-to-be-forgotten requests with requester and reviewer metadata.
+     *
+     * @group Users
+     * @queryParam status string Optional request status filter. Example: pending
+     * @response 200 {"forget_requests":{"data":[{"id":3,"status":"pending","request_note":"Hesabimin silinmesini talep ediyorum.","user":{"id":55,"email":"ayse@example.com"}}],"current_page":1}}
+     * @response 403 {"message":"Unutulma taleplerini listelemek icin tum sistem kapsami gerekir."}
+     */
+
     public function listKvkkForgetRequests(Request $request)
     {
         $this->abortUnlessAllowed($request, 'users.view');
@@ -486,6 +631,20 @@ class UserController extends Controller
             'forget_requests' => $query->paginate(20),
         ]);
     }
+
+    /**
+     * Resolve a KVKK forget request.
+     *
+     * Requires permission: `users.update` with global `all` scope. Approving anonymizes personal account fields, deletes profile/staff profile records, revokes tokens and stores an anonymization summary. Rejecting stores reviewer metadata without anonymizing. The operation is audited as `users.kvkk_forget.resolved`.
+     *
+     * @group Users
+     * @urlParam id integer required KVKK forget request ID. Example: 3
+     * @bodyParam decision string required Decision. Allowed values: approve, reject. Example: approve
+     * @bodyParam reviewer_note string Optional reviewer note. Max 2000 characters. Example: Talep uygun bulundu.
+     * @response 200 {"message":"Unutulma talebi onaylandi ve hesap anonimlestirildi.","forget_request":{"id":3,"status":"completed","anonymized_at":"2026-06-30T12:00:00.000000Z"}}
+     * @response 403 {"message":"Unutulma talebi islemek icin tum sistem kapsami gerekir."}
+     * @response 422 {"message":"Bu talep zaten sonuclandirilmis."}
+     */
 
     public function resolveKvkkForgetRequest(Request $request, int $id)
     {

@@ -1,0 +1,163 @@
+name: 'Files & Exports'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/media/upload
+    metadata:
+      custom: []
+      groupName: 'Files & Exports'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Upload a media file.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/media/upload` and `/panel/media/upload`. Access is granted when the user has global scope for one of the content/settings permissions (`content.blog.create`, `content.blog.update`, `content.faq.create`, `content.faq.update`, `settings.update`, `content.site_settings.update`) or at least one scoped project/program media permission (`projects.content.update`, `projects.gallery.update`, `projects.internships.manage`, `projects.mentors.manage`, `projects.eurodesk.manage`, `projects.rewards.manage`, `programs.update`, `programs.media.upload`).
+
+        Send as `multipart/form-data`. The optional `folder` is slugged and files are stored under `kademe-media/{folder}` with a UUID filename. Returns both storage path and resolved URL.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      file:
+        custom: []
+        name: file
+        description: 'Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB.'
+        required: true
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      folder:
+        custom: []
+        name: folder
+        description: 'Optional logical folder name.'
+        required: false
+        example: homepage-hero
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      folder: homepage-hero
+    fileParameters:
+      file: null
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Dosya yuklendi.","path":"kademe-media/homepage-hero/uuid.png","url":"https://storage.example.com/kademe-media/homepage-hero/uuid.png"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The file field is required."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/media/upload
+    metadata:
+      custom: []
+      groupName: 'Files & Exports'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Upload a media file.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/media/upload` and `/panel/media/upload`. Access is granted when the user has global scope for one of the content/settings permissions (`content.blog.create`, `content.blog.update`, `content.faq.create`, `content.faq.update`, `settings.update`, `content.site_settings.update`) or at least one scoped project/program media permission (`projects.content.update`, `projects.gallery.update`, `projects.internships.manage`, `projects.mentors.manage`, `projects.eurodesk.manage`, `projects.rewards.manage`, `programs.update`, `programs.media.upload`).
+
+        Send as `multipart/form-data`. The optional `folder` is slugged and files are stored under `kademe-media/{folder}` with a UUID filename. Returns both storage path and resolved URL.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      file:
+        custom: []
+        name: file
+        description: 'Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB.'
+        required: true
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      folder:
+        custom: []
+        name: folder
+        description: 'Optional logical folder name.'
+        required: false
+        example: homepage-hero
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      folder: homepage-hero
+    fileParameters:
+      file: null
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Dosya yuklendi.","path":"kademe-media/homepage-hero/uuid.png","url":"https://storage.example.com/kademe-media/homepage-hero/uuid.png"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The file field is required."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

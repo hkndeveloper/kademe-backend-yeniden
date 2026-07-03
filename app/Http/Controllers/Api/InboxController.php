@@ -13,6 +13,9 @@ use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * @group Announcements & Inbox
+ */
 class InboxController extends Controller
 {
     public function __construct(
@@ -129,6 +132,25 @@ class InboxController extends Controller
 
         return in_array((int) $post->period_id, $this->participantPeriodIds((int) $user->id), true);
     }
+
+    /**
+     * List unified inbox messages.
+     *
+     * Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project/global scope. Project filters must be inside the merged participant/project permission scope.
+     *
+     * @group Announcements & Inbox
+     * @authenticated
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam category string Optional category filter for announcements. Example: general
+     * @queryParam from date Optional start date filter. Example: 2026-01-01
+     * @queryParam to date Optional end date filter. Example: 2026-12-31
+     * @queryParam type string Optional message type. Allowed values: announcement, opportunity, forum_post. Example: announcement
+     * @queryParam unread_only boolean Optional only unread messages. Example: true
+     * @queryParam starred_only boolean Optional only starred messages. Example: false
+     * @queryParam pinned_only boolean Optional only pinned messages. Example: false
+     * @response 200 {"messages":[{"type":"announcement","source_id":1,"title":"Duyuru","content":"Metin","state":{"is_read":false,"is_starred":false,"is_pinned":false}}]}
+     * @response 403 {"message":"Bu proje inbox filtresi icin yetkiniz yok."}
+     */
 
     public function recipientMessages(Request $request): JsonResponse
     {
@@ -365,6 +387,23 @@ class InboxController extends Controller
             'messages' => $ordered,
         ]);
     }
+
+    /**
+     * Update unified inbox message state.
+     *
+     * Updates read, starred and pinned state for a visible announcement, alumni opportunity or forum post. Visibility is rechecked server-side using participant project/period rules or panel `announcements.view` scope before creating/updating the state row.
+     *
+     * @group Announcements & Inbox
+     * @authenticated
+     * @bodyParam source_type string required Fully qualified source model class. Allowed: App\\Models\\Announcement, App\\Models\\AlumniOpportunity, App\\Models\\ForumPost. Example: App\\Models\\Announcement
+     * @bodyParam source_id integer required Source record id. Example: 1
+     * @bodyParam is_read boolean Optional read state. Example: true
+     * @bodyParam is_starred boolean Optional starred state. Example: false
+     * @bodyParam is_pinned boolean Optional pinned state. Example: true
+     * @response 200 {"message":"Inbox durumu guncellendi.","state":{"source_type":"App\\Models\\Announcement","source_id":1,"is_read":true,"is_starred":false,"is_pinned":true}}
+     * @response 403 {"message":"Bu mesaj kaydi icin islem yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Desteklenmeyen source_type."}
+     */
 
     public function upsertState(Request $request): JsonResponse
     {

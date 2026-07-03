@@ -21,6 +21,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group Projects
+ */
 class ProjectContentController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -30,6 +33,16 @@ class ProjectContentController extends Controller
     ) {
     }
 
+    /**
+     * List projects manageable by the current panel user.
+     *
+     * Requires the selected `permission` action, defaulting to `projects.view`. Global scope returns all projects; scoped users only receive projects allowed by their action+scope permission. Exposed under `/api/admin/projects/manageable` and `/api/panel/projects/manageable`.
+     *
+     * @authenticated
+     * @queryParam permission string Optional permission to evaluate for project visibility. Must be in the permission catalog. Defaults to `projects.view`. Example: programs.view
+     * @response 200 {"projects":[{"id":1,"name":"Diplomasi360","slug":"diplomasi360","periods":[]}]}
+     * @response 403 {"message":"Projelere erisim yetkiniz yok."}
+     */
     public function manageable(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -75,6 +88,16 @@ class ProjectContentController extends Controller
         ]));
     }
 
+    /**
+     * Export manageable projects.
+     *
+     * Requires permission: `projects.export`. Global scope exports all projects; scoped users export only projects allowed by their `projects.export` action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
+     *
+     * @authenticated
+     * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     * @response 200 binary Projects export file.
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     */
     public function exportManageable(Request $request)
     {
         $this->abortUnlessAllowedForProject($request, 'projects.export');
@@ -113,6 +136,16 @@ class ProjectContentController extends Controller
         );
     }
 
+    /**
+     * Get editable project content.
+     *
+     * Requires project access for either `projects.view` or `projects.content.update`. Returns public project resource data plus editable panel fields and the latest active application form.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @response 200 {"project":{"id":1,"name":"Diplomasi360"},"editable":{"name":"Diplomasi360","application_open":true,"has_interview":false},"application_form":{"id":5,"fields":[]}}
+     * @response 403 {"message":"Bu proje icerigini goruntuleme yetkiniz yok."}
+     */
     public function show(Request $request, int $id): JsonResponse
     {
         $project = Project::with(['periods', 'participants.user'])->findOrFail($id);
@@ -144,6 +177,18 @@ class ProjectContentController extends Controller
         ]);
     }
 
+    /**
+     * Get project module dashboard summary.
+     *
+     * Requires at least one project-scoped permission for the selected project. The response exposes an `access` matrix for supported module actions, applicable project-special module keys, period context, summaries and previews. Project-specific module access is filtered by project type/module support.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @queryParam period_id integer Optional period filter. Must belong to the project. Defaults to active period when omitted. Example: 3
+     * @response 200 {"project":{"id":1,"name":"Diplomasi360","selected_period":{"id":3,"status":"active"}},"access":{"projects.participants.view":true},"applicable_modules":["mentors"],"summary":{},"previews":{}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Secilen donem bu projeye ait degil."}
+     */
     public function modules(Request $request, int $id): JsonResponse
     {
         $project = Project::with(['periods' => fn ($query) => $query->latest('start_date')])->findOrFail($id);
@@ -441,6 +486,28 @@ class ProjectContentController extends Controller
             ->all();
     }
 
+    /**
+     * Update editable project content.
+     *
+     * Requires permission: `projects.content.update` for the project. Gallery period references must belong to the same project. This endpoint updates public-facing content, application flags, interview flag and quota, but does not create periods or project-special module records.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @bodyParam name string required Project name. Example: Diplomasi360
+     * @bodyParam slug string required Unique project slug. Example: diplomasi360
+     * @bodyParam type string required Project type. Example: diplomacy
+     * @bodyParam short_description string Optional short description. Example: Genclere diplomasi egitimi.
+     * @bodyParam description string Optional long description.
+     * @bodyParam cover_image_path string Optional cover image path or URL. Example: projects/diplomasi/cover.jpg
+     * @bodyParam gallery_paths object[] Optional gallery items with `path`, optional `caption`, `year`, `period_id`.
+     * @bodyParam application_open boolean required Whether applications are open. Example: true
+     * @bodyParam next_application_date date Optional next application date. Example: 2026-09-01
+     * @bodyParam has_interview boolean required Whether applications use interview workflow. Example: false
+     * @bodyParam quota integer Optional project quota. Example: 100
+     * @response 200 {"message":"Proje icerigi guncellendi.","project":{"id":1,"name":"Diplomasi360"},"editable":{"application_open":true}}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Galeri donemi bu projeye ait olmalidir."}
+     */
     public function update(Request $request, int $id): JsonResponse
     {
         $project = Project::findOrFail($id);
@@ -516,6 +583,19 @@ class ProjectContentController extends Controller
         ]);
     }
 
+    /**
+     * Get active project application form.
+     *
+     * Requires permission: `projects.view` for the project. Optional period/program filters must belong to the same project; program-specific forms are resolved separately from general project/period forms.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam program_id integer Optional program filter. Must belong to the project and selected period when both are provided. Example: 8
+     * @response 200 {"project":{"id":1,"name":"Diplomasi360"},"periods":[],"programs":[],"application_form":{"id":5,"fields":[]}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Secilen program bu doneme ait degil."}
+     */
     public function applicationForm(Request $request, int $id): JsonResponse
     {
         $project = Project::with('periods')->findOrFail($id);
@@ -574,6 +654,29 @@ class ProjectContentController extends Controller
         ]);
     }
 
+    /**
+     * Save project application form.
+     *
+     * Requires permission: `projects.application_form.update` for the project. Period and program must belong to the project; when a program is selected, its period is used. Previous active form for the same project/period/program context is deactivated before the new form is saved.
+     *
+     * @authenticated
+     * @urlParam id integer required Project ID. Example: 1
+     * @bodyParam period_id integer Optional period ID. Example: 3
+     * @bodyParam program_id integer Optional program ID. Example: 8
+     * @bodyParam fields object[] required Form fields. Each field needs `id`, `type`, `label`, `required` and optional `options` for choice fields.
+     * @bodyParam fields[].id string required Field key. Example: motivation
+     * @bodyParam fields[].type string required Field type: `text`, `longtext`, `select`, `radio`, `checkbox` or `file`. Example: longtext
+     * @bodyParam fields[].label string required Field label. Example: Motivasyon mektubu
+     * @bodyParam fields[].required boolean required Whether the field is required. Example: true
+     * @bodyParam fields[].options string[] Optional options for select/radio/checkbox fields. Example: ["A","B"]
+     * @bodyParam require_consent boolean Optional consent requirement. Example: true
+     * @bodyParam consent_text string Optional consent text.
+     * @bodyParam is_active boolean Optional active flag. Defaults to true. Example: true
+     * @bodyParam auto_reject_rules object[] Optional automatic rejection rules.
+     * @response 200 {"message":"Basvuru formu kaydedildi.","application_form":{"id":5,"fields":[]}}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"Secilen donem bu projeye ait degil."}
+     */
     public function updateApplicationForm(Request $request, int $id): JsonResponse
     {
         $project = Project::with('periods')->findOrFail($id);

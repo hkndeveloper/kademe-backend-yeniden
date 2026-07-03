@@ -12,6 +12,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group Motivation
+ */
 class MotivationController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -21,6 +24,16 @@ class MotivationController extends Controller
     ) {
     }
 
+    /**
+     * Get the current public motivation quote.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * Returns the active motivation quote using the configured daily, weekly, or monthly rotation. If no active list exists, a KADEME fallback quote is returned.
+     *
+     * @response 200 {"motivation":{"id":1,"quote":"Gelecek, bugunden ona hazirlananlara aittir.","speaker":"KADEME","image_url":null,"rotation_period":"monthly","list_name":"Aylik Motivasyon"}}
+     */
     public function current(): JsonResponse
     {
         $list = MotivationList::query()
@@ -57,6 +70,16 @@ class MotivationController extends Controller
         ]);
     }
 
+    /**
+     * List motivation lists for the panel.
+     *
+     * Requires permission: `motivation.view` with global `all` scope. Returns every motivation list with its quotes ordered for the management screen.
+     *
+     * @group Motivation
+     * @response 200 {"lists":[{"id":1,"name":"Aylik Motivasyon","rotation_period":"monthly","is_active":true,"quotes":[{"id":1,"quote":"Basari emek ister."}]}]}
+     * @response 403 {"message":"Bu alan global yetki gerektirir."}
+     */
+
     public function index(Request $request): JsonResponse
     {
         $this->authorizeGlobal($request, 'motivation.view');
@@ -69,6 +92,19 @@ class MotivationController extends Controller
 
         return response()->json(['lists' => $lists]);
     }
+
+    /**
+     * Create a motivation list.
+     *
+     * Requires permission: `motivation.manage` with global `all` scope. When the new list is active, all other lists are deactivated.
+     *
+     * @group Motivation
+     * @bodyParam name string required List name. Example: Aylik Motivasyon
+     * @bodyParam description string Optional description. Example: Panel ve mobil icin aylik sozler
+     * @bodyParam rotation_period string required Rotation period. Allowed values: daily, weekly, monthly. Example: monthly
+     * @bodyParam is_active boolean Optional active flag. Example: true
+     * @response 201 {"list":{"id":1,"name":"Aylik Motivasyon","is_active":true,"quotes":[]}}
+     */
 
     public function storeList(Request $request): JsonResponse
     {
@@ -94,6 +130,20 @@ class MotivationController extends Controller
         return response()->json(['list' => $list->load('quotes')], 201);
     }
 
+    /**
+     * Update a motivation list.
+     *
+     * Requires permission: `motivation.manage` with global `all` scope. Activating this list deactivates the other lists.
+     *
+     * @group Motivation
+     * @urlParam id integer required Motivation list ID. Example: 1
+     * @bodyParam name string Optional list name. Example: Haftalik Motivasyon
+     * @bodyParam description string Optional description. Example: Haftalik sozler
+     * @bodyParam rotation_period string Optional rotation period. Allowed values: daily, weekly, monthly. Example: weekly
+     * @bodyParam is_active boolean Optional active flag. Example: true
+     * @response 200 {"list":{"id":1,"name":"Haftalik Motivasyon","is_active":true}}
+     */
+
     public function updateList(Request $request, int $id): JsonResponse
     {
         $this->authorizeGlobal($request, 'motivation.manage');
@@ -115,6 +165,16 @@ class MotivationController extends Controller
         return response()->json(['list' => $list->fresh('quotes')]);
     }
 
+    /**
+     * Delete a motivation list.
+     *
+     * Requires permission: `motivation.manage` with global `all` scope.
+     *
+     * @group Motivation
+     * @urlParam id integer required Motivation list ID. Example: 1
+     * @response 200 {"message":"Motivasyon listesi silindi."}
+     */
+
     public function destroyList(Request $request, int $id): JsonResponse
     {
         $this->authorizeGlobal($request, 'motivation.manage');
@@ -123,6 +183,22 @@ class MotivationController extends Controller
 
         return response()->json(['message' => 'Motivasyon listesi silindi.']);
     }
+
+    /**
+     * Add a quote to a motivation list.
+     *
+     * Requires permission: `motivation.manage` with global `all` scope. Optional uploaded image is stored through `MediaStorage`; alternatively an existing image path can be provided.
+     *
+     * @group Motivation
+     * @urlParam id integer required Motivation list ID. Example: 1
+     * @bodyParam quote string required Quote text. Max 4000 characters. Example: Basari emek ister.
+     * @bodyParam speaker string Optional speaker. Example: KADEME
+     * @bodyParam image file Optional quote image. Allowed: jpg, jpeg, png, webp. Max 8 MB.
+     * @bodyParam image_path string Optional existing image path. Example: motivation-images/sample.png
+     * @bodyParam sort_order integer Optional sort order. Example: 1
+     * @bodyParam is_active boolean Optional active flag. Defaults to true. Example: true
+     * @response 201 {"quote":{"id":1,"quote":"Basari emek ister.","is_active":true}}
+     */
 
     public function storeQuote(Request $request, int $listId): JsonResponse
     {
@@ -156,6 +232,22 @@ class MotivationController extends Controller
         return response()->json(['quote' => $quote], 201);
     }
 
+    /**
+     * Update a motivation quote.
+     *
+     * Requires permission: `motivation.manage` with global `all` scope. Uploading a new image replaces the previous stored image.
+     *
+     * @group Motivation
+     * @urlParam id integer required Motivation quote ID. Example: 1
+     * @bodyParam quote string Optional quote text. Example: Yol emekle acilir.
+     * @bodyParam speaker string Optional speaker. Example: KADEME
+     * @bodyParam image file Optional replacement image. Allowed: jpg, jpeg, png, webp. Max 8 MB.
+     * @bodyParam image_path string Optional existing image path. Example: motivation-images/new.png
+     * @bodyParam sort_order integer Optional sort order. Example: 2
+     * @bodyParam is_active boolean Optional active flag. Example: true
+     * @response 200 {"quote":{"id":1,"quote":"Yol emekle acilir."}}
+     */
+
     public function updateQuote(Request $request, int $quoteId): JsonResponse
     {
         $this->authorizeGlobal($request, 'motivation.manage');
@@ -182,6 +274,16 @@ class MotivationController extends Controller
 
         return response()->json(['quote' => $quote->fresh()]);
     }
+
+    /**
+     * Delete a motivation quote.
+     *
+     * Requires permission: `motivation.manage` with global `all` scope. Deletes the stored image when the quote has one.
+     *
+     * @group Motivation
+     * @urlParam id integer required Motivation quote ID. Example: 1
+     * @response 200 {"message":"Motivasyon cumlesi silindi."}
+     */
 
     public function destroyQuote(Request $request, int $quoteId): JsonResponse
     {

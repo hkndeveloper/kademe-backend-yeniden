@@ -1,0 +1,1069 @@
+name: Certificates
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/certificates/verify/{verificationCode}'
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Verify a certificate by code.'
+      description: 'Public endpoint used by web/mobile certificate verification screens. No bearer token is required. The response confirms validity and returns public certificate metadata plus recipient name/surname; it does not require panel permissions.'
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      verificationCode:
+        custom: []
+        name: verificationCode
+        description: 'Certificate verification code.'
+        required: true
+        example: ABC123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      verificationCode: ABC123
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"valid":true,"certificate":{"id":1,"type":"participation","verification_code":"ABC123","issued_at":"2026-01-01T00:00:00.000000Z"},"recipient":{"name":"Hakan","surname":"Kekec"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\Certificate]."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/certificates/{verificationCode}/download'
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Download a certificate file by code.'
+      description: 'Public endpoint used after verification. No bearer token is required. Returns a storage direct URL when direct/public downloads are configured; otherwise streams the certificate file. Generated certificates are typically stored under the certificate media disk path.'
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      verificationCode:
+        custom: []
+        name: verificationCode
+        description: 'Certificate verification code.'
+        required: true
+        example: ABC123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      verificationCode: ABC123
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download_url":"https://storage.example.com/certificates/abc123.pdf"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Binary certificate file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Sertifika dosyasi bulunamadi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Sertifika dosyasi storage uzerinde bulunamadi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/certificates
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel certificates.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/certificates` and `/panel/certificates`. Uses `certificates.view` through project-period context: global scope sees all project certificates, while scoped users are limited to allowed project ids. Optional `project_id` and `period_id` are validated against the action+scope matrix.
+
+        Returns paginated certificate records with user, project, period, verification code, stored path, and public download URL.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter; scoped by `certificates.view`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional recipient name, surname, email, or verification code search.'
+        required: false
+        example: ABC123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      search: ABC123
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"certificates":{"data":[{"id":1,"type":"participation","verification_code":"ABC123","download_url":"https://api.example.com/api/certificates/ABC123/download","user":{"id":5,"name":"Ayse"}}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/certificates/export
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel certificates.'
+      description: 'Panel/admin endpoint exposed under `/admin/certificates/export` and `/panel/certificates/export`. Uses `certificates.export` through project-period context: global scope exports all matching certificates, while scoped users are limited to allowed project ids. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter; scoped by `certificates.export`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional recipient name, surname, email, or verification code search.'
+        required: false
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      search: hakan@example.com
+      format: xlsx
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Must not be greater than 20 characters.'
+        required: false
+        example: amniihfqcoynlazgh
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+      format: amniihfqcoynlazgh
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Export file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/certificates
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a certificate.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/certificates` and `/panel/certificates`. Requires `certificates.create` and create access to the selected project. `period_id`, when provided, must belong to the project and must be writable; completed periods require archive update permission through the shared period lock logic.
+
+        The `type` field is normalized from Turkish/English labels into `participation`, `graduation`, or `achievement`. Duplicate certificates for the same user, project, period, and type are rejected. If no file/path is supplied, the backend generates a certificate PDF, assigns a verification code, stores it, audit logs `certificate.created`, and emails the recipient when an email exists.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      user_id:
+        custom: []
+        name: user_id
+        description: 'Recipient user id.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project id; scoped by `certificates.create`.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period id belonging to the selected project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Certificate type: participation, graduation, achievement. Turkish aliases such as katilim, mezuniyet, basari are normalized.'
+        required: true
+        example: participation
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      certificate_path:
+        custom: []
+        name: certificate_path
+        description: 'Optional existing storage path or URL.'
+        required: false
+        example: certificates/manual.pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      file_path:
+        custom: []
+        name: file_path
+        description: 'Optional alias for certificate_path.'
+        required: false
+        example: certificates/manual.pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      certificate_file:
+        custom: []
+        name: certificate_file
+        description: 'Optional certificate file; pdf, jpg, jpeg, png, max 20MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      user_id: 5
+      project_id: 1
+      period_id: 3
+      type: participation
+      certificate_path: certificates/manual.pdf
+      file_path: certificates/manual.pdf
+    fileParameters:
+      certificate_file: null
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Sertifika basariyla olusturuldu.","certificate":{"id":1,"type":"participation","verification_code":"ABC123"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 400
+        content: '{"message":"Bu kullaniciya bu projeden zaten bu turde bir sertifika verilmis."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu projede sertifika olusturma yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/certificates/{id}'
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a certificate.'
+      description: 'Panel/admin endpoint exposed under `/admin/certificates/{id}` and `/panel/certificates/{id}`. Requires `certificates.delete` and delete access to the certificate project. The related period must be writable; completed periods require archive update permission. The certificate file is removed from storage and the operation is audit logged as `certificate.deleted`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Certificate id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Sertifika basariyla iptal edildi/silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu sertifikayi silme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/certificates
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel certificates.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/certificates` and `/panel/certificates`. Uses `certificates.view` through project-period context: global scope sees all project certificates, while scoped users are limited to allowed project ids. Optional `project_id` and `period_id` are validated against the action+scope matrix.
+
+        Returns paginated certificate records with user, project, period, verification code, stored path, and public download URL.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter; scoped by `certificates.view`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional recipient name, surname, email, or verification code search.'
+        required: false
+        example: ABC123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      search: ABC123
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"certificates":{"data":[{"id":1,"type":"participation","verification_code":"ABC123","download_url":"https://api.example.com/api/certificates/ABC123/download","user":{"id":5,"name":"Ayse"}}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/certificates/export
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel certificates.'
+      description: 'Panel/admin endpoint exposed under `/admin/certificates/export` and `/panel/certificates/export`. Uses `certificates.export` through project-period context: global scope exports all matching certificates, while scoped users are limited to allowed project ids. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter; scoped by `certificates.export`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Optional recipient name, surname, email, or verification code search.'
+        required: false
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      search: hakan@example.com
+      format: xlsx
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Must not be greater than 20 characters.'
+        required: false
+        example: amniihfqcoynlazgh
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+      format: amniihfqcoynlazgh
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Export file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/certificates
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a certificate.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/certificates` and `/panel/certificates`. Requires `certificates.create` and create access to the selected project. `period_id`, when provided, must belong to the project and must be writable; completed periods require archive update permission through the shared period lock logic.
+
+        The `type` field is normalized from Turkish/English labels into `participation`, `graduation`, or `achievement`. Duplicate certificates for the same user, project, period, and type are rejected. If no file/path is supplied, the backend generates a certificate PDF, assigns a verification code, stores it, audit logs `certificate.created`, and emails the recipient when an email exists.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      user_id:
+        custom: []
+        name: user_id
+        description: 'Recipient user id.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project id; scoped by `certificates.create`.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period id belonging to the selected project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Certificate type: participation, graduation, achievement. Turkish aliases such as katilim, mezuniyet, basari are normalized.'
+        required: true
+        example: participation
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      certificate_path:
+        custom: []
+        name: certificate_path
+        description: 'Optional existing storage path or URL.'
+        required: false
+        example: certificates/manual.pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      file_path:
+        custom: []
+        name: file_path
+        description: 'Optional alias for certificate_path.'
+        required: false
+        example: certificates/manual.pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      certificate_file:
+        custom: []
+        name: certificate_file
+        description: 'Optional certificate file; pdf, jpg, jpeg, png, max 20MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      user_id: 5
+      project_id: 1
+      period_id: 3
+      type: participation
+      certificate_path: certificates/manual.pdf
+      file_path: certificates/manual.pdf
+    fileParameters:
+      certificate_file: null
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Sertifika basariyla olusturuldu.","certificate":{"id":1,"type":"participation","verification_code":"ABC123"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 400
+        content: '{"message":"Bu kullaniciya bu projeden zaten bu turde bir sertifika verilmis."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu projede sertifika olusturma yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/certificates/{id}'
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a certificate.'
+      description: 'Panel/admin endpoint exposed under `/admin/certificates/{id}` and `/panel/certificates/{id}`. Requires `certificates.delete` and delete access to the certificate project. The related period must be writable; completed periods require archive update permission. The certificate file is removed from storage and the operation is audit logged as `certificate.deleted`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Certificate id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Sertifika basariyla iptal edildi/silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu sertifikayi silme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

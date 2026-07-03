@@ -123,4 +123,14 @@ class PermissionMatrixDomainSeparationTest extends TestCase
         $this->assertNotContains('participant.dashboard.view', $response->json('role.permissions.*.name'));
         $this->assertContains('users.view', $response->json('role.permissions.*.name'));
     }
-}
+    public function test_trainer_permissions_only_support_global_scope(): void
+    {
+        $this->actingSuperAdmin();
+
+        $response = $this->getJson('/api/panel/permissions-matrix')->assertOk();
+        $supportedScopeOptions = $response->json('supported_scope_options');
+
+        foreach (['trainers.view', 'trainers.create', 'trainers.update', 'trainers.delete', 'trainers.comment', 'trainers.email', 'trainers.export'] as $permission) {
+            $this->assertSame(['all', 'none'], $supportedScopeOptions[$permission] ?? null, $permission);
+        }
+    }}

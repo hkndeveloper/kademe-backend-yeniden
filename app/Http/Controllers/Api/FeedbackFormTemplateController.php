@@ -9,6 +9,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group Feedback
+ */
 class FeedbackFormTemplateController extends Controller
 {
     public function __construct(

@@ -10,6 +10,9 @@ use App\Models\Participant;
 use App\Models\Program;
 use Illuminate\Http\Request;
 
+/**
+ * @group Programs & Attendance
+ */
 class ProgramController extends Controller
 {
     private function shouldIncludeGraduatedParticipations($user): bool
@@ -30,7 +33,16 @@ class ProgramController extends Controller
     }
 
     /**
-     * Ogrencinin aktif projelerindeki programlari kendi yoklama ve kredi durumuyla getirir.
+     * List participant programs.
+     *
+     * Requires permission: `participant.programs.view`. Lists programs for the current user active/graduated participations with attendance, credit, and feedback state.
+     *
+     * @group Programs & Attendance
+     * @authenticated
+     *
+     * @response 200 {"programs":[{"id":1,"title":"Liderlik Atolyesi","status":"scheduled","attendance_status":"pending","credit":{"deducted":false,"net_amount":0},"feedback_submitted":false,"project":{"id":1,"name":"KADEME"}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function myPrograms(Request $request)
     {
@@ -153,6 +165,19 @@ class ProgramController extends Controller
         ]);
     }
 
+    /**
+     * Get participant program detail.
+     *
+     * Requires permission: `participant.programs.view`. The program must belong to one of the current user participations and must target the user role.
+     *
+     * @group Programs & Attendance
+     * @authenticated
+     *
+     * @urlParam id integer required Program id. Example: 1
+     * @response 200 {"program":{"id":1,"title":"Liderlik Atolyesi","status":"active","location":"Istanbul","project":{"id":1,"name":"KADEME"}}}
+     * @response 403 {"message":"Bu etkinligi goruntuleme yetkiniz bulunmuyor."}
+     * @response 404 {"message":"No query results for model [App\\Models\\Program]."}
+     */
     public function show($id, Request $request)
     {
         $program = Program::with(['project'])->findOrFail($id);

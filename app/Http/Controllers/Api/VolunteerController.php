@@ -15,6 +15,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @group Volunteer
+ */
 class VolunteerController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -26,6 +29,18 @@ class VolunteerController extends Controller
     ) {
     }
 
+    /**
+     * List volunteer opportunities and my applications.
+     *
+     * Requires permission: `participant.volunteer.apply`. Returns open volunteer opportunities and the authenticated user previous applications.
+     *
+     * @group Volunteer
+     * @authenticated
+     *
+     * @response 200 {"opportunities":[{"id":1,"title":"Etkinlik Gonullusu","status":"open"}],"my_applications":[{"id":1,"status":"pending","opportunity":{"id":1,"title":"Etkinlik Gonullusu"}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -83,6 +98,21 @@ class VolunteerController extends Controller
         ]);
     }
 
+    /**
+     * Apply to a volunteer opportunity.
+     *
+     * Requires permission: `participant.volunteer.apply`. The opportunity must be open, quota must be available, and the current user must not have applied before.
+     *
+     * @group Volunteer
+     * @authenticated
+     *
+     * @urlParam id integer required Volunteer opportunity id. Example: 1
+     * @bodyParam motivation_text string required Motivation text, min 20 characters. Example: Bu etkinlikte gonullu olmak istiyorum.
+     * @bodyParam notes string Optional additional note. Example: Hafta sonu uygunum.
+     * @response 201 {"message":"Gonullu basvurun alindi.","application":{"id":1,"status":"pending","opportunity":{"id":1,"title":"Etkinlik Gonullusu"}}}
+     * @response 422 {"message":"Bu gonullu ilanina daha once basvurdun."}
+     * @response 422 {"message":"Bu gonullu ilani icin kontenjan dolu."}
+     */
     public function apply(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([

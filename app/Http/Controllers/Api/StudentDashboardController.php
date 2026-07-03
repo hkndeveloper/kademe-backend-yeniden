@@ -24,6 +24,9 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Barryvdh\DomPDF\Facade\Pdf;
 
+/**
+ * @group Participant Dashboard
+ */
 class StudentDashboardController extends Controller
 {
     private function shouldIncludeGraduatedParticipations($user): bool
@@ -45,7 +48,16 @@ class StudentDashboardController extends Controller
     }
 
     /**
-     * Öğrencinin rozetleri, aktif kredi durumu ve kredi geçmişi
+     * Get participant dashboard summary.
+     *
+     * Requires permission: `participant.dashboard.view`. Returns active or alumni participations, recent credit history, KADEME+ badge data, monthly titles, and total score.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @response 200 {"participations":[{"id":1,"status":"active","credit":100}],"recent_credit_history":[{"amount":10,"type":"bonus"}],"earned_badges":[{"id":1,"name":"Liderlik"}],"monthly_titles":["Ayin Pergellisi"],"total_score":100,"profile_badge_frame":"gold"}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function summary(Request $request)
     {
@@ -92,6 +104,18 @@ class StudentDashboardController extends Controller
         ]);
     }
 
+    /**
+     * List the current participant projects.
+     *
+     * Requires permission: `participant.projects.view`. Alumni users may also see graduated participations.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @response 200 {"projects":[{"id":1,"name":"KADEME","slug":"kademe","type":"kademe_plus","participation_status":"active","graduation_status":null,"period":{"id":1,"name":"2026","status":"active"}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function projects(Request $request)
     {
         $user = $request->user();
@@ -125,6 +149,18 @@ class StudentDashboardController extends Controller
         ]);
     }
 
+    /**
+     * Get digital CV source data.
+     *
+     * Requires permission: `participant.cv.manage`. Returns editable saved draft data plus approved KADEME projects, badges, certificates, and credit history that can be shown in the mobile CV builder.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @response 200 {"profile":{"full_name":"Hakan Kekec","email":"hakan@example.com","summary":"Kariyer hedefim sosyal etki."},"saved_draft":{"form":{"fullName":"Hakan Kekec"}},"approved":{"title":"KADEME Onayli Dijital CV","total_credit":100,"completed_project_count":1,"badge_count":2,"certificate_count":1},"projects":[],"badges":[],"certificates":[],"credit_history":[]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function digitalCv(Request $request)
     {
         $user = $request->user()->loadMissing('profile');
@@ -231,6 +267,25 @@ class StudentDashboardController extends Controller
         ]);
     }
 
+    /**
+     * Save digital CV draft data.
+     *
+     * Requires permission: `participant.cv.manage`. Stores the editable CV builder payload under the user profile. The approved KADEME data is not overwritten by this endpoint.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @bodyParam form object required CV form payload.
+     * @bodyParam form.fullName string Optional displayed full name. Example: Hakan Kekec
+     * @bodyParam form.summary string Optional profile summary. Example: Sosyal etki odakli calismalar yapiyorum.
+     * @bodyParam form.skills string Optional skills text. Example: Liderlik, iletisim, proje yonetimi
+     * @bodyParam form.experience object[] Optional experience rows.
+     * @bodyParam form.education object[] Optional education rows.
+     * @bodyParam form.projects object[] Optional project rows.
+     * @bodyParam form.certificates object[] Optional certificate rows.
+     * @response 200 {"message":"Dijital CV taslagi kaydedildi.","saved_draft":{"form":{"fullName":"Hakan Kekec"},"saved_at":"2026-06-30T12:00:00+03:00"}}
+     * @response 422 {"message":"The form field is required.","errors":{"form":["The form field is required."]}}
+     */
     public function saveDigitalCv(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -288,6 +343,23 @@ class StudentDashboardController extends Controller
         ]);
     }
 
+    /**
+     * Generate a digital CV PDF.
+     *
+     * Requires permission: `participant.cv.manage`. Accepts the CV builder payload and returns a downloadable PDF response.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @bodyParam form object required CV form payload.
+     * @bodyParam approved object Optional approved KADEME summary data.
+     * @bodyParam projects object[] Optional approved project rows.
+     * @bodyParam badges object[] Optional badge rows.
+     * @bodyParam certificates object[] Optional certificate rows.
+     * @bodyParam credit_history object[] Optional credit rows.
+     * @response 200 {"download":"Binary PDF stream named {full-name}-kademe-cv.pdf"}
+     * @response 422 {"message":"The form field is required.","errors":{"form":["The form field is required."]}}
+     */
     public function digitalCvPdf(Request $request)
     {
         $validated = $request->validate([
@@ -316,6 +388,18 @@ class StudentDashboardController extends Controller
         return $pdf->download($fileName.'-kademe-cv.pdf');
     }
 
+    /**
+     * List participant project special modules.
+     *
+     * Requires permission: `participant.projects.view`. Returns only modules that belong to projects where the current user is a participant or alumni participant.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @response 200 {"projects":[{"project":{"id":1,"name":"KADEME","type":"kademe_plus"},"participation":{"id":1,"status":"active","credit":100},"modules":["reward_tiers","participants_by_module"],"reward_progress":{"badge_count":2,"credit":100,"eligible_count":1}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function projectSpecials(Request $request)
     {
         $user = $request->user();
@@ -522,6 +606,21 @@ class StudentDashboardController extends Controller
         ]);
     }
 
+    /**
+     * Enroll in a KADEME project module.
+     *
+     * Requires permission: `participant.projects.view`. The user must be a participant of the project and, when required, must accept module terms.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @urlParam projectId integer required Project id. Example: 1
+     * @urlParam moduleId integer required Module id. Example: 10
+     * @bodyParam accepted_terms boolean Optional, required when the module requires consent. Example: true
+     * @response 201 {"message":"Basvurunuz koordinator onayina iletildi.","enrollment":{"id":1,"status":"pending","consented_at":"2026-06-30T12:00:00+03:00"}}
+     * @response 403 {"message":"Bu projenin katilimcisi degilsiniz."}
+     * @response 422 {"message":"Bu modul icin basvuru su an kapali."}
+     */
     public function enrollKademeModule(Request $request, int $projectId, int $moduleId): JsonResponse
     {
         $user = $request->user();
@@ -578,6 +677,19 @@ class StudentDashboardController extends Controller
         ], 201);
     }
 
+    /**
+     * Get KADEME badge leaderboard for a project.
+     *
+     * Requires permission: `participant.projects.view`. The viewer must be a participant of the project. Returns top 50 rows and the viewer row.
+     *
+     * @group Participant Dashboard
+     * @authenticated
+     *
+     * @urlParam projectId integer required Project id. Example: 1
+     * @response 200 {"leaderboard":[{"rank":1,"user_id":1,"display_name":"Hakan Kekec","badge_count":5,"profile_badge_frame":"gold"}],"me":{"rank":1,"user_id":1,"display_name":"Hakan Kekec","badge_count":5}}
+     * @response 403 {"message":"Bu siralamayi gorme yetkiniz yok."}
+     * @response 404 {"message":"Not Found"}
+     */
     public function badgeLeaderboard(Request $request, int $projectId): JsonResponse
     {
         $user = $request->user();

@@ -19,6 +19,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group KPD
+ */
 class StudentKpdController extends Controller
 {
     use ResolvesProjectPeriodContext;
@@ -96,6 +99,17 @@ class StudentKpdController extends Controller
         return $participation;
     }
 
+    /**
+     * List KPD participant appointments and resources.
+     *
+     * Requires permission: `participant.kpd.view`. The current user must participate in a project that supports the `kpd_appointments` module. Returns appointments, counselors, rooms, KPD materials, and personal reports.
+     *
+     * @group KPD
+     * @authenticated
+     *
+     * @response 200 {"appointments":[{"id":1,"status":"scheduled"}],"counselors":[{"id":2,"name":"Ayse"}],"rooms":[{"id":1,"name":"Oda 1"}],"materials":[{"id":1,"title":"KPD Rehberi","download_url":"/digital-bohca/1/download"}],"reports":[{"id":1,"title":"Gorusme Raporu","download_url":"/kpd/reports/1/download"}]}
+     * @response 403 {"message":"KPD modulu yalnizca KPD projesi katilimcilari ve mezunlari icin kullanilabilir."}
+     */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -171,6 +185,19 @@ class StudentKpdController extends Controller
         ]);
     }
 
+    /**
+     * Download a personal KPD report.
+     *
+     * Requires permission: `participant.kpd.view` and KPD project participation. The report must belong to the current user. Returns direct download URL when configured, otherwise streams the file.
+     *
+     * @group KPD
+     * @authenticated
+     *
+     * @urlParam id integer required Report id. Example: 1
+     * @response 200 {"download_url":"https://storage.example.com/kpd/report.pdf"}
+     * @response 200 {"download":"Binary KPD report file stream"}
+     * @response 404 {"message":"Rapor dosyasi bulunamadi."}
+     */
     public function downloadReport(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $participation = $this->abortUnlessKpdParticipant($request);
@@ -183,6 +210,22 @@ class StudentKpdController extends Controller
         return $this->streamReport($report);
     }
 
+    /**
+     * Create a KPD appointment request.
+     *
+     * Requires permission: `participant.kpd.view` and KPD project participation. The selected room, counselor, and current user cannot have an overlapping non-cancelled appointment.
+     *
+     * @group KPD
+     * @authenticated
+     *
+     * @bodyParam counselor_id integer required Counselor user id. Example: 2
+     * @bodyParam room_id integer required KPD room id. Example: 1
+     * @bodyParam start_at datetime required Start date/time after now. Example: 2026-07-01 10:00:00
+     * @bodyParam end_at datetime required End date/time after start_at. Example: 2026-07-01 10:30:00
+     * @bodyParam notes string Optional participant note. Example: Ilk gorusme talebi.
+     * @response 201 {"message":"KPD randevu talebin olusturuldu.","appointment":{"id":1,"status":"scheduled"}}
+     * @response 422 {"message":"Secilen zaman araliginda uygun bir randevu olusturulamadi. Farkli saat veya oda deneyin."}
+     */
     public function store(Request $request): JsonResponse
     {
         $participation = $this->abortUnlessKpdParticipant($request);
@@ -247,6 +290,19 @@ class StudentKpdController extends Controller
         ], 201);
     }
 
+    /**
+     * Cancel a KPD appointment.
+     *
+     * Requires permission: `participant.kpd.view`. Only the current user scheduled, future appointments can be cancelled.
+     *
+     * @group KPD
+     * @authenticated
+     *
+     * @urlParam id integer required Appointment id. Example: 1
+     * @response 200 {"message":"Randevu iptal edildi.","appointment":{"id":1,"status":"cancelled"}}
+     * @response 422 {"message":"Yalnizca planlanmis randevular iptal edilebilir."}
+     * @response 422 {"message":"Baslamis veya gecmis randevu iptal edilemez."}
+     */
     public function cancel(Request $request, int $id): JsonResponse
     {
         $participation = $this->abortUnlessKpdParticipant($request);

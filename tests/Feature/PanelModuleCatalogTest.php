@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Project;
 use App\Models\RolePermissionScope;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
@@ -154,5 +155,112 @@ class PanelModuleCatalogTest extends TestCase
         $programs = $modules->firstWhere('id', 'participant_programs');
         $this->assertContains('participant.programs.view', $programs['enabled_actions']);
         $this->assertSame('self', $programs['scopes']['participant.programs.view']['scope_type']);
+    }
+    public function test_project_family_module_is_visible_only_when_scope_matches_required_project_type(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Diplomasi360 Test',
+            'slug' => 'diplomasi360-test',
+            'type' => 'diplomasi360',
+            'status' => 'active',
+        ]);
+
+        Permission::findOrCreate('projects.internships.view', 'web');
+        $role = Role::findOrCreate('diplomasi_family_viewer', 'web');
+        $role->givePermissionTo('projects.internships.view');
+
+        RolePermissionScope::query()->create([
+            'role_name' => 'diplomasi_family_viewer',
+            'permission_name' => 'projects.internships.view',
+            'scope_type' => 'selected_projects',
+            'scope_payload' => ['project_ids' => [$project->id]],
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'visitor',
+            'surname' => 'Diplomasi',
+            'email' => 'diplomasi-family@test.local',
+        ]);
+        $user->assignRole('diplomasi_family_viewer');
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/panel/modules')->assertOk();
+        $module = collect($response->json('modules'))->firstWhere('id', 'diplomasi360');
+
+        $this->assertNotNull($module);
+        $this->assertSame('/panel/diplomasi360', $module['href']);
+        $this->assertContains('projects.internships.view', $module['enabled_actions']);
+        $this->assertSame([$project->id], $module['matched_project_ids']);
+    }
+
+    public function test_project_family_module_is_hidden_when_action_scope_points_to_other_project_type(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Eurodesk Test',
+            'slug' => 'eurodesk-test',
+            'type' => 'eurodesk',
+            'status' => 'active',
+        ]);
+
+        Permission::findOrCreate('projects.internships.view', 'web');
+        $role = Role::findOrCreate('diplomasi_family_wrong_scope', 'web');
+        $role->givePermissionTo('projects.internships.view');
+
+        RolePermissionScope::query()->create([
+            'role_name' => 'diplomasi_family_wrong_scope',
+            'permission_name' => 'projects.internships.view',
+            'scope_type' => 'selected_projects',
+            'scope_payload' => ['project_ids' => [$project->id]],
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'visitor',
+            'surname' => 'WrongScope',
+            'email' => 'diplomasi-wrong-scope@test.local',
+        ]);
+        $user->assignRole('diplomasi_family_wrong_scope');
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/panel/modules')->assertOk();
+        $modules = collect($response->json('modules'));
+
+        $this->assertFalse($modules->contains(fn (array $module) => $module['id'] === 'diplomasi360'));
+    }
+
+    public function test_project_family_module_is_hidden_when_no_required_project_exists(): void
+    {
+        Permission::findOrCreate('projects.rewards.view', 'web');
+        $role = Role::findOrCreate('kademe_family_without_project', 'web');
+        $role->givePermissionTo('projects.rewards.view');
+
+        RolePermissionScope::query()->create([
+            'role_name' => 'kademe_family_without_project',
+            'permission_name' => 'projects.rewards.view',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'visitor',
+            'surname' => 'NoProject',
+            'email' => 'kademe-no-project@test.local',
+        ]);
+        $user->assignRole('kademe_family_without_project');
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/panel/modules')->assertOk();
+        $modules = collect($response->json('modules'));
+
+        $this->assertFalse($modules->contains(fn (array $module) => $module['id'] === 'kademe_plus'));
+        $this->assertFalse($modules->contains(fn (array $module) => $module['id'] === 'zirve_kademe'));
+    }
+
+    public function test_project_specific_modules_are_grouped_under_the_same_sidebar_section(): void
+    {
+        $modules = collect(config('panel_modules.modules'))->keyBy('id');
+
+        foreach (['diplomasi360', 'pergel', 'eurodesk', 'kademe_plus', 'zirve_kademe', 'kpd'] as $moduleId) {
+            $this->assertSame('project_special_modules', $modules->get($moduleId)['section'] ?? null, $moduleId);
+        }
     }
 }

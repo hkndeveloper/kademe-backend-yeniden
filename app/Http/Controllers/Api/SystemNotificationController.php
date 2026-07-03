@@ -6,11 +6,21 @@ use App\Http\Controllers\Controller;
 use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 
+/**
+ * @group User
+ */
 class SystemNotificationController extends Controller
 {
     /**
-     * Oturum acik kullanicinin okunmamis bildirimlerini listeler.
-     * GET /user/notifications
+     * List authenticated user notifications.
+     *
+     * Requires a valid token and KVKK consent. Returns the latest 30 notifications and unread count for the current user.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @response 200 {"notifications":[{"id":1,"type":"request.created","title":"Yeni bildirim","body":"Bildirim metni","is_read":false,"created_at":"2026-06-30T12:00:00+03:00"}],"unread_count":1}
+     * @response 401 {"message":"Unauthenticated."}
      */
     public function index(Request $request)
     {
@@ -33,8 +43,16 @@ class SystemNotificationController extends Controller
     }
 
     /**
-     * Bir bildirimi okundu olarak isaretle.
-     * PATCH /user/notifications/{id}/read
+     * Mark a notification as read.
+     *
+     * The notification must belong to the authenticated user.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @urlParam id integer required Notification id. Example: 1
+     * @response 200 {"message":"Bildirim okundu olarak isaretlendi."}
+     * @response 404 {"message":"No query results for model [App\\Models\\SystemNotification]."}
      */
     public function markRead(Request $request, int $id)
     {
@@ -52,8 +70,15 @@ class SystemNotificationController extends Controller
     }
 
     /**
-     * Tum bildirimleri okundu yap.
-     * POST /user/notifications/read-all
+     * Mark all notifications as read.
+     *
+     * Marks every unread notification of the authenticated user as read.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @response 200 {"message":"Tum bildirimler okundu olarak isaretlendi."}
+     * @response 401 {"message":"Unauthenticated."}
      */
     public function markAllRead(Request $request)
     {
@@ -70,8 +95,16 @@ class SystemNotificationController extends Controller
     }
 
     /**
-     * Bir bildirimi sil.
-     * DELETE /user/notifications/{id}
+     * Delete a notification.
+     *
+     * Deletes only a notification owned by the authenticated user.
+     *
+     * @group Users
+     * @authenticated
+     *
+     * @urlParam id integer required Notification id. Example: 1
+     * @response 200 {"message":"Bildirim silindi."}
+     * @response 404 {"message":"No query results for model [App\\Models\\SystemNotification]."}
      */
     public function destroy(Request $request, int $id)
     {

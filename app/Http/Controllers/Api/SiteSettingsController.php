@@ -17,6 +17,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
+/**
+ * @group Site Settings
+ */
 class SiteSettingsController extends Controller
 {
     private const PUBLIC_HOMEPAGE_CACHE_KEY = 'public.homepage.v1';
@@ -392,6 +395,16 @@ class SiteSettingsController extends Controller
         return $this->normalizeStoredMediaUrls($this->normalizeSettings($settings));
     }
 
+    /**
+     * Get public site configuration.
+     *
+     * Public endpoint used by web/mobile shells to render shared navigation, footer, contact, social, homepage/about/blog/FAQ labels, and computed counters. No bearer token is required. Sensitive Google Calendar/OAuth settings are explicitly removed from this response.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * @response 200 {"settings":{"general":{"site_name":"KADEME","site_tagline":"Gelecegin Liderlik Okulu"},"navigation":{"header_links":[]},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}
+     */
     public function public(): JsonResponse
     {
         $settings = $this->groupedSettings();
@@ -404,6 +417,16 @@ class SiteSettingsController extends Controller
         ]);
     }
 
+    /**
+     * Get public homepage payload.
+     *
+     * Public endpoint used by the homepage. No bearer token is required. Returns normalized public settings, computed counters, active projects, published blogs, and public programs/activities. The backend caches the assembled payload briefly and removes sensitive Google Calendar/OAuth settings before returning it.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * @response 200 {"settings":{"homepage":{"hero_title_line_1":"YETENEGINI","stats_mode":"auto"}},"computed_homepage_stats":[],"projects":[],"blogs":[],"programs":[]}
+     */
     public function homepage(Request $request): JsonResponse
     {
         $payload = Cache::remember(self::PUBLIC_HOMEPAGE_CACHE_KEY, now()->addSeconds(30), function () use ($request) {
@@ -446,6 +469,17 @@ class SiteSettingsController extends Controller
         return response()->json($payload);
     }
 
+    /**
+     * Get panel site settings.
+     *
+     * Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.view` or `content.site_settings.update`. Returns normalized settings with defaults merged, stored media URLs normalized through the media storage layer, and computed homepage counters for preview screens.
+     *
+     * @group Site Settings
+     * @authenticated
+     *
+     * @response 200 {"settings":{"general":{"site_name":"KADEME"},"contact":{"contact_email":"info@kademe.org"},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     */
     public function admin(Request $request): JsonResponse
     {
         abort_unless($this->canViewAdminSettings($request), 403, 'Bu islem icin yetkiniz bulunmuyor.');
@@ -456,6 +490,29 @@ class SiteSettingsController extends Controller
         ]);
     }
 
+    /**
+     * Update panel site settings.
+     *
+     * Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.update` or `content.site_settings.update`. Accepts grouped settings for public site configuration, stores scalar values as strings and arrays as JSON, normalizes the response with defaults, and clears the short-lived public homepage cache.
+     *
+     * Supported top-level groups are `general`, `contact`, `social_media`, `navigation`, `homepage`, `about`, `blog_page`, and `faq_page`. Unknown nested keys inside accepted groups are stored as provided, so mobile/web clients should send the full intended group shape when replacing complex arrays such as navigation links or homepage blocks.
+     *
+     * @group Site Settings
+     * @authenticated
+     *
+     * @bodyParam settings object required Grouped site settings payload.
+     * @bodyParam settings.general object Optional general labels. Example: {"site_name":"KADEME","site_tagline":"Gelecegin Liderlik Okulu"}
+     * @bodyParam settings.contact object Optional contact settings. Example: {"contact_email":"info@kademe.org"}
+     * @bodyParam settings.social_media object Optional social/media/webhook settings. Example: {"instagram_url":"https://instagram.com/kademe"}
+     * @bodyParam settings.navigation object Optional header/footer navigation arrays. Example: {"header_links":[{"label":"Ana Sayfa","href":"/"}]}
+     * @bodyParam settings.homepage object Optional homepage configuration. Example: {"stats_mode":"auto","block_order":["hero","projects"]}
+     * @bodyParam settings.about object Optional about page copy.
+     * @bodyParam settings.blog_page object Optional blog page copy.
+     * @bodyParam settings.faq_page object Optional FAQ page copy.
+     * @response 200 {"message":"Site ayarlari guncellendi.","settings":{"general":{"site_name":"KADEME"}},"computed_homepage_stats":[]}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The settings field is required."}
+     */
     public function update(Request $request): JsonResponse
     {
         abort_unless($this->canUpdateAdminSettings($request), 403, 'Bu islem icin yetkiniz bulunmuyor.');

@@ -10,10 +10,24 @@ use App\Models\Faq;
 use App\Models\Program;
 use Illuminate\Http\Request;
 
+/**
+ * @group Public Content
+ */
 class PublicContentController extends Controller
 {
     /**
-     * Yayinlanmis blog yazilarini getir.
+     * List published blog posts.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * Returns only published blog posts whose `published_at` is not in the future. Response is paginated.
+     *
+     * @queryParam search string Optional search term. Example: liderlik
+     * @queryParam category_id integer Optional blog category id. Example: 1
+     * @queryParam per_page integer Optional page size, max 24. Example: 12
+     * @response 200 {"blogs":{"current_page":1,"data":[{"id":1,"title":"KADEME Blog","slug":"kademe-blog","excerpt":"Kisa ozet"}],"per_page":12,"total":1}}
+     * @response 422 {"message":"The per page field must not be greater than 24.","errors":{"per_page":["The per page field must not be greater than 24."]}}
      */
     public function blogs(Request $request)
     {
@@ -47,7 +61,14 @@ class PublicContentController extends Controller
     }
 
     /**
-     * Blog detayi.
+     * Get a published blog post detail.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * @urlParam slug string required Blog slug. Example: ornek-blog-yazisi
+     * @response 200 {"blog":{"id":1,"title":"KADEME Blog","slug":"kademe-blog","content":"Blog icerigi"}}
+     * @response 404 {"message":"No query results for model [App\\Models\\BlogPost]."}
      */
     public function blogDetail($slug)
     {
@@ -61,7 +82,14 @@ class PublicContentController extends Controller
     }
 
     /**
-     * Sık sorulan soruları getir.
+     * List frequently asked questions.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * Returns FAQ records grouped by category.
+     *
+     * @response 200 {"faqs":{"Genel":[{"id":1,"question":"KADEME nedir?","answer":"KADEME gelisim ekosistemidir.","category":"Genel"}]}}
      */
     public function faqs()
     {
@@ -71,7 +99,21 @@ class PublicContentController extends Controller
     }
 
     /**
-     * Public faaliyet ozeti ve liste akisi.
+     * List public activities.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * Lists public programs/activities. Response is paginated.
+     *
+     * @queryParam search string Optional search term. Example: atelye
+     * @queryParam project_id integer Optional project id. Example: 1
+     * @queryParam status string Optional status: scheduled, active or completed. Example: scheduled
+     * @queryParam from date Optional start date lower bound. Example: 2026-01-01
+     * @queryParam to date Optional start date upper bound. Example: 2026-12-31
+     * @queryParam per_page integer Optional page size, max 48. Example: 12
+     * @response 200 {"programs":{"current_page":1,"data":[{"id":1,"title":"Liderlik Atolyesi","status":"scheduled","start_at":"2026-07-01T10:00:00+03:00","project":{"id":1,"name":"KADEME"}}],"per_page":12,"total":1}}
+     * @response 422 {"message":"The to field must be a date after or equal to from.","errors":{"to":["The to field must be a date after or equal to from."]}}
      */
     public function activities(Request $request)
     {
@@ -113,7 +155,14 @@ class PublicContentController extends Controller
     }
 
     /**
-     * Public faaliyet detayi.
+     * Get public activity detail.
+     *
+     * @group Public Content
+     * @unauthenticated
+     *
+     * @urlParam id integer required Program id. Example: 1
+     * @response 200 {"program":{"id":1,"title":"Liderlik Atolyesi","status":"scheduled","location":"Istanbul","photos":[]}}
+     * @response 404 {"message":"No query results for model [App\\Models\\Program]."}
      */
     public function activityDetail($id)
     {

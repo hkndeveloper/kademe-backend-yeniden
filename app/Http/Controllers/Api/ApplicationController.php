@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * @group Applications
+ */
 class ApplicationController extends Controller
 {
     public function __construct(
@@ -362,7 +365,16 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Kullanicinin kendi basvurularini listelemesi
+     * List the authenticated user applications.
+     *
+     * Requires KVKK consent. Returns the current user applications with project, period, program, waitlist, interview, rejection, and dynamic form entry summaries.
+     *
+     * @group Applications
+     * @authenticated
+     *
+     * @response 200 {"applications":[{"id":1,"status":"pending","waitlist_invitation_active":false,"project":{"id":1,"name":"KADEME"},"form_entries":[{"id":"motivation","label":"Motivasyon","type":"text","value":"Katiliyorum","file":null}]}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"KVKK onayi gereklidir."}
      */
     public function myApplications(Request $request)
     {
@@ -517,7 +529,20 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Bir projeye yeni basvuru yapma
+     * Create an authenticated project application.
+     *
+     * Requires KVKK consent. Dynamic application form fields are accepted in `form_data`; file fields must be uploaded as `multipart/form-data` under `form_files[field_id]`.
+     *
+     * @group Applications
+     * @authenticated
+     *
+     * @bodyParam project_id integer required Project id. Example: 1
+     * @bodyParam program_id integer Optional program id. Example: 5
+     * @bodyParam form_data object Optional dynamic form answers keyed by field id. Example: {"motivation":"Projeye katilmak istiyorum"}
+     * @bodyParam form_files object Optional dynamic form files keyed by field id.
+     * @bodyParam consent_accepted boolean Optional consent flag. Example: true
+     * @response 201 {"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending"}}
+     * @response 422 {"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}
      */
     public function store(Request $request)
     {
@@ -553,6 +578,27 @@ class ApplicationController extends Controller
         ], 201);
     }
 
+    /**
+     * Create a public project application as a guest applicant.
+     *
+     * @group Applications
+     * @unauthenticated
+     *
+     * This endpoint accepts dynamic application form fields. File fields must be sent as `multipart/form-data` under `form_files[field_id]`. The applicant may be matched to an existing user by email or created as a student user.
+     *
+     * @bodyParam project_id integer required Project id. Example: 1
+     * @bodyParam program_id integer Optional program id. Example: 5
+     * @bodyParam form_data object Optional dynamic form answers keyed by field id. Example: {"motivation":"Projeye katilmak istiyorum"}
+     * @bodyParam form_files object Optional dynamic form files keyed by field id.
+     * @bodyParam consent_accepted boolean Optional consent flag. Example: true
+     * @bodyParam applicant.name string required Applicant first name. Example: Hakan
+     * @bodyParam applicant.surname string required Applicant last name. Example: Kekec
+     * @bodyParam applicant.email string required Applicant email. Example: hakan@example.com
+     * @bodyParam applicant.phone string Optional applicant phone. Example: 05551234567
+     * @response 201 {"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending","form_data":{"motivation":"Projeye katilmak istiyorum"}}}
+     * @response 422 {"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}
+     * @response 422 {"message":"The applicant.email field must be a valid email address.","errors":{"applicant.email":["The applicant.email field must be a valid email address."]}}
+     */
     public function storePublic(Request $request)
     {
         $validated = $request->validate([
@@ -592,7 +638,16 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Basvuru detayi
+     * Get an authenticated user application detail.
+     *
+     * Returns only applications owned by the current user. Requires KVKK consent.
+     *
+     * @group Applications
+     * @authenticated
+     *
+     * @urlParam id integer required Application id. Example: 1
+     * @response 200 {"application":{"id":1,"status":"pending","project":{"id":1,"name":"KADEME"},"form_entries":[]}}
+     * @response 404 {"message":"No query results for model [App\\Models\\Application]."}
      */
     public function show($id, Request $request)
     {
@@ -606,6 +661,19 @@ class ApplicationController extends Controller
         ]);
     }
 
+    /**
+     * Respond to a waitlist invitation.
+     *
+     * Allows the current applicant to accept or reject an active waitlist invitation. Accepting may create or activate the participant record when quota rules allow it.
+     *
+     * @group Applications
+     * @authenticated
+     *
+     * @urlParam id integer required Application id. Example: 1
+     * @bodyParam decision string required Must be `accept` or `reject`. Example: accept
+     * @response 200 {"message":"Yedek liste daveti kabul edildi.","application":{"id":1,"status":"accepted","waitlist_invitation_active":false}}
+     * @response 422 {"message":"Yedek liste davet suresi doldu.","errors":{"application":["Yedek liste davet suresi doldu."]}}
+     */
     public function respondWaitlistInvitation(Request $request, int $id)
     {
         $validated = $request->validate([

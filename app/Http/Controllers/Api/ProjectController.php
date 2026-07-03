@@ -17,10 +17,22 @@ use App\Support\MediaStorage;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\Request;
 
+/**
+ * @group Projects
+ */
 class ProjectController extends Controller
 {
     /**
-     * Ziyaretcilerin ve ogrencilerin gorebilecegi acik projeleri listeler.
+     * List public active projects.
+     *
+     * @group Projects
+     * @unauthenticated
+     *
+     * Lists only active projects. Public clients can use this endpoint before login.
+     *
+     * @queryParam search string Optional project search term. Example: diplomasi
+     * @queryParam type string Optional project type filter. Example: fellowship
+     * @response 200 {"projects":[{"id":1,"name":"Diplomasi360","slug":"diplomasi360","status":"active","application_open":true,"periods":[]}]}
      */
     public function index(Request $request)
     {
@@ -53,7 +65,16 @@ class ProjectController extends Controller
     }
 
     /**
-     * Proje detayini ve basvuru formunu getirir.
+     * Get public project detail and active application form.
+     *
+     * @group Projects
+     * @unauthenticated
+     *
+     * Returns project details, active period, public programs, application form, and public project-specific module summaries.
+     *
+     * @urlParam slug string required Project slug. Example: diplomasi360
+     * @response 200 {"project":{"id":1,"name":"Diplomasi360","slug":"diplomasi360"},"current_period":{"id":1,"name":"2026"},"application_form":{"id":1,"fields":[]},"programs":{"summary":{"total":0,"upcoming":0,"completed":0}},"project_specials":{"module_keys":["mentors"]}}
+     * @response 404 {"message":"No query results for model [App\\Models\\Project]."}
      */
     public function show($slug)
     {

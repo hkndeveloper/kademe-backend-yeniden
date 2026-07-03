@@ -18,6 +18,9 @@ use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
+/**
+ * @group Permissions Matrix
+ */
 class PermissionMatrixController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -36,6 +39,16 @@ class PermissionMatrixController extends Controller
         private readonly PermissionResolver $permissionResolver
     ) {
     }
+
+    /**
+     * Get the permissions matrix workspace.
+     *
+     * Requires permission: `permissions.matrix.view` with global `all` scope. Ensures default roles/permissions exist, then returns legacy and granular permission catalogs, effective role permissions, supported scope options, default role scopes, role compatibility maps and stored role permission scopes.
+     *
+     * @group Permissions Matrix
+     * @response 200 {"roles":[{"id":1,"name":"coordinator","label":"Koordinator","user_count":4,"permissions":["projects.view"],"granular_effective":["projects.view"]}],"granular_matrix_groups":{"Projects":[{"name":"projects.view","label":"projects.view","group":"Projects"}]},"supported_scope_options":{"projects.view":["all","own_projects","assigned_projects","selected_projects","none"]},"role_scope_storage_ready":true}
+     * @response 403 {"message":"Bu islem icin tum sistem kapsami gerekir."}
+     */
 
     public function index(Request $request): JsonResponse
     {
@@ -90,6 +103,28 @@ class PermissionMatrixController extends Controller
             'default_role_scopes' => $this->defaultRoleScopes($roles),
         ]);
     }
+
+    /**
+     * Update the role permissions matrix.
+     *
+     * Requires permission: `permissions.matrix.update` with global `all` scope. Accepts either `granular_matrix` or legacy `matrix`, never both. Granular updates validate role/permission compatibility, sync Spatie permissions, optionally sync role permission scopes and clear the permission cache. Super admin always receives all permissions.
+     *
+     * @group Permissions Matrix
+     * @bodyParam granular_matrix array Optional granular matrix rows. Do not send with `matrix`.
+     * @bodyParam granular_matrix.*.role string required_with:granular_matrix Role name. Example: coordinator
+     * @bodyParam granular_matrix.*.permissions array Permission names for the role. Example: ["projects.view","programs.view"]
+     * @bodyParam granular_scopes array Optional role-level scope rows for granular permissions.
+     * @bodyParam granular_scopes.*.role string required_with:granular_scopes Role name. Example: coordinator
+     * @bodyParam granular_scopes.*.scopes array Scope definitions for permissions granted to the role.
+     * @bodyParam granular_scopes.*.scopes.*.permission_name string required Permission name. Example: projects.view
+     * @bodyParam granular_scopes.*.scopes.*.scope_type string required Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none. Example: own_projects
+     * @bodyParam granular_scopes.*.scopes.*.scope_payload object Optional scope payload. `selected_projects` keeps `project_ids`; `own_unit` keeps `unit`; dynamic scopes store an empty payload. Example: {"project_ids":[1,2]}
+     * @bodyParam matrix array Optional legacy matrix rows. Do not send with `granular_matrix`.
+     * @bodyParam matrix.*.role string required_with:matrix Role name. Example: staff
+     * @bodyParam matrix.*.permissions array Legacy permission names. Example: ["users.view"]
+     * @response 200 {"message":"Granular yetki matrisi guncellendi."}
+     * @response 422 {"message":"Yalnizca granular_matrix veya matrix (legacy) gonderin; ikisini birden gondermeyin."}
+     */
 
     public function update(Request $request): JsonResponse
     {
@@ -207,6 +242,17 @@ class PermissionMatrixController extends Controller
         ]);
     }
 
+    /**
+     * List users for permission overrides.
+     *
+     * Requires permission: `permissions.user_override.view` with global `all` scope. Returns non-banned users with Spatie roles and staff unit/title metadata for the override panel.
+     *
+     * @group Permissions Matrix
+     * @queryParam search string Optional search across name, surname and email. Example: ayse
+     * @response 200 {"users":[{"id":8,"name":"Ayse","surname":"Yilmaz","email":"ayse@example.com","role":"coordinator","roles":["coordinator"],"unit":"Program","title":"Koordinator"}]}
+     * @response 403 {"message":"Bu islem icin tum sistem kapsami gerekir."}
+     */
+
     public function users(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.user_override.view');
@@ -244,6 +290,17 @@ class PermissionMatrixController extends Controller
         ]);
     }
 
+    /**
+     * Get user permission overrides.
+     *
+     * Requires permission: `permissions.user_override.view` with global `all` scope. Returns the selected user, stored allow/deny overrides, sanitized scope payloads and the resolver output showing the final effective permissions.
+     *
+     * @group Permissions Matrix
+     * @urlParam id integer required User ID. Example: 8
+     * @response 200 {"user":{"id":8,"role":"coordinator","roles":["coordinator"]},"overrides":[{"permission_name":"projects.view","effect":"allow","scope_type":"selected_projects","scope_payload":{"project_ids":[1]}}],"resolved":{"permissions":[]}}
+     * @response 404 {"message":"No query results for model [App\\Models\\User] 8"}
+     */
+
     public function showUserOverrides(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.user_override.view');
@@ -277,6 +334,22 @@ class PermissionMatrixController extends Controller
             'granular_permission_groups' => config('permission_catalog.granular_permissions', []),
         ]);
     }
+
+    /**
+     * Update user permission overrides.
+     *
+     * Requires permission: `permissions.user_override.update` with global `all` scope. Replaces all overrides for the target user. Permission names must exist in the granular catalog or legacy map, must be compatible with the user role and scope types must be allowed for the role/permission pair. Clears the permission cache and logs `user_permission_overrides.updated`.
+     *
+     * @group Permissions Matrix
+     * @urlParam id integer required User ID. Example: 8
+     * @bodyParam overrides array required Complete replacement list. Send an empty array to clear overrides.
+     * @bodyParam overrides.*.permission_name string required Permission name. Example: projects.view
+     * @bodyParam overrides.*.effect string required Override effect. Allowed values: allow, deny. Example: allow
+     * @bodyParam overrides.*.scope_type string Optional scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none. Example: selected_projects
+     * @bodyParam overrides.*.scope_payload object Optional payload. Example: {"project_ids":[1,2]}
+     * @response 200 {"message":"Kullaniciya ozel yetkiler guncellendi.","resolved":{"permissions":[]}}
+     * @response 422 {"message":"Bu kullanici tipi icin bu permission atanamaz."}
+     */
 
     public function updateUserOverrides(Request $request, int $id): JsonResponse
     {
@@ -351,6 +424,15 @@ class PermissionMatrixController extends Controller
         ]);
     }
 
+    /**
+     * Get role catalog for the permission matrix.
+     *
+     * Requires permission: `permissions.matrix.view` with global `all` scope. Returns all Spatie roles, system-role markers, permission counts, assigned permissions, user counts and configured scope templates.
+     *
+     * @group Permissions Matrix
+     * @response 200 {"roles":[{"id":1,"name":"coordinator","label":"Koordinator","is_system":true,"permission_count":12,"user_count":4}],"scope_templates":[]}
+     */
+
     public function roleCatalog(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.view');
@@ -375,6 +457,19 @@ class PermissionMatrixController extends Controller
             'scope_templates' => config('permission_catalog.scope_templates', []),
         ]);
     }
+
+    /**
+     * Create a custom role.
+     *
+     * Requires permission: `permissions.matrix.update` with global `all` scope. The submitted name is normalized to a lowercase slug, system role names are reserved, and only valid granular permissions compatible with the role are assigned. Clears the permission cache and logs `role.custom.created`.
+     *
+     * @group Permissions Matrix
+     * @bodyParam name string required Custom role name. It is normalized to lowercase slug format and must be unique. Example: proje_denetcisi
+     * @bodyParam permissions array Optional granular permission names. Example: ["projects.view","logs.view"]
+     * @bodyParam permissions.* string Permission name. Example: projects.view
+     * @response 201 {"message":"Ozel rol olusturuldu.","role":{"id":9,"name":"proje_denetcisi","permissions":[{"name":"projects.view"}]}}
+     * @response 422 {"message":"Bu isim sistem rolu olarak ayrildi."}
+     */
 
     public function createRole(Request $request): JsonResponse
     {
@@ -412,6 +507,23 @@ class PermissionMatrixController extends Controller
         ], 201);
     }
 
+    /**
+     * Update a custom role.
+     *
+     * Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be changed through this endpoint. Updates granular permissions and optional role scopes, validates scope compatibility, clears the permission cache and logs `role.custom.updated`.
+     *
+     * @group Permissions Matrix
+     * @urlParam id integer required Custom role ID. Example: 9
+     * @bodyParam permissions array Optional granular permission names. Example: ["projects.view"]
+     * @bodyParam permissions.* string Permission name. Example: projects.view
+     * @bodyParam scopes array Optional role scope rows.
+     * @bodyParam scopes.*.permission_name string required_with:scopes Permission name. Example: projects.view
+     * @bodyParam scopes.*.scope_type string required_with:scopes Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none. Example: selected_projects
+     * @bodyParam scopes.*.scope_payload object Optional scope payload. Example: {"project_ids":[1]}
+     * @response 200 {"message":"Rol yetkileri guncellendi.","role":{"id":9,"name":"proje_denetcisi"}}
+     * @response 422 {"message":"Sistem rolleri buradan degistirilemez."}
+     */
+
     public function updateRole(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
@@ -448,6 +560,17 @@ class PermissionMatrixController extends Controller
         ]);
     }
 
+    /**
+     * Delete a custom role.
+     *
+     * Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be deleted and roles assigned to users must be unassigned first. Clears the permission cache and logs `role.custom.deleted`.
+     *
+     * @group Permissions Matrix
+     * @urlParam id integer required Custom role ID. Example: 9
+     * @response 200 {"message":"Rol silindi."}
+     * @response 422 {"message":"Bu role atanmis kullanicilar var. Once atamalari kaldirin."}
+     */
+
     public function deleteRole(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
@@ -466,6 +589,20 @@ class PermissionMatrixController extends Controller
 
         return response()->json(['message' => 'Rol silindi.']);
     }
+
+    /**
+     * Assign roles to a user.
+     *
+     * Requires permission: `permissions.user_override.update` with global `all` scope. Syncs Spatie roles and optionally updates the primary `users.role` column. Student/alumni roles cannot be combined with authority roles. Clears the permission cache and logs `user_roles.updated`.
+     *
+     * @group Permissions Matrix
+     * @urlParam id integer required User ID. Example: 8
+     * @bodyParam roles array required Role names to assign. Example: ["coordinator"]
+     * @bodyParam roles.* string required Existing role name. Example: coordinator
+     * @bodyParam primary_role string Optional primary role to store on the user record. Must be one of `roles`. Example: coordinator
+     * @response 200 {"message":"Kullanici rolleri guncellendi.","user":{"id":8,"role":"coordinator","roles":["coordinator"]},"resolved":{"permissions":[]}}
+     * @response 422 {"message":"Ogrenci/mezun rolleri baska rollerle birlestirilemez."}
+     */
 
     public function assignUserRoles(Request $request, int $id): JsonResponse
     {
@@ -523,8 +660,15 @@ class PermissionMatrixController extends Controller
     }
 
     /**
-     * Son rol matrisi ve kullanici override degisiklikleri (Spatie activity_log, log_name=permissions).
+     * List permission matrix audit logs.
+     *
+     * Requires either `permissions.matrix.view` with global `all` scope or `logs.view` with global `all` scope. Reads the Spatie `activity_log` entries with `log_name=permissions` and returns the latest 50 changes. If the activity log table/package is unavailable, an empty list with a warning is returned.
+     *
+     * @group Permissions Matrix
+     * @response 200 {"logs":[{"id":1,"description":"permission_granular_matrix.updated","created_at":"2026-06-30T12:00:00+00:00","causer":{"id":1,"name":"Admin","role":"super_admin"},"properties":{"roles":[{"role":"coordinator","granular_permission_count":12}]}}]}
+     * @response 403 {"message":"Bu global kayitlari goruntuleme yetkiniz bulunmuyor."}
      */
+
     public function audit(Request $request): JsonResponse
     {
         abort_unless(
@@ -966,6 +1110,7 @@ class PermissionMatrixController extends Controller
             'newsletter.',
             'chatbot.',
             'content.',
+            'trainers.',
         ])) {
             return ['all', 'none'];
         }

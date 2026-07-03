@@ -23,6 +23,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Support
+ */
 class SupportTicketController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -378,7 +381,15 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Kullanicinin kendi destek kayitlarini listele.
+     * List my support tickets.
+     *
+     * Participant/mobile endpoint. Requires `participant.support.manage`; the result is limited to tickets created by the authenticated student/alumni user and includes replies plus participant-facing attachment URLs.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @response 200 {"tickets":[{"id":1,"subject":"Teknik destek","category":"technical","status":"open","attachment_download_url":"/tickets/1/attachment","replies":[]}]}
+     * @response 401 {"message":"Unauthenticated."}
      */
     public function myTickets(Request $request): JsonResponse
     {
@@ -393,6 +404,21 @@ class SupportTicketController extends Controller
         ]);
     }
 
+    /**
+     * Export my support tickets.
+     *
+     * Participant/mobile endpoint. Requires `participant.support.manage`; exports only the authenticated user's tickets. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled by the application export stack.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 1
+     * @queryParam status string Optional status filter. Example: open
+     * @queryParam format string Optional export format. Example: csv
+     * @response 200 {"download":"Export file stream"}
+     * @response 401 {"message":"Unauthenticated."}
+     */
     public function exportMyTickets(Request $request)
     {
         $tickets = SupportTicket::query()
@@ -425,7 +451,24 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Giris yapmis kullanici icin yeni destek kaydi.
+     * Create an authenticated support ticket.
+     *
+     * Participant routes require `participant.support.manage`. Staff/admin panel usage requires `support.create`; if a project or period is supplied, the actor must have access to that project/period through the action+scope matrix. Student/alumni users can only create tickets for projects and periods where they are participants or graduates.
+     *
+     * Send as `multipart/form-data` when uploading an attachment. Official document categories such as `official_document`, `official_doc`, or `resmi_evrak` require an attachment. The ticket is auto-assigned to a project coordinator, category unit candidate, or fallback super admin when possible.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @bodyParam subject string required Ticket subject. Example: Teknik destek
+     * @bodyParam category string required Ticket category. Example: technical
+     * @bodyParam project_id integer Optional project id. Example: 1
+     * @bodyParam period_id integer Optional period id. Example: 1
+     * @bodyParam message string required Ticket message. Example: Sisteme girerken hata aliyorum.
+     * @bodyParam attachment file Optional attachment, max 10MB. Required for official document categories.
+     * @response 201 {"message":"Destek talebiniz basariyla alindi.","ticket":{"id":1,"subject":"Teknik destek","status":"in_progress"}}
+     * @response 403 {"message":"Bu proje icin destek talebi olusturma yetkiniz bulunmuyor."}
+     * @response 422 {"message":"The subject field is required.","errors":{"subject":["The subject field is required."]}}
      */
     public function store(Request $request): JsonResponse
     {
@@ -498,7 +541,24 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Ziyaretci iletisim formu.
+     * Create a public contact support ticket.
+     *
+     * Public contact endpoint. No bearer token is required; requests are throttled at route level. If `project_id` or a category maps to a known project/unit, the ticket may be auto-assigned and notification emails are sent through the configured notification service.
+     *
+     * Send as `multipart/form-data` when uploading an attachment. Official document categories may require an attachment.
+     *
+     * @group Contact
+     * @unauthenticated
+     *
+     * @bodyParam name string required Sender name. Example: Hakan Kekec
+     * @bodyParam email string required Sender email. Example: hakan@example.com
+     * @bodyParam subject string required Message subject. Example: Bilgi talebi
+     * @bodyParam category string required Message category. Example: general
+     * @bodyParam project_id integer Optional related project id. Example: 1
+     * @bodyParam message string required Message body. Example: Merhaba, bilgi almak istiyorum.
+     * @bodyParam attachment file Optional attachment file, max 10MB. Required for official document categories.
+     * @response 201 {"message":"Mesajiniz basariyla alindi. En kisa surede sizinle iletisime gececegiz.","ticket":{"id":1,"name":"Hakan Kekec","email":"hakan@example.com","subject":"Bilgi talebi","status":"open"}}
+     * @response 422 {"message":"The email field must be a valid email address.","errors":{"email":["The email field must be a valid email address."]}}
      */
     public function storePublic(Request $request): JsonResponse
     {
@@ -548,7 +608,19 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Mesaja yanit ekle.
+     * Reply to a support ticket.
+     *
+     * Ticket owners can reply to their own ticket. Staff/admin replies require `support.reply` and ticket visibility through global scope, assigned ownership, project scope, or ticket ownership. Upload attachments with `multipart/form-data`.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @urlParam id integer required Ticket id. Example: 1
+     * @bodyParam message string required Reply message. Example: Ek bilgi paylasiyorum.
+     * @bodyParam attachment file Optional reply attachment, max 10MB.
+     * @response 200 {"reply":{"id":1,"ticket_id":1,"message":"Ek bilgi paylasiyorum","attachment_download_url":"/tickets/replies/1/attachment"}}
+     * @response 403 {"message":"Bu ticket icin yanit yetkiniz yok."}
+     * @response 422 {"message":"The message field is required.","errors":{"message":["The message field is required."]}}
      */
     public function reply(Request $request, int $id): JsonResponse
     {
@@ -608,6 +680,20 @@ class SupportTicketController extends Controller
         ]);
     }
 
+    /**
+     * Download a support reply attachment.
+     *
+     * The current user must own the parent ticket or pass `support.view`/`support.reply` visibility. Returns a storage direct URL when configured; otherwise streams the binary file.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @urlParam id integer required Reply id. Example: 1
+     * @response 200 {"download_url":"https://storage.example.com/support-replies/file.pdf"}
+     * @response 200 {"download":"Binary reply attachment stream"}
+     * @response 403 {"message":"Bu ek dosyayi indirme yetkiniz yok."}
+     * @response 404 {"message":"Ek dosya bulunamadi."}
+     */
     public function downloadReplyAttachment(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $reply = SupportReply::query()
@@ -625,6 +711,20 @@ class SupportTicketController extends Controller
         return $this->streamReplyAttachment($reply);
     }
 
+    /**
+     * Download a support ticket attachment.
+     *
+     * The current user must own the ticket or pass `support.view`/`support.reply` visibility. Returns a storage direct URL when configured; otherwise streams the binary file.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @urlParam id integer required Ticket id. Example: 1
+     * @response 200 {"download_url":"https://storage.example.com/support-attachments/file.pdf"}
+     * @response 200 {"download":"Binary attachment stream"}
+     * @response 403 {"message":"Bu ek dosyayi indirme yetkiniz yok."}
+     * @response 404 {"message":"Ek dosya bulunamadi."}
+     */
     public function downloadTicketAttachment(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $ticket = SupportTicket::query()->findOrFail($id);
@@ -639,7 +739,21 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Admin tum ticketlari, koordinatör ise kendi proje havuzunu listeler.
+     * List panel support tickets.
+     *
+     * Panel/admin endpoint. Requires `support.view`; users with global scope see all tickets. Scoped users see tickets for manageable projects plus tickets assigned to them or created by them. The response is paginated and includes user, project, period, assignee, replies, and panel attachment URLs.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @queryParam status string Optional ticket status filter. Example: open
+     * @queryParam category string Optional category filter. Example: technical
+     * @queryParam project_id integer Optional project filter; scoped by `support.view`. Example: 1
+     * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
+     * @queryParam assigned_to integer Optional assignee user id filter. Example: 5
+     * @queryParam search string Optional subject, message, name, or email search. Example: belge
+     * @response 200 {"tickets":{"data":[{"id":1,"subject":"Teknik destek","status":"open","attachment_download_url":"/panel/support/tickets/1/attachment","replies":[]}]}}
+     * @response 403 {"message":"This action is unauthorized."}
      */
     public function index(Request $request): JsonResponse
     {
@@ -722,6 +836,23 @@ class SupportTicketController extends Controller
         ]);
     }
 
+    /**
+     * Export panel support tickets.
+     *
+     * Panel/admin endpoint. Requires `support.export`; users with global scope export all matching tickets, while scoped users export only manageable project tickets plus tickets assigned to or created by them. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @queryParam status string Optional ticket status filter. Example: closed
+     * @queryParam category string Optional category filter. Example: official_doc
+     * @queryParam project_id integer Optional project filter; scoped by `support.export`. Example: 1
+     * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
+     * @queryParam search string Optional subject, message, name, or email search. Example: evrak
+     * @queryParam format string Optional export format. Example: xlsx
+     * @response 200 {"download":"Export file stream"}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'support.export');
@@ -818,7 +949,16 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Destek atamasi icin sinirli kullanici listesi (users.view olmadan).
+     * List users assignable to support tickets.
+     *
+     * Panel/admin endpoint. Requires `support.assign`. This intentionally returns a limited active admin/coordinator/staff list without requiring `users.view`. Without global support assign scope, candidates are restricted to users who can view the selected/manageable project scope.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @queryParam project_id integer Optional project id used to narrow assignable candidates. Example: 1
+     * @response 200 {"users":[{"id":2,"name":"Ayse","surname":"Yilmaz","role":"staff"}]}
+     * @response 403 {"message":"Bu proje icin destek atama yetkiniz yok."}
      */
     public function assignableUsers(Request $request): JsonResponse
     {
@@ -870,7 +1010,18 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Ticket'i personele ata. Sadece super admin.
+     * Assign a support ticket.
+     *
+     * Panel/admin endpoint. Requires `support.assign` and ticket visibility through global scope, project scope, ownership, or current assignment. The selected assignee must be an active super admin/coordinator/staff user; for project-scoped assignment, the assignee must also have `support.view` on the ticket project.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @urlParam id integer required Ticket id. Example: 1
+     * @bodyParam assigned_to integer required Active admin/coordinator/staff user id. Example: 2
+     * @response 200 {"message":"Ticket atandi.","ticket":{"id":1,"assigned_to":2,"status":"in_progress"}}
+     * @response 403 {"message":"Bu ticket icin atama yetkiniz yok."}
+     * @response 422 {"message":"Secilen kullanici bu destek talebinin proje kapsaminda goruntuleme yetkisine sahip degil."}
      */
     public function assign(Request $request, int $id): JsonResponse
     {
@@ -922,7 +1073,16 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * Ticket'i kapat.
+     * Close a support ticket.
+     *
+     * Panel/admin endpoint. Requires `support.close` and ticket visibility through global scope, project scope, ownership, or current assignment. Closing the ticket notifies the owner when an email is available.
+     *
+     * @group Support
+     * @authenticated
+     *
+     * @urlParam id integer required Ticket id. Example: 1
+     * @response 200 {"message":"Ticket kapatildi.","ticket":{"id":1,"status":"closed"}}
+     * @response 403 {"message":"Bu ticketi kapatma yetkiniz yok."}
      */
     public function close(Request $request, int $id): JsonResponse
     {

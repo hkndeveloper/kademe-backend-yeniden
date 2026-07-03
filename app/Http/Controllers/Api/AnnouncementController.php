@@ -20,6 +20,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * @group Announcements & Inbox
+ */
 class AnnouncementController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -273,9 +276,15 @@ class AnnouncementController extends Controller
             });
     }
     /**
-     * GET /staff/announcements
-     * Staff kullanicisinin gorebilecegi aktif duyurulari listele.
+     * List staff-visible announcements.
+     *
+     * Requires permission: `announcements.view`. Returns active announcements visible to the current staff user by role and target unit, with optional category filtering. Expired and future announcements are hidden.
+     *
+     * @group Announcements & Inbox
+     * @queryParam category string Optional category filter. Example: general
+     * @response 200 {"announcements":{"data":[{"id":1,"title":"Toplanti","category":"general","project":{"id":1,"name":"KADEME"}}],"current_page":1}}
      */
+
     public function myAnnouncements(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.view');
@@ -303,6 +312,19 @@ class AnnouncementController extends Controller
             'announcements' => $query->paginate(20),
         ]);
     }
+
+    /**
+     * List announcements visible to the current recipient.
+     *
+     * Requires permission: `participant.inbox.view`. Filters announcements by the current user role, participant projects/periods, publish window, expiry window, target units and optional category.
+     *
+     * @group Announcements & Inbox
+     * @authenticated
+     * @queryParam category string Optional category filter. Example: general
+     * @response 200 {"announcements":[{"id":1,"title":"Program duyurusu","content":"Duyuru metni","category":"general","project":{"id":1,"name":"KADEME"}}]}
+     * @response 401 {"message":"Unauthenticated."}
+     * @response 403 {"message":"This action is unauthorized."}
+     */
 
     public function recipientAnnouncements(Request $request)
     {
@@ -364,6 +386,17 @@ class AnnouncementController extends Controller
         ]);
     }
 
+    /**
+     * Export staff-visible announcements.
+     *
+     * Requires permission: `announcements.export`. Applies the same staff recipient visibility as `myAnnouncements` and exports through the shared admin export responder.
+     *
+     * @group Announcements & Inbox
+     * @queryParam category string Optional category filter. Example: general
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: xlsx
+     * @response 200 {"download":"Staff announcements export file stream"}
+     */
+
     public function exportMyAnnouncements(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.export');
@@ -411,9 +444,18 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * GET /admin/announcements
-     * Tüm duyuruları listele.
+     * List panel announcements.
+     *
+     * Requires permission: `announcements.view`. Global scope can list all announcements; project-scoped users see announcements in manageable projects plus their own global announcements. `period_id` resolves and validates the owning project.
+     *
+     * @group Announcements & Inbox
+     * @queryParam category string Optional category filter. Example: general
+     * @queryParam project_id integer Optional project filter. Requires access to the project for `announcements.view`. Example: 1
+     * @queryParam period_id integer Optional period filter. The period project is used as the announcement project. Example: 3
+     * @response 200 {"announcements":{"data":[{"id":1,"title":"Toplanti","project":{"id":1,"name":"KADEME"}}],"current_page":1}}
+     * @response 403 {"message":"Bu proje kapsaminda islem yapamazsiniz."}
      */
+
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.view');
@@ -439,6 +481,19 @@ class AnnouncementController extends Controller
 
         return response()->json(['announcements' => $query->paginate(20)]);
     }
+
+    /**
+     * Export panel announcements.
+     *
+     * Requires permission: `announcements.export`. Applies the same manageable announcement scope and filters as the list endpoint, then exports through the shared admin export responder.
+     *
+     * @group Announcements & Inbox
+     * @queryParam category string Optional category filter. Example: general
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam period_id integer Optional period filter. Example: 3
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: csv
+     * @response 200 {"download":"Announcements export file stream"}
+     */
 
     public function export(Request $request)
     {
@@ -489,9 +544,27 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * POST /admin/announcements
-     * Yeni duyuru oluştur.
+     * Create a panel announcement.
+     *
+     * Requires permission: `announcements.create`. Project and period values are checked against the caller project scope; completed periods require archive update permission. Target roles, target units and direct user IDs are resolved through the sender scope. Optional `send_sms` and `send_email` additionally require their own permissions and create communication logs through the notification service.
+     *
+     * @group Announcements & Inbox
+     * @bodyParam title string required Announcement title. Example: Program duyurusu
+     * @bodyParam content string required Announcement content. Example: Yarin toplantimiz vardir.
+     * @bodyParam category string Optional category. Example: general
+     * @bodyParam target_roles array Optional target roles. Allowed values: super_admin, coordinator, staff, student, alumni. Example: ["student"]
+     * @bodyParam target_units array Optional target units. Allowed values: media, operations, program, finance, official_affairs. Example: ["program"]
+     * @bodyParam project_id integer Optional project ID. Example: 1
+     * @bodyParam period_id integer Optional period ID; sets project_id from the period. Example: 3
+     * @bodyParam published_at datetime Optional publish time. Example: 2026-07-01 09:00:00
+     * @bodyParam expires_at datetime Optional expiry time. Example: 2026-07-31 23:59:00
+     * @bodyParam send_sms boolean Optional send SMS immediately. Requires `announcements.send_sms`. Example: false
+     * @bodyParam send_email boolean Optional send email immediately. Requires `announcements.send_email`. Example: true
+     * @bodyParam email_attachment file Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB.
+     * @response 201 {"message":"Duyuru olusturuldu.","announcement":{"id":1,"title":"Program duyurusu"},"target_count":25,"email_sent_to":20,"sms_sent_to":0}
+     * @response 403 {"message":"Bu birim hedefi icin yetkiniz bulunmuyor."}
      */
+
     public function store(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.create');
@@ -573,8 +646,16 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * GET /admin/announcements/{id}
+     * Get panel announcement details.
+     *
+     * Requires permission: `announcements.view` and access to the announcement. Global users can view all; project-scoped users can view manageable project announcements or their own global announcements.
+     *
+     * @group Announcements & Inbox
+     * @urlParam id integer required Announcement ID. Example: 1
+     * @response 200 {"announcement":{"id":1,"title":"Program duyurusu","project":{"id":1,"name":"KADEME"}}}
+     * @response 403 {"message":"Bu duyuru icin yetkiniz bulunmuyor."}
      */
+
     public function show(int $id)
     {
         $announcement = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->findOrFail($id);
@@ -584,8 +665,25 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * PUT /admin/announcements/{id}
+     * Update a panel announcement.
+     *
+     * Requires permission: `announcements.update` and access to the announcement. Completed periods require archive update permission. Project changes are checked against the caller project scope; removing the project link is only allowed with global scope. Target units are validated against the caller unit targets.
+     *
+     * @group Announcements & Inbox
+     * @urlParam id integer required Announcement ID. Example: 1
+     * @bodyParam title string Optional title. Example: Guncel duyuru
+     * @bodyParam content string Optional content. Example: Guncellenen duyuru metni.
+     * @bodyParam category string Optional category. Example: general
+     * @bodyParam target_roles array Optional target roles. Example: ["student","alumni"]
+     * @bodyParam target_units array Optional target units. Example: ["program"]
+     * @bodyParam project_id integer Optional project ID or null. Example: 1
+     * @bodyParam period_id integer Optional period ID or null. Example: 3
+     * @bodyParam published_at datetime Optional publish time. Example: 2026-07-01 09:00:00
+     * @bodyParam expires_at datetime Optional expiry time. Example: 2026-07-31 23:59:00
+     * @response 200 {"message":"Duyuru guncellendi.","announcement":{"id":1,"title":"Guncel duyuru"}}
+     * @response 403 {"message":"Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir."}
      */
+
     public function update(Request $request, int $id)
     {
         $announcement = Announcement::findOrFail($id);
@@ -635,8 +733,16 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * DELETE /admin/announcements/{id}
+     * Delete a panel announcement.
+     *
+     * Requires permission: `announcements.delete` and access to the announcement. Completed periods require archive update permission before deletion.
+     *
+     * @group Announcements & Inbox
+     * @urlParam id integer required Announcement ID. Example: 1
+     * @response 200 {"message":"Duyuru silindi."}
+     * @response 403 {"message":"Bu duyuru icin yetkiniz bulunmuyor."}
      */
+
     public function destroy(int $id)
     {
         $announcement = Announcement::findOrFail($id);
@@ -648,9 +754,20 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * POST /admin/announcements/send-sms
-     * Bağımsız SMS gönderim endpoint'i.
+     * Send a standalone SMS announcement.
+     *
+     * Requires permission: `announcements.send_sms`. Project and unit targets are validated against caller scope. Non-global senders can target participants in manageable projects, staff in allowed units, selected accessible users, or themselves.
+     *
+     * @group Announcements & Inbox
+     * @bodyParam message string required SMS message, max 160 characters. Example: Toplanti saat 10:00
+     * @bodyParam target_roles array Optional target roles. Example: ["student"]
+     * @bodyParam target_units array Optional target units. Example: ["program"]
+     * @bodyParam project_id integer Optional project ID. Example: 1
+     * @bodyParam user_ids array Optional direct user IDs. Example: [12,13]
+     * @response 200 {"message":"SMS gonderimi tamamlandi.","sent_to":12}
+     * @response 403 {"message":"Secilen kullanicilarin bir kismi erisim kapsaminiz disinda."}
      */
+
     public function sendSms(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.send_sms');
@@ -681,9 +798,22 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * POST /admin/announcements/send-email
-     * Bağımsız e-posta gönderim endpoint'i.
+     * Send a standalone email announcement.
+     *
+     * Requires permission: `announcements.send_email`. Project, unit and direct user targets are validated with the same target resolver as SMS. Optional attachment is stored through `MediaStorage` and passed to the notification service.
+     *
+     * @group Announcements & Inbox
+     * @bodyParam subject string required Email subject. Example: Program duyurusu
+     * @bodyParam body string required Email body. Example: Merhaba, yeni program duyurusu ektedir.
+     * @bodyParam target_roles array Optional target roles. Example: ["student"]
+     * @bodyParam target_units array Optional target units. Example: ["program"]
+     * @bodyParam project_id integer Optional project ID. Example: 1
+     * @bodyParam user_ids array Optional direct user IDs. Example: [12,13]
+     * @bodyParam attachment file Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB.
+     * @response 200 {"message":"E-posta gonderimi tamamlandi.","sent_to":12}
+     * @response 200 {"message":"E-posta gonderimi basarisiz veya alici e-postasi bulunamadi.","sent_to":0}
      */
+
     public function sendEmail(Request $request)
     {
         $this->abortUnlessAllowed($request, 'announcements.send_email');
@@ -727,6 +857,23 @@ class AnnouncementController extends Controller
     }
 
     // ─── YARDIMCI METODLAR ────────────────────────────────────────────────────
+
+    /**
+     * List announcement communication logs.
+     *
+     * Requires permission: `announcements.view`. Global users can see all email/SMS logs; project-scoped users see logs they sent or logs in accessible projects. Supports type, status, project, sender, search and date filters.
+     *
+     * @group Announcements & Inbox
+     * @queryParam type string Optional channel filter. Allowed values: email, sms. Example: email
+     * @queryParam status string Optional status filter. Example: sent
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam sender_id integer Optional sender user ID. Example: 8
+     * @queryParam search string Optional subject/content search. Example: program
+     * @queryParam date_from date Optional start date. Example: 2026-06-01
+     * @queryParam date_to date Optional end date. Must be after or equal to date_from. Example: 2026-06-30
+     * @queryParam per_page integer Optional page size between 1 and 100. Defaults to 20. Example: 20
+     * @response 200 {"logs":{"data":[{"id":1,"type":"email","recipients_count":20,"attachment_download_url":"/panel/announcements/communication-logs/1/attachment"}],"current_page":1}}
+     */
 
     public function communicationLogs(Request $request): JsonResponse
     {
@@ -791,6 +938,23 @@ class AnnouncementController extends Controller
             'logs' => $logs,
         ]);
     }
+
+    /**
+     * Export announcement communication logs.
+     *
+     * Requires permission: `announcements.view`. Applies the same communication log scope and filters as the list endpoint and exports through the shared admin export responder.
+     *
+     * @group Announcements & Inbox
+     * @queryParam type string Optional channel filter. Allowed values: email, sms. Example: email
+     * @queryParam status string Optional status filter. Example: sent
+     * @queryParam project_id integer Optional project filter. Example: 1
+     * @queryParam sender_id integer Optional sender user ID. Example: 8
+     * @queryParam search string Optional subject/content search. Example: program
+     * @queryParam date_from date Optional start date. Example: 2026-06-01
+     * @queryParam date_to date Optional end date. Example: 2026-06-30
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: xlsx
+     * @response 200 {"download":"Communication logs export file stream"}
+     */
 
     public function exportCommunicationLogs(Request $request)
     {
@@ -868,6 +1032,19 @@ class AnnouncementController extends Controller
             $rows,
         );
     }
+
+    /**
+     * Download a communication log attachment.
+     *
+     * Requires permission: `announcements.view`. The caller can download an attachment if they sent the log, have global scope, or can access the log project. Depending on storage configuration the response is a JSON direct URL or streamed file download.
+     *
+     * @group Announcements & Inbox
+     * @urlParam id integer required Communication log ID. Example: 1
+     * @response 200 {"download_url":"https://storage.example.com/announcement_attachments/file.pdf"}
+     * @response 200 {"download":"Binary attachment file stream"}
+     * @response 403 {"message":"Bu ek dosyayi indirme yetkiniz yok."}
+     * @response 404 {"message":"Ek dosya storage uzerinde bulunamadi."}
+     */
 
     public function downloadCommunicationAttachment(Request $request, int $id): JsonResponse|StreamedResponse
     {

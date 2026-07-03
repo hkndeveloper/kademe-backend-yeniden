@@ -20,6 +20,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Role;
 
+/**
+ * @group Staff
+ */
 class StaffController extends Controller
 {
     use AuthorizesGranularPermissions;
@@ -148,6 +151,16 @@ class StaffController extends Controller
             ->all();
     }
 
+    /**
+     * Get staff creation options.
+     *
+     * Requires permission: `staff.update` with global `all` scope. Returns assignable non-participant, non-super-admin Spatie roles for the panel staff creation form.
+     *
+     * @group Staff
+     * @response 200 {"roles":[{"name":"coordinator","label":"Koordinator"},{"name":"staff","label":"Personel"}]}
+     * @response 403 {"message":"Calisan olusturmak icin tum sistem kapsami gerekir."}
+     */
+
     public function createOptions(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.update');
@@ -169,6 +182,26 @@ class StaffController extends Controller
 
         return response()->json(['roles' => $roles]);
     }
+
+    /**
+     * Create a staff account.
+     *
+     * Requires permission: `staff.update` with global `all` scope. Creates an active coordinator/staff/custom authority user, syncs the selected role, creates the staff profile, assigns coordinated projects for coordinators or assigned projects for other staff, and sends the password setup email.
+     *
+     * @group Staff
+     * @bodyParam name string required Staff first name. Example: Ayse
+     * @bodyParam surname string required Staff surname. Example: Yilmaz
+     * @bodyParam email string required Unique email address. Example: ayse@example.com
+     * @bodyParam phone string Optional phone number. Example: 05550000000
+     * @bodyParam tc_no string Optional identity number, exactly 11 characters. Example: 12345678901
+     * @bodyParam role string required Existing role name except super_admin/student/alumni/visitor. Example: coordinator
+     * @bodyParam unit string Optional unit name. Defaults to Genel. Example: Program
+     * @bodyParam title string Optional staff title. Allowed values: researcher, specialist, coordinator, manager, other. Example: coordinator
+     * @bodyParam contract_type string Optional contract type. Example: full_time
+     * @bodyParam project_ids array Optional project IDs to assign. Coordinators receive coordinated projects; other staff receive assigned projects. Example: [1,2]
+     * @response 201 {"message":"Calisan olusturuldu. Sifre belirleme baglantisi e-posta ile gonderildi.","staff":{"id":8,"role":"coordinator","projects":[{"id":1,"name":"KADEME","assignment_type":"coordinator"}]},"reset_email_status":"passwords.sent"}
+     * @response 422 {"message":"Bu rol personel ekranindan olusturulamaz."}
+     */
 
     public function store(Request $request)
     {
@@ -246,9 +279,15 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /staff/projects
-     * Personelin gorev kapsamindaki projeleri dondurur.
+     * List the current staff user projects.
+     *
+     * Requires permission: `projects.view`. Project visibility comes from `PermissionResolver::projectIdsForPermission`; if no project is visible an empty assignment response is returned. Media unit users are labelled with an `all_active_for_media_unit` scope in the response.
+     *
+     * @group Staff
+     * @response 200 {"scope":"assignment","projects":[{"id":1,"name":"KADEME","active_period":{"id":3,"name":"2026 Bahar"},"participant_summary":{"total":40,"active":35,"graduates":5}}]}
+     * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
+
     public function myProjects(Request $request)
     {
         $this->abortUnlessAllowed($request, 'projects.view');
@@ -315,6 +354,16 @@ class StaffController extends Controller
         ]);
     }
 
+    /**
+     * Export the current staff user projects.
+     *
+     * Requires permission: `projects.export`. Uses the same project visibility resolver as the staff project list and exports through the shared admin export responder.
+     *
+     * @group Staff
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: xlsx
+     * @response 200 {"download":"Staff project export file stream"}
+     */
+
     public function exportMyProjects(Request $request)
     {
         $this->abortUnlessAllowed($request, 'projects.export');
@@ -357,9 +406,16 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /staff/members
-     * Personelin kendi birimine ait sade ekip listesini dondurur.
+     * List members visible to the current staff user.
+     *
+     * Requires permission: `staff.view`. The current user must have a staff unit. Rows are filtered through `PermissionResolver::applyUserScope`, so global users can see all matching staff while own-unit users only see their unit.
+     *
+     * @group Staff
+     * @queryParam search string Optional name, email or title search. Example: uzman
+     * @response 200 {"unit":"Program","members":{"data":[{"id":8,"name":"Ayse","role":"coordinator","staff_profile":{"unit":"Program"}}],"current_page":1}}
+     * @response 200 {"members":[],"unit":null,"message":"Kullaniciya bagli birim bilgisi bulunmuyor."}
      */
+
     public function unitMembers(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
@@ -398,6 +454,18 @@ class StaffController extends Controller
             'members' => $query->orderBy('name')->paginate(20),
         ]);
     }
+
+    /**
+     * Export members visible to the current staff user.
+     *
+     * Requires permission: `staff.export`. The current user must have a staff unit and the export rows are filtered through `PermissionResolver::applyUserScope`.
+     *
+     * @group Staff
+     * @queryParam search string Optional name, email or title search. Example: uzman
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: csv
+     * @response 200 {"download":"Unit members export file stream"}
+     * @response 422 {"message":"Kullaniciya bagli birim bilgisi bulunmuyor."}
+     */
 
     public function exportUnitMembers(Request $request)
     {
@@ -448,9 +516,19 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /admin/staff
-     * Tüm personel listesi (filtreli).
+     * List panel staff.
+     *
+     * Requires permission: `staff.view`. Returns authority users and users with staff/project assignments. Global scope can see every staff record; non-global staff view scope is limited to the caller staff unit through `applyCoordinatorUnitScope`.
+     *
+     * @group Staff
+     * @queryParam project_id integer Optional project assignment filter. Example: 1
+     * @queryParam unit string Optional staff unit filter. Example: Program
+     * @queryParam title string Optional title search. Example: coordinator
+     * @queryParam role string Optional role filter. Example: staff
+     * @queryParam search string Optional name, surname, email or phone search. Example: ayse
+     * @response 200 {"staff":{"data":[{"id":8,"name":"Ayse","role":"coordinator","projects":[{"id":1,"assignment_type":"coordinator"}]}],"current_page":1}}
      */
+
     public function index(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
@@ -498,9 +576,14 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /admin/staff/active
-     * Şu anda giriş yapmış (aktif) ve izinli personeller.
+     * List active and on-leave staff.
+     *
+     * Requires permission: `staff.view`. Active staff are approximated by Sanctum tokens used in the last 8 hours; on-leave staff are approved leave requests covering today. Non-global viewers are limited to their unit.
+     *
+     * @group Staff
+     * @response 200 {"active_staff":[{"id":8,"name":"Ayse","role":"coordinator"}],"on_leave":[{"id":9,"name":"Mehmet","role":"staff"}]}
      */
+
     public function active(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
@@ -531,9 +614,16 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /admin/staff/{id}
-     * Personel detayı (özlük bilgileri dahil).
+     * Get panel staff details.
+     *
+     * Requires permission: `staff.view`. The target must be an authority/staff-like user. Unit access is enforced through `abortUnlessUnitAllowed`; personal document paths are returned with storage URLs and project assignments are summarized.
+     *
+     * @group Staff
+     * @urlParam id integer required Staff user ID. Example: 8
+     * @response 200 {"staff":{"id":8,"name":"Ayse","role":"coordinator","staff_profile":{"unit":"Program","personal_documents":[{"label":"CV","url":"https://storage.example.com/cv.pdf"}]},"projects":[{"id":1,"assignment_type":"coordinator"}]}}
+     * @response 403 {"message":"Bu birim icin yetkiniz bulunmuyor."}
      */
+
     public function show(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
@@ -562,6 +652,19 @@ class StaffController extends Controller
 
         return response()->json(['staff' => $user]);
     }
+
+    /**
+     * Sync staff project assignments.
+     *
+     * Requires permission: `staff.update` with global `all` scope. Super admin and participant/visitor accounts cannot be managed here. Coordinators receive `coordinated_project_ids`; other staff receive `assigned_project_ids`; the unused relation is cleared.
+     *
+     * @group Staff
+     * @urlParam id integer required Staff user ID. Example: 8
+     * @bodyParam coordinated_project_ids array required Project IDs for coordinator assignment. Send empty array when not applicable. Example: [1]
+     * @bodyParam assigned_project_ids array required Project IDs for staff assignment. Send empty array when not applicable. Example: [2]
+     * @response 200 {"message":"Calisan proje atamalari guncellendi.","staff":{"id":8,"projects":[{"id":1,"assignment_type":"coordinator"}]}}
+     * @response 403 {"message":"Proje atamasi icin tum sistem kapsami gerekir."}
+     */
 
     public function syncProjects(Request $request, int $id)
     {
@@ -613,9 +716,21 @@ class StaffController extends Controller
     }
 
     /**
-     * PUT /admin/staff/{id}
-     * Personel özlük bilgisi güncelle.
+     * Update staff profile information.
+     *
+     * Requires permission: `staff.update`. Unit access is enforced with `abortUnlessUnitAllowed`; non-global users cannot move staff to another unit. Updates staff profile fields and optionally the user phone number.
+     *
+     * @group Staff
+     * @urlParam id integer required Staff user ID. Example: 8
+     * @bodyParam title string Optional title. Allowed values: researcher, specialist, coordinator, manager, other. Example: specialist
+     * @bodyParam unit string Optional unit name. Example: Program
+     * @bodyParam contract_type string Optional contract type. Example: full_time
+     * @bodyParam start_date date Optional start date. Example: 2026-01-15
+     * @bodyParam phone string Optional phone number. Example: 05550000000
+     * @response 200 {"message":"Personel bilgileri guncellendi.","staff":{"id":8,"staff_profile":{"unit":"Program","title":"specialist"}}}
+     * @response 403 {"message":"Birim kapsami olan kullanici personeli baska birime tasiyamaz."}
      */
+
     public function update(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.update');
@@ -666,9 +781,18 @@ class StaffController extends Controller
     }
 
     /**
-     * POST /admin/staff/{id}/documents
-     * Personel belgesi yükle (CV vb.).
+     * Upload a staff personal document.
+     *
+     * Requires permission: `staff.documents.upload` and unit access for the target staff member. Stores the file through `MediaStorage` under the staff document folder and appends it to `staff_profile.personal_documents` with a label and URL.
+     *
+     * @group Staff
+     * @urlParam id integer required Staff user ID. Example: 8
+     * @bodyParam document file required Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB.
+     * @bodyParam label string Optional document label. Max 100 characters. Example: CV
+     * @response 200 {"message":"Belge yuklendi.","documents":[{"label":"CV","url":"https://storage.example.com/staff/8/documents/cv.pdf"}]}
+     * @response 422 {"message":"Bu kullanici calisan rolu tasimiyor."}
      */
+
     public function uploadDocument(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.documents.upload');
@@ -698,9 +822,18 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /admin/staff/export
-     * Personel listesini CSV olarak dışa aktar.
+     * Export panel staff.
+     *
+     * Requires permission: `staff.export`. Applies employee and coordinator unit scope, supports project/role/search filters and exports through the shared admin export responder.
+     *
+     * @group Staff
+     * @queryParam project_id integer Optional project assignment filter. Example: 1
+     * @queryParam role string Optional role filter. Example: staff
+     * @queryParam search string Optional search filter. Example: ayse
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: xlsx
+     * @response 200 {"download":"Staff export file stream"}
      */
+
     public function export(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.export');
@@ -758,6 +891,17 @@ class StaffController extends Controller
         );
     }
 
+    /**
+     * Export staff leave requests.
+     *
+     * Requires permission: `staff.export`. Global users can export all leave requests; non-global staff view scope is limited to the caller unit. Exports through the shared admin export responder.
+     *
+     * @group Staff
+     * @queryParam status string Optional leave status filter. Example: pending
+     * @queryParam format string Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv. Example: csv
+     * @response 200 {"download":"Leave requests export file stream"}
+     */
+
     public function exportLeaveRequests(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.export');
@@ -796,9 +940,16 @@ class StaffController extends Controller
     // ─── İZİN TALEPLERİ ───────────────────────────────────────────────────────
 
     /**
-     * GET /admin/leave-requests
-     * Tüm izin taleplerini listele.
+     * List staff leave requests for the panel.
+     *
+     * Requires permission: `staff.view`. Global users see all leave requests; non-global viewers are limited to their own staff unit. Supports status and user filters.
+     *
+     * @group Staff
+     * @queryParam status string Optional leave status filter. Example: pending
+     * @queryParam user_id integer Optional staff user filter. Example: 8
+     * @response 200 {"leave_requests":{"data":[{"id":5,"status":"pending","user":{"id":8,"name":"Ayse"}}],"current_page":1}}
      */
+
     public function leaveRequests(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.view');
@@ -814,8 +965,18 @@ class StaffController extends Controller
     }
 
     /**
-     * POST /leave-requests  (Personel izin talep eder)
+     * Create a leave request for the current staff user.
+     *
+     * Requires permission: `staff.leave.request`. Creates a pending leave request for the authenticated user and notifies super admins plus coordinators in the same unit when available.
+     *
+     * @group Staff
+     * @bodyParam start_date date required Leave start date. Must be today or later. Example: 2026-07-10
+     * @bodyParam end_date date required Leave end date. Must be after or equal to start_date. Example: 2026-07-12
+     * @bodyParam reason string Optional reason. Max 1000 characters. Example: Yillik izin
+     * @response 201 {"message":"Izin talebiniz iletildi.","leave_request":{"id":5,"status":"pending"}}
+     * @response 422 {"message":"The start date must be a date after or equal to today."}
      */
+
     public function storeLeaveRequest(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.leave.request');
@@ -841,8 +1002,16 @@ class StaffController extends Controller
     }
 
     /**
-     * PUT /admin/leave-requests/{id}/approve
+     * Approve a staff leave request.
+     *
+     * Requires permission: `staff.leave.approve` and unit access for the leave owner. Marks the leave as approved, stores the approver and emails the staff member when an address exists.
+     *
+     * @group Staff
+     * @urlParam id integer required Leave request ID. Example: 5
+     * @response 200 {"message":"Izin talebi onaylandi.","leave_request":{"id":5,"status":"approved"}}
+     * @response 403 {"message":"Bu birim icin yetkiniz bulunmuyor."}
      */
+
     public function approveLeave(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.leave.approve');
@@ -863,8 +1032,16 @@ class StaffController extends Controller
     }
 
     /**
-     * PUT /admin/leave-requests/{id}/reject
+     * Reject a staff leave request.
+     *
+     * Requires permission: `staff.leave.reject` and unit access for the leave owner. Marks the leave as rejected, stores the reviewer and emails the staff member when an address exists.
+     *
+     * @group Staff
+     * @urlParam id integer required Leave request ID. Example: 5
+     * @response 200 {"message":"Izin talebi reddedildi.","leave_request":{"id":5,"status":"rejected"}}
+     * @response 403 {"message":"Bu birim icin yetkiniz bulunmuyor."}
      */
+
     public function rejectLeave(Request $request, int $id)
     {
         $this->abortUnlessAllowed($request, 'staff.leave.reject');
@@ -885,8 +1062,14 @@ class StaffController extends Controller
     }
 
     /**
-     * GET /staff/my-leave-requests  (Personelin kendi izinleri)
+     * List the current staff user leave requests.
+     *
+     * Requires permission: `staff.leave.request`. Returns the authenticated user leave history with approver metadata.
+     *
+     * @group Staff
+     * @response 200 {"leave_requests":[{"id":5,"status":"pending","approver":null}]}
      */
+
     public function myLeaveRequests(Request $request)
     {
         $this->abortUnlessAllowed($request, 'staff.leave.request');
