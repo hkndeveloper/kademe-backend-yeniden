@@ -116,6 +116,12 @@ class InboxExperienceTest extends TestCase
         $starred = $this->getJson('/api/inbox/messages?starred_only=1');
         $starred->assertOk()->assertJsonCount(1, 'messages');
 
+        $starredAndPinned = $this->getJson('/api/inbox/messages?starred_only=true&pinned_only=true');
+        $starredAndPinned->assertOk()->assertJsonCount(1, 'messages');
+
+        $unreadStringBoolean = $this->getJson('/api/inbox/messages?unread_only=true');
+        $unreadStringBoolean->assertOk();
+
         $unread = $this->getJson('/api/inbox/messages?unread_only=1');
         $unread->assertOk();
         $this->assertFalse(
@@ -180,6 +186,9 @@ class InboxExperienceTest extends TestCase
         Sanctum::actingAs($admin);
         $response = $this->getJson('/api/panel/inbox/messages');
         $response->assertOk();
+
+        $stringBooleanFilters = $this->getJson('/api/panel/inbox/messages?unread_only=true&starred_only=true&pinned_only=true');
+        $stringBooleanFilters->assertOk();
         $types = collect($response->json('messages'))->pluck('type')->unique()->values()->all();
         $this->assertContains('announcement', $types);
         $this->assertContains('opportunity', $types);

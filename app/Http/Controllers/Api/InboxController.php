@@ -132,6 +132,41 @@ class InboxController extends Controller
 
         return in_array((int) $post->period_id, $this->participantPeriodIds((int) $user->id), true);
     }
+    /** @param string[] $keys */
+    private function normalizeBooleanQueryParameters(Request $request, array $keys): void
+    {
+        $normalized = [];
+
+        foreach ($keys as $key) {
+            if (! $request->query->has($key)) {
+                continue;
+            }
+
+            $value = $request->query($key);
+            if (is_bool($value)) {
+                $normalized[$key] = $value;
+                continue;
+            }
+
+            if (! is_string($value) && ! is_int($value)) {
+                continue;
+            }
+
+            $normalizedValue = match (strtolower((string) $value)) {
+                '1', 'true', 'on', 'yes' => true,
+                '0', 'false', 'off', 'no' => false,
+                default => null,
+            };
+
+            if ($normalizedValue !== null) {
+                $normalized[$key] = $normalizedValue;
+            }
+        }
+
+        if ($normalized !== []) {
+            $request->merge($normalized);
+        }
+    }
 
     /**
      * List unified inbox messages.
@@ -154,6 +189,12 @@ class InboxController extends Controller
 
     public function recipientMessages(Request $request): JsonResponse
     {
+        $this->normalizeBooleanQueryParameters($request, [
+            'unread_only',
+            'starred_only',
+            'pinned_only',
+        ]);
+
         $validated = $request->validate([
             'project_id' => 'nullable|integer',
             'category' => 'nullable|string|max:100',
