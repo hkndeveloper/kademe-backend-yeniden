@@ -45,36 +45,32 @@ class AdminChatbotService
     }
 
     private const HELP_TEXT = <<<'TXT'
-Veri asistani kural tabanlidir. Ham SQL uretmez; yalnizca tanimli anahtar kelimelerle, action+scope ve proje erisimi kontrollerinden gecen okuma sorgularini calistirir.
+Veri asistanı kural tabanlıdır. Ham SQL üretmez; yalnızca tanımlı anahtar kelimelerle, action+scope ve proje erişimi kontrollerinden geçen okuma sorgularını çalıştırır.
 
-Proje bazli:
-• "Diplomasi360 katilimci ozeti" / "katilimci listesi limit 50"
-• "Pergel basvuru ozeti son 30 gun" / "basvuru listesi"
-• "KADEME+ program listesi" / "program ozeti" / "yoklama"
-• "Eurodesk mali ozet son 90 gun"
-• "Diplomasi360 dijital bohca listesi"
-• "Pergel odev ozeti"
+Örnekler:
+• "Diplomasi360 katılımcı özeti" / "katılımcı listesi limit 50"
+• "Pergel başvuru özeti son 30 gün" / "başvuru listesi"
+• "KADEME+ program listesi" / "program özeti" / "yoklama"
+• "Eurodesk mali özet son 90 gün"
+• "Diplomasi360 dijital bohça listesi"
+• "Pergel ödev özeti"
 • "KADEME+ sertifika listesi"
-• "KPD ozel modul ozeti" / "staj mentor eurodesk rozet odul modulleri"
-• "Diplomasi360 ve Pergel karsilastir"
-
-Sistem geneli:
-• "egitmen ozeti" / "egitmen listesi"
-• "log ozeti son 7 gun" / "basarisiz loglar" / "son log listesi"
-• "destek ozeti" / "destek listesi"
-• "talep listesi son 30 gun"
-• "duyuru listesi" / "duyuru ozeti"
-• "donem listesi" / "donem ozeti"
-• "kullanici rol dagilimi" / "kullanici listesi"
-• "personel ozeti" / "personel listesi"
-
-Sistem bilgisi:
-• "action scope mantigi"
-• "proje ozgu modul mantigi"
+• "KPD özel modül özeti" / "staj mentor eurodesk rozet ödül modülleri"
+• "tüm projeler özet"
+• "projeleri karşılaştır"
+• "eğitmen özeti" / "eğitmen listesi"
+• "log özeti son 7 gün" / "başarısız loglar" / "son log listesi"
+• "destek özeti" / "destek listesi"
+• "talep listesi son 30 gün"
+• "duyuru listesi" / "duyuru özeti"
+• "dönem listesi" / "dönem özeti"
+• "kullanıcı rol dağılımı" / "kullanıcı listesi"
+• "personel özeti" / "personel listesi"
+• "action scope mantığı"
+• "özel modül yetkisi"
 • "cv pdf indir"
 
-Tarih: son 7 gun, son 30 gun, son 90 gun, bu hafta, bu ay, gecen ay, bugun, dun veya 2026-01-01 - 2026-01-31.
-Cikti tablolari CSV, Excel, PDF veya Word olarak indirilebilir. Proje bazli sorgularda hem ilgili action+scope hem de o projeye erisim aranir.
+Çıktı tabloları CSV, Excel, PDF veya Word olarak indirilebilir. Proje bazlı sorgularda hem ilgili action+scope hem de o projeye erişim aranır.
 TXT;
 
     public function handle(User $user, string $message): array
@@ -933,7 +929,7 @@ TXT;
         $lines = ["**{$project->name}** başvuru durumları" . ($labelSuffix !== '' ? " ({$labelSuffix})" : '') . ":"];
         $tableRows = [];
         foreach ($byStatus as $status => $count) {
-            $lines[] = sprintf('- %s: %d', $status, $count);
+            $lines[] = sprintf('- %s: %d', $this->localizeEnumValue((string) $status), $count);
             $tableRows[] = [(string) $status, (string) $count];
         }
         if ($byStatus->isEmpty()) {
@@ -1359,14 +1355,14 @@ TXT;
     private function buildSystemGuide(string $normalized): array
     {
         if (str_contains($normalized, 'cv')) {
-            return $this->response("Katilimci CV tarafinda panel, projects.student_cv.view iznini ve ilgili proje erisimini backend'de kontrol eder. CV detayi JSON olarak basilmaz; okunabilir bolumlere ayrilir. PDF indirme de ayni izin/proje kontrolunden gecer.", 'system_cv_guide', null, null, null);
+            return $this->response("**CV ve PDF Yetki Bilgisi**\n\nKatılımcı CV ekranında panel erişimi `projects.student_cv.view` izni ve ilgili proje erişimiyle kontrol edilir. CV detayı ham JSON olarak basılmaz; okunabilir bölümlere ayrılır. PDF indirme de aynı izin ve proje kontrolünden geçer.", 'system_cv_guide', null, null, null);
         }
 
         if (str_contains($normalized, 'proje')) {
-            return $this->response("Proje ozgu modullerde gorunurluk sadece action+scope degildir; kullanicinin ilgili proje ailesinde erisebildigi proje de olmalidir. Frontend sidebar bunu permission_scopes + authorization_context ile saklar, backend ise her endpointte canAccessProject veya aileye uygun scope kontrolu yapar.", 'system_project_module_guide', null, null, null);
+            return $this->response("**Proje Özel Modül Yetkisi**\n\nProje özel modüllerinde görünürlük yalnızca action+scope değildir. Kullanıcının ilgili proje ailesinde erişebildiği proje de olmalıdır. Frontend sidebar bu bilgiyi `permission_scopes` ve `authorization_context` ile saklar; backend ise her endpointte `canAccessProject` veya aileye uygun scope kontrolü yapar.", 'system_project_module_guide', null, null, null);
         }
 
-        return $this->response("Action+scope modeli iki katmanli calisir: frontend yalnizca uygun menuyu ve aksiyonu gosterir, backend ise her istekte permission ve scope'u tekrar kontrol eder. all tum sistem, selected_projects secili projeler, own/assigned/self ise kullanicinin yetki baglamindaki projeler icindir. Proje bagimsiz modullerde, egitmenlerde oldugu gibi all scope yeterli tutulabilir.", 'system_permission_guide', null, null, null);
+        return $this->response("**Action+Scope Yetki Modeli**\n\nFrontend yalnızca uygun menüyü ve aksiyonu gösterir; backend ise her istekte permission ve scope'u tekrar kontrol eder. `all` tüm sistem, `selected_projects` seçili projeler, `own`, `assigned` ve `self` kullanıcının yetki bağlamındaki kayıtlar içindir. Proje bağımsız modüllerde, eğitmenlerde olduğu gibi `all` scope yeterli tutulabilir.", 'system_permission_guide', null, null, null);
     }
 
     private function handleSupportIntent(User $user, string $normalized, Collection $matched, ?Carbon $fromDate, ?Carbon $toDate, ?string $dateLabel, int $limit): array
@@ -1694,15 +1690,338 @@ TXT;
         return $this->response("{$project->name} proje ozgu modul ozeti hazirlandi. Bu rapor action+scope ve proje erisimi birlikte gecilerek uretilir.", 'project_special_modules_summary', $table, null, $token);
     }
 
+    private function localizeTable(array $table): array
+    {
+        $columns = array_map(
+            fn ($column) => $this->localizeColumn((string) $column),
+            $table['columns'] ?? []
+        );
+
+        $rows = array_map(function ($row) use ($columns) {
+            $row = is_array($row) ? $row : [$row];
+
+            return array_map(
+                fn ($cell, $index) => $this->localizeCell($cell, $columns[$index] ?? null),
+                $row,
+                array_keys($row)
+            );
+        }, $table['rows'] ?? []);
+
+        return [
+            'columns' => $columns,
+            'rows' => $rows,
+        ];
+    }
+
+    private function localizeColumn(string $column): string
+    {
+        $labels = [
+            'Aktif Katilimci' => 'Aktif Katılımcı',
+            'Aktif katılımcı' => 'Aktif Katılımcı',
+            'Accepted' => 'Kabul Edilen',
+            'Approved Tutar' => 'Onaylanan Tutar',
+            'Baslangic' => 'Başlangıç',
+            'Baslangic Kredi' => 'Başlangıç Kredisi',
+            'Baslik' => 'Başlık',
+            'Basvuru' => 'Başvuru',
+            'Bitis' => 'Bitiş',
+            'Bolum' => 'Bölüm',
+            'Bölüm' => 'Bölüm',
+            'Deger' => 'Değer',
+            'Donem' => 'Dönem',
+            'Dogrulama Kodu' => 'Doğrulama Kodu',
+            'Esik' => 'Eşik',
+            'Feedback' => 'Geri Bildirim',
+            'Katilimci' => 'Katılımcı',
+            'Kayit durumu' => 'Kayıt Durumu',
+            'Kisi' => 'Kişi',
+            'Kullanici' => 'Kullanıcı',
+            'Modul' => 'Modül',
+            'Odev' => 'Ödev',
+            'Ogrenciye Gorunur' => 'Öğrenciye Görünür',
+            'Olcum' => 'Ölçüm',
+            'Olusturma' => 'Oluşturulma',
+            'Paid Tutar' => 'Ödenen Tutar',
+            'Pending' => 'Bekleyen',
+            'Pending Tutar' => 'Bekleyen Tutar',
+            'Rejected Tutar' => 'Reddedilen Tutar',
+            'Son Calisma' => 'Son Çalışma',
+            'Sonuc' => 'Sonuç',
+            'Sozlesme' => 'Sözleşme',
+            'Toplam Katilimci' => 'Toplam Katılımcı',
+            'Toplam kayit' => 'Toplam Kayıt',
+            'Tur' => 'Tür',
+            'Universite' => 'Üniversite',
+            'Unvan' => 'Unvan',
+            'Uzmanlik' => 'Uzmanlık',
+            'Verilis' => 'Veriliş',
+            'Yayin' => 'Yayın',
+        ];
+
+        return $labels[$column] ?? $column;
+    }
+    private function localizeCell(mixed $cell, ?string $column = null): string
+    {
+        if ($cell === null || $cell === '') {
+            return '-';
+        }
+
+        if (is_bool($cell)) {
+            return $cell ? 'Evet' : 'Hayır';
+        }
+
+        $value = is_scalar($cell) ? (string) $cell : json_encode($cell, JSON_UNESCAPED_UNICODE);
+        $value = $value === false ? '-' : trim($value);
+
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        if (preg_match('/^-?\d+([.,]\d+)?$/', $value)) {
+            return $value;
+        }
+
+        if (str_contains($value, ':')) {
+            [$prefix, $suffix] = array_map('trim', explode(':', $value, 2));
+            $localizedPrefix = $this->localizeMetricPrefix($prefix);
+            $localizedSuffix = $this->localizeEnumValue($suffix, $column);
+
+            return "{$localizedPrefix}: {$localizedSuffix}";
+        }
+
+        return $this->localizeEnumValue($value, $column);
+    }
+
+    private function localizeMetricPrefix(string $prefix): string
+    {
+        $labels = [
+            'Aktif' => 'Aktif',
+            'Aday' => 'Aday',
+            'Basarili' => 'Başarılı',
+            'Basarisiz / engellenen' => 'Başarısız / Engellenen',
+            'E-posta bulunan' => 'E-posta Bulunan',
+            'Eurodesk projeleri' => 'Eurodesk Projeleri',
+            'Kademe modulleri' => 'Kademe Modülleri',
+            'Kademe yorumu bulunan' => 'Kademe Yorumu Bulunan',
+            'Kayit' => 'Kayıt',
+            'Kaynak' => 'Kaynak',
+            'Mentorlar' => 'Mentorlar',
+            'Mezuniyet' => 'Mezuniyet',
+            'Odul kademeleri' => 'Ödül Kademeleri',
+            'Odul teslimleri' => 'Ödül Teslimleri',
+            'Pasif' => 'Pasif',
+            'Staj kayitlari' => 'Staj Kayıtları',
+            'Toplam' => 'Toplam',
+            'Toplam feedback' => 'Toplam Geri Bildirim',
+            'Toplam kayit' => 'Toplam Kayıt',
+            'Toplam yoklama kaydi' => 'Toplam Yoklama Kaydı',
+        ];
+
+        return $labels[$prefix] ?? $prefix;
+    }
+    private function localizeEnumValue(string $value, ?string $column = null): string
+    {
+        $normalized = Str::lower(trim($value));
+
+        $labels = [
+            '(bos)' => '(Boş)',
+            'accepted' => 'Kabul Edildi',
+            'active' => 'Aktif',
+            'admin' => 'Yönetici',
+            'alumni' => 'Mezun',
+            'approved' => 'Onaylandı',
+            'assigned' => 'Atanmış',
+            'auto_rejected' => 'Otomatik Reddedildi',
+            'blacklisted' => 'Kara Liste',
+            'candidate' => 'Aday',
+            'cancelled' => 'İptal Edildi',
+            'closed' => 'Kapalı',
+            'completed' => 'Tamamlandı',
+            'coordinator' => 'Koordinatör',
+            'csv' => 'CSV',
+            'denied_or_failed' => 'Reddedildi / Başarısız',
+            'docx' => 'Word',
+            'draft' => 'Taslak',
+            'failed' => 'Tamamlayamadı',
+            'graduated' => 'Mezun',
+            'hayir' => 'Hayır',
+            'hidden' => 'Gizli',
+            'in_progress' => 'İşlemde',
+            'interview_failed' => 'Mülakat Olumsuz',
+            'interview_passed' => 'Mülakat Geçildi',
+            'interview_planned' => 'Mülakat Planlandı',
+            'json' => 'JSON',
+            'late' => 'Geç Teslim',
+            'not_completed' => 'Tamamlanmadı',
+            'not_submitted' => 'Teslim Edilmedi',
+            'open' => 'Açık',
+            'paid' => 'Ödendi',
+            'passive' => 'Pasif',
+            'pdf' => 'PDF',
+            'pending' => 'Beklemede',
+            'private' => 'Özel',
+            'public' => 'Herkese Açık',
+            'published' => 'Yayında',
+            'rejected' => 'Reddedildi',
+            'resolved' => 'Çözüldü',
+            'reviewed' => 'İncelendi',
+            'scheduled' => 'Planlandı',
+            'self' => 'Kendi Kaydı',
+            'staff' => 'Personel',
+            'student' => 'Öğrenci',
+            'submitted' => 'Teslim Edildi',
+            'success' => 'Başarılı',
+            'true' => 'Evet',
+            'false' => 'Hayır',
+            'var' => 'Var',
+            'visible' => 'Görünür',
+            'waitlist' => 'Yedek',
+            'waitlisted' => 'Yedek Listede',
+            'xlsx' => 'Excel',
+            'yok' => 'Yok',
+        ];
+
+        return $labels[$normalized] ?? $value;
+    }
+    private function localizeReply(string $reply): string
+    {
+        return strtr($reply, [
+            'Action scope' => 'Action scope',
+            'Basarisiz' => 'Başarısız',
+            'Basarili' => 'Başarılı',
+            'Basvuru' => 'Başvuru',
+            'Cikti' => 'Çıktı',
+            'Disa Aktar' => 'Dışa Aktar',
+            'Disa aktar' => 'Dışa aktar',
+            'Donem' => 'Dönem',
+            'Egitmen' => 'Eğitmen',
+            'Erisim' => 'Erişim',
+            'Gonullu' => 'Gönüllü',
+            'Hazirlandi' => 'Hazırlandı',
+            'Katilim' => 'Katılım',
+            'Katilimci' => 'Katılımcı',
+            'Kayit' => 'Kayıt',
+            'Kullanici' => 'Kullanıcı',
+            'Modul' => 'Modül',
+            'Odev' => 'Ödev',
+            'Ozet' => 'Özet',
+            'Veri asistani' => 'Veri asistanı',
+            'bagimsizdir' => 'bağımsızdır',
+            'basarisiz' => 'başarısız',
+            'basarili' => 'başarılı',
+            'basvuru' => 'başvuru',
+            'bolumlere' => 'bölümlere',
+            'calisir' => 'çalışır',
+            'calistirir' => 'çalıştırır',
+            'cikarabilirim' => 'çıkarabilirim',
+            'cikti' => 'çıktı',
+            'dagilimi' => 'dağılımı',
+            'detayi' => 'detayı',
+            'donem' => 'dönem',
+            'dugmeyi' => 'düğmeyi',
+            'egitmen' => 'eğitmen',
+            'erisimi' => 'erişimi',
+            'erisim' => 'erişim',
+            'evet' => 'evet',
+            'firatlari' => 'fırsatları',
+            'gecer' => 'geçer',
+            'gecilerek' => 'geçilerek',
+            'gecti' => 'geçti',
+            'gonullu' => 'gönüllü',
+            'gorunur' => 'görünür',
+            'gorunurluk' => 'görünürlük',
+            'gosterir' => 'gösterir',
+            'guncel' => 'güncel',
+            'hazirlandi' => 'hazırlandı',
+            'icermiyor' => 'içermiyor',
+            'icin' => 'için',
+            'indirebilirsiniz' => 'indirebilirsiniz',
+            'iznini' => 'iznini',
+            'kapsami' => 'kapsamı',
+            'karsilastirma' => 'karşılaştırma',
+            'katilimci' => 'katılımcı',
+            'katilim' => 'katılım',
+            'kayit' => 'kayıt',
+            'kaynagi' => 'kaynağı',
+            'kullanici' => 'kullanıcı',
+            'kullanilabilir' => 'kullanılabilir',
+            'listelendi' => 'listelendi',
+            'mantigi' => 'mantığı',
+            'modul' => 'modül',
+            'okunabilir' => 'okunabilir',
+            'okunamadi' => 'okunamadı',
+            'odev' => 'ödev',
+            'olusturup' => 'oluşturup',
+            'ozel' => 'özel',
+            'ozeti' => 'özeti',
+            'ozet' => 'özet',
+            'ozgu' => 'özgü',
+            'proje bazli' => 'proje bazlı',
+            'saglayabilirim' => 'sağlayabilirim',
+            'sinir' => 'sınır',
+            'su anda' => 'şu anda',
+            'sureci' => 'süreci',
+            'tarafinda' => 'tarafında',
+            'uretilir' => 'üretilir',
+            'ust sinir' => 'üst sınır',
+            'veri asistani' => 'veri asistanı',
+            'Aktif (kayit durumu)' => 'Aktif katılımcı',
+            'Basvuru durumlari' => 'Başvuru durumları',
+            'Detay tabloda' => 'Detaylı kırılım tabloda',
+            'Liste icin' => 'Liste için',
+            'Mezuniyet alani "graduated" sayisi' => 'Mezun olarak işaretlenen katılımcı sayısı',
+            'Toplam kayit' => 'Toplam kayıt',
+            'alani' => 'alanı',
+            'alti' => 'altı',
+            'basvuru durumlari' => 'başvuru durumları',
+            'dugmeyi kullanin' => 'düğmeyi kullanın',
+            'en guncel' => 'en güncel',
+            'kaydi' => 'kaydı',
+            'kirilimi' => 'kırılımı',
+            'sayisi' => 'sayısı',
+            'yalnizca kayit durumu' => 'yalnızca kayıt durumu',            'yazdiginiz' => 'yazdığınız',
+            'all tum sistem' => 'all tüm sistem',
+            'anahtar kelimelerle' => 'anahtar kelimelerle',
+            'aranir' => 'aranır',
+            'ayni' => 'aynı',
+            'ayrilir' => 'ayrılır',
+            'baglamindaki' => 'bağlamındaki',
+            'bazli' => 'bazlı',
+            'basilmaz' => 'basılmaz',
+            'bohca' => 'bohça',
+            'degildir' => 'değildir',
+            'erisebildigi' => 'erişebildiği',
+            'gecen' => 'geçen',
+            'gun' => 'gün',
+            'icindir' => 'içindir',
+            'iki katmanli' => 'iki katmanlı',
+            'kontrolunden' => 'kontrolünden',
+            'kontrolu' => 'kontrolü',
+            'kullanicinin' => 'kullanıcının',
+            'menuyu' => 'menüyü',
+            'oldugu' => 'olduğu',
+            'olmalidir' => 'olmalıdır',
+            'sorgularini' => 'sorgularını',
+            'tablolari' => 'tabloları',
+            'tanimli' => 'tanımlı',
+            'yalnizca' => 'yalnızca',
+            'secili' => 'seçili',
+        ]);
+    }
     private function storeExportPayload(User $user, array $columns, array $rows, string $filenameBase): string
     {
         $token = Str::random(48);
+        $table = $this->localizeTable([
+            'columns' => $columns,
+            'rows' => $rows,
+        ]);
+
         Cache::put(
             $this->exportCacheKey($token),
             [
                 'user_id' => $user->id,
-                'headings' => $columns,
-                'rows' => $rows,
+                'headings' => $table['columns'],
+                'rows' => $table['rows'],
                 'filename' => $filenameBase . '_' . now()->format('Ymd_His'),
             ],
             now()->addMinutes(15),
@@ -1734,15 +2053,14 @@ TXT;
         ?string $exportToken,
     ): array {
         return [
-            'reply' => $reply,
+            'reply' => $this->localizeReply($reply),
             'intent' => $intent,
-            'table' => $table,
+            'table' => $table !== null ? $this->localizeTable($table) : null,
             'stats' => $stats,
             'export_token' => $exportToken,
             'export_available' => $exportToken !== null,
         ];
-    }
-}
+    }}
 
 
 

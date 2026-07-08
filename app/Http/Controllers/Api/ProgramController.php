@@ -121,11 +121,13 @@ class ProgramController extends Controller
                     'title' => $program->title,
                     'description' => $program->description,
                     'location' => $program->location,
+                    'latitude' => $program->latitude,
+                    'longitude' => $program->longitude,
+                    'radius_meters' => $program->radius_meters,
                     'start_at' => optional($program->start_at)?->toIso8601String(),
                     'end_at' => optional($program->end_at)?->toIso8601String(),
                     'status' => $program->status,
                     'credit_deduction' => $program->credit_deduction,
-                    'radius_meters' => $program->radius_meters,
                     'target_audience' => $program->targetAudience(),
                     'project' => $program->project ? [
                         'id' => $program->project->id,
@@ -204,3 +206,5 @@ class ProgramController extends Controller
         ]);
     }
 }
+
+

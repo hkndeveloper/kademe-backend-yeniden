@@ -43,7 +43,7 @@ class AdminChatbotController extends Controller
      *   "export_available": true
      * }
      * @response 200 {"reply":"Bu veri icin gerekli yetki bulunmuyor: projects.participants.view.","intent":"permission_denied","table":null,"stats":null,"export_token":null,"export_available":false}
-     * @response 403 {"message":"Veri asistani icin tum sistem kapsami gerekir."}
+     * @response 403 {"message":"Veri asistanı için tüm sistem kapsamı gerekir."}
      * @response 422 {"message":"The message field is required.","errors":{"message":["The message field is required."]}}
      */
     public function query(Request $request, AdminChatbotService $chatbot): \Illuminate\Http\JsonResponse
@@ -70,9 +70,9 @@ class AdminChatbotController extends Controller
      * @queryParam format string Export format: csv, xlsx, excel, pdf, docx, or word. Example: xlsx
      *
      * @response 200 scenario="csv" "ID,Ad Soyad\n42,Ada Yilmaz"
-     * @response 400 "Gecersiz disa aktarma istegi."
+     * @response 400 "Geçersiz dışa aktarma isteği."
      * @response 403 "Yetkisiz."
-     * @response 410 "Disa aktarma suresi dolmus veya gecersiz."
+     * @response 410 "Dışa aktarma süresi dolmuş veya geçersiz."
      * @response 422 {"message":"The selected format is invalid.","errors":{"format":["The selected format is invalid."]}}
      */
     public function export(Request $request, AdminChatbotService $chatbot, string $token): Response|BinaryFileResponse
@@ -80,12 +80,12 @@ class AdminChatbotController extends Controller
         $this->abortUnlessGlobalChatbotPermission($request);
 
         if (! preg_match('/^[a-zA-Z0-9]{40,64}$/', $token)) {
-            return response('Gecersiz disa aktarma istegi.', 400);
+            return response('Geçersiz dışa aktarma isteği.', 400);
         }
 
         $payload = $chatbot->takeExportPayload($token);
         if ($payload === null) {
-            return response('Disa aktarma suresi dolmus veya gecersiz.', 410);
+            return response('Dışa aktarma süresi dolmuş veya geçersiz.', 410);
         }
 
         if ((int) ($payload['user_id'] ?? 0) !== (int) $request->user()->id) {
@@ -103,7 +103,7 @@ class AdminChatbotController extends Controller
         return AdminExportResponder::download(
             $validated['format'] ?? 'csv',
             $filename,
-            'Veri Asistani Ciktisi',
+            'Veri Asistanı Çıktısı',
             $headings,
             $rows,
         );
@@ -117,7 +117,7 @@ class AdminChatbotController extends Controller
             $this->permissionResolver->hasGlobalScope($user, 'chatbot.manage')
                 || $this->permissionResolver->hasGlobalScope($user, 'chatbot.view'),
             403,
-            'Veri asistani icin tum sistem kapsami gerekir.'
+            'Veri asistanı için tüm sistem kapsamı gerekir.'
         );
     }
 }
