@@ -1920,7 +1920,7 @@
     </ul>
 
     <ul class="toc-footer" id="last-updated">
-        <li>Last updated: July 2, 2026</li>
+        <li>Last updated: July 9, 2026</li>
     </ul>
 </div>
 
@@ -2624,9 +2624,9 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --data "{
     \"search\": \"vmqeopfuudtdsufvyvddq\",
     \"project_id\": 17,
-    \"status\": \"active\",
-    \"from\": \"2026-07-02T10:54:49\",
-    \"to\": \"2107-07-31\",
+    \"status\": \"completed\",
+    \"from\": \"2026-07-09T11:23:04\",
+    \"to\": \"2107-08-07\",
     \"per_page\": 13
 }"
 </code></pre></div>
@@ -2656,9 +2656,9 @@ const headers = {
 let body = {
     "search": "vmqeopfuudtdsufvyvddq",
     "project_id": 17,
-    "status": "active",
-    "from": "2026-07-02T10:54:49",
-    "to": "2107-07-31",
+    "status": "completed",
+    "from": "2026-07-09T11:23:04",
+    "to": "2107-08-07",
     "per_page": 13
 };
 
@@ -2887,10 +2887,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="status"                data-endpoint="GETapi-activities"
-               value="active"
+               value="completed"
                data-component="body">
     <br>
-<p>Example: <code>active</code></p>
+<p>Example: <code>completed</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>scheduled</code></li> <li><code>active</code></li> <li><code>completed</code></li></ul>
         </div>
@@ -2901,10 +2901,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="from"                data-endpoint="GETapi-activities"
-               value="2026-07-02T10:54:49"
+               value="2026-07-09T11:23:04"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:49</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:04</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>to</code></b>&nbsp;&nbsp;
@@ -2913,10 +2913,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="to"                data-endpoint="GETapi-activities"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>per_page</code></b>&nbsp;&nbsp;
@@ -5296,7 +5296,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"auto_reject_rules\": [
         {
             \"field_id\": \"byickznkygloigmkwxphl\",
-            \"operator\": \"lte\",
+            \"operator\": \"contains\",
             \"value\": \"vazjrcnfbaqywuxhgjjmz\",
             \"reason\": \"uxjubqouzswiwxtrkimfc\"
         }
@@ -5337,7 +5337,7 @@ let body = {
     "auto_reject_rules": [
         {
             "field_id": "byickznkygloigmkwxphl",
-            "operator": "lte",
+            "operator": "contains",
             "value": "vazjrcnfbaqywuxhgjjmz",
             "reason": "uxjubqouzswiwxtrkimfc"
         }
@@ -5675,10 +5675,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="auto_reject_rules.0.operator"                data-endpoint="PUTapi-admin-projects--id--application-form"
-               value="lte"
+               value="contains"
                data-component="body">
     <br>
-<p>This field is required when <code>auto_reject_rules</code> is present. Example: <code>lte</code></p>
+<p>This field is required when <code>auto_reject_rules</code> is present. Example: <code>contains</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>equals</code></li> <li><code>not_equals</code></li> <li><code>contains</code></li> <li><code>gt</code></li> <li><code>lt</code></li> <li><code>gte</code></li> <li><code>lte</code></li></ul>
                     </div>
@@ -7163,7 +7163,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"auto_reject_rules\": [
         {
             \"field_id\": \"byickznkygloigmkwxphl\",
-            \"operator\": \"lte\",
+            \"operator\": \"equals\",
             \"value\": \"vazjrcnfbaqywuxhgjjmz\",
             \"reason\": \"uxjubqouzswiwxtrkimfc\"
         }
@@ -7204,7 +7204,7 @@ let body = {
     "auto_reject_rules": [
         {
             "field_id": "byickznkygloigmkwxphl",
-            "operator": "lte",
+            "operator": "equals",
             "value": "vazjrcnfbaqywuxhgjjmz",
             "reason": "uxjubqouzswiwxtrkimfc"
         }
@@ -7542,10 +7542,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="auto_reject_rules.0.operator"                data-endpoint="PUTapi-panel-projects--id--application-form"
-               value="lte"
+               value="equals"
                data-component="body">
     <br>
-<p>This field is required when <code>auto_reject_rules</code> is present. Example: <code>lte</code></p>
+<p>This field is required when <code>auto_reject_rules</code> is present. Example: <code>equals</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>equals</code></li> <li><code>not_equals</code></li> <li><code>contains</code></li> <li><code>gt</code></li> <li><code>lt</code></li> <li><code>gte</code></li> <li><code>lte</code></li></ul>
                     </div>
@@ -8427,7 +8427,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "type=participation"\
     --form "certificate_path=certificates/manual.pdf"\
     --form "file_path=certificates/manual.pdf"\
-    --form "certificate_file=@C:\Users\kresc\AppData\Local\Temp\php3E79.tmp" </code></pre></div>
+    --form "certificate_file=@C:\Users\kresc\AppData\Local\Temp\phpF5B6.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -8667,7 +8667,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional certificate file; pdf, jpg, jpeg, png, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3E79.tmp</code></p>
+<p>Optional certificate file; pdf, jpg, jpeg, png, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF5B6.tmp</code></p>
         </div>
         </form>
 
@@ -9371,7 +9371,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "type=participation"\
     --form "certificate_path=certificates/manual.pdf"\
     --form "file_path=certificates/manual.pdf"\
-    --form "certificate_file=@C:\Users\kresc\AppData\Local\Temp\php466B.tmp" </code></pre></div>
+    --form "certificate_file=@C:\Users\kresc\AppData\Local\Temp\phpFD03.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -9611,7 +9611,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional certificate file; pdf, jpg, jpeg, png, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php466B.tmp</code></p>
+<p>Optional certificate file; pdf, jpg, jpeg, png, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFD03.tmp</code></p>
         </div>
         </form>
 
@@ -10933,7 +10933,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "category=general"\
     --form "project_id=1"\
     --form "message=Merhaba, bilgi almak istiyorum."\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php3A56.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpF240.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -11149,7 +11149,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional attachment file, max 10MB. Required for official document categories. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3A56.tmp</code></p>
+<p>Optional attachment file, max 10MB. Required for official document categories. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF240.tmp</code></p>
         </div>
         </form>
 
@@ -21814,7 +21814,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "caption=Atolye baslangici"\
-    --form "photo=@C:\Users\kresc\AppData\Local\Temp\php42D6.tmp" </code></pre></div>
+    --form "photo=@C:\Users\kresc\AppData\Local\Temp\phpF9A2.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -21980,7 +21980,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Image file, maximum 5 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php42D6.tmp</code></p>
+<p>Image file, maximum 5 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF9A2.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>caption</code></b>&nbsp;&nbsp;
@@ -23123,7 +23123,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "title=Odevi tamamladim"\
     --form "description=Calismam ekte yer almaktadir."\
     --form "file_path=https://example.com/submission.pdf"\
-    --form "file=@C:\Users\kresc\AppData\Local\Temp\php3D0C.tmp" </code></pre></div>
+    --form "file=@C:\Users\kresc\AppData\Local\Temp\phpF488.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -23331,7 +23331,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional uploaded file, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3D0C.tmp</code></p>
+<p>Optional uploaded file, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF488.tmp</code></p>
         </div>
         </form>
 
@@ -23847,7 +23847,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"period_id\": \"consequatur\",
     \"title\": \"mqeopfuudtdsufvyvddqa\",
     \"description\": \"Molestias ipsam sit veniam sed fuga aspernatur.\",
-    \"due_date\": \"2026-07-02T10:54:52\"
+    \"due_date\": \"2026-07-09T11:23:06\"
 }"
 </code></pre></div>
 
@@ -23868,7 +23868,7 @@ let body = {
     "period_id": "consequatur",
     "title": "mqeopfuudtdsufvyvddqa",
     "description": "Molestias ipsam sit veniam sed fuga aspernatur.",
-    "due_date": "2026-07-02T10:54:52"
+    "due_date": "2026-07-09T11:23:06"
 };
 
 fetch(url, {
@@ -24032,10 +24032,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="due_date"                data-endpoint="POSTapi-panel-assignments"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
         </form>
 
@@ -24336,7 +24336,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"status\": \"approved\",
+    \"status\": \"rejected\",
     \"reviewer_note\": \"vmqeopfuudtdsufvyvddq\"
 }"
 </code></pre></div>
@@ -24354,7 +24354,7 @@ const headers = {
 };
 
 let body = {
-    "status": "approved",
+    "status": "rejected",
     "reviewer_note": "vmqeopfuudtdsufvyvddq"
 };
 
@@ -24472,10 +24472,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="status"                data-endpoint="PUTapi-panel-assignment-submissions--id--review"
-               value="approved"
+               value="rejected"
                data-component="body">
     <br>
-<p>Example: <code>approved</code></p>
+<p>Example: <code>rejected</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>reviewed</code></li> <li><code>approved</code></li> <li><code>rejected</code></li></ul>
         </div>
@@ -25171,7 +25171,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "description=Dolores molestias ipsam sit."\
     --form "visible_to_student=1"\
     --form "category=consequatur"\
-    --form "file=@C:\Users\kresc\AppData\Local\Temp\php4400.tmp" </code></pre></div>
+    --form "file=@C:\Users\kresc\AppData\Local\Temp\phpFAEB.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -25356,7 +25356,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Must be a file. Must not be greater than 20480 kilobytes. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4400.tmp</code></p>
+<p>Must be a file. Must not be greater than 20480 kilobytes. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFAEB.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>visible_to_student</code></b>&nbsp;&nbsp;
@@ -26557,7 +26557,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --data "{
     \"name\": \"vmqeopfuudtdsufvyvddq\",
     \"description\": \"Dolores molestias ipsam sit.\",
-    \"is_default\": true,
+    \"is_default\": false,
     \"is_active\": false,
     \"questions\": [
         {
@@ -26568,7 +26568,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             ],
             \"min_value\": 10,
             \"max_value\": 6,
-            \"is_required\": true
+            \"is_required\": false
         }
     ]
 }"
@@ -26589,7 +26589,7 @@ const headers = {
 let body = {
     "name": "vmqeopfuudtdsufvyvddq",
     "description": "Dolores molestias ipsam sit.",
-    "is_default": true,
+    "is_default": false,
     "is_active": false,
     "questions": [
         {
@@ -26600,7 +26600,7 @@ let body = {
             ],
             "min_value": 10,
             "max_value": 6,
-            "is_required": true
+            "is_required": false
         }
     ]
 };
@@ -26756,7 +26756,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>true</code></p>
+<p>Example: <code>false</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>is_active</code></b>&nbsp;&nbsp;
@@ -26884,7 +26884,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>true</code></p>
+<p>Example: <code>false</code></p>
                     </div>
                                     </details>
         </div>
@@ -29458,7 +29458,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "user_id=12"\
     --form "period_id=3"\
     --form "title=Ilk Gorusme Raporu"\
-    --form "file=@C:\Users\kresc\AppData\Local\Temp\php3FF2.tmp" </code></pre></div>
+    --form "file=@C:\Users\kresc\AppData\Local\Temp\phpF710.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -29641,7 +29641,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Report file. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 20 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3FF2.tmp</code></p>
+<p>Report file. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 20 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF710.tmp</code></p>
         </div>
         </form>
 
@@ -31012,7 +31012,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "user_id=12"\
     --form "period_id=3"\
     --form "title=Ilk Gorusme Raporu"\
-    --form "file=@C:\Users\kresc\AppData\Local\Temp\php4442.tmp" </code></pre></div>
+    --form "file=@C:\Users\kresc\AppData\Local\Temp\phpFB1C.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -31195,7 +31195,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Report file. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 20 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4442.tmp</code></p>
+<p>Report file. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 20 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFB1C.tmp</code></p>
         </div>
         </form>
 
@@ -32558,7 +32558,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Authorization: Bearer {YOUR_ACCESS_TOKEN}" \
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
-    --form "response_file=@C:\Users\kresc\AppData\Local\Temp\php3CAC.tmp" </code></pre></div>
+    --form "response_file=@C:\Users\kresc\AppData\Local\Temp\phpF438.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -32728,7 +32728,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Response attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3CAC.tmp</code></p>
+<p>Response attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF438.tmp</code></p>
         </div>
         </form>
 
@@ -33939,7 +33939,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Authorization: Bearer {YOUR_ACCESS_TOKEN}" \
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
-    --form "response_file=@C:\Users\kresc\AppData\Local\Temp\php4597.tmp" </code></pre></div>
+    --form "response_file=@C:\Users\kresc\AppData\Local\Temp\phpFC70.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -34109,7 +34109,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Response attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4597.tmp</code></p>
+<p>Response attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFC70.tmp</code></p>
         </div>
         </form>
 
@@ -34671,7 +34671,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "project_id=1"\
     --form "period_id=1"\
     --form "message=Sisteme girerken hata aliyorum."\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php3D2D.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpF499.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -34894,7 +34894,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional attachment, max 10MB. Required for official document categories. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3D2D.tmp</code></p>
+<p>Optional attachment, max 10MB. Required for official document categories. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF499.tmp</code></p>
         </div>
         </form>
 
@@ -34917,7 +34917,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "message=Ek bilgi paylasiyorum."\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php3D2F.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpF4AA.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -35101,7 +35101,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional reply attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php3D2F.tmp</code></p>
+<p>Optional reply attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF4AA.tmp</code></p>
         </div>
         </form>
 
@@ -36299,7 +36299,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "message=Ek bilgi paylasiyorum."\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php4257.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpF933.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -36483,7 +36483,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional reply attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4257.tmp</code></p>
+<p>Optional reply attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF933.tmp</code></p>
         </div>
         </form>
 
@@ -38034,7 +38034,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "message=Ek bilgi paylasiyorum."\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php4585.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpFC40.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -38218,7 +38218,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional reply attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4585.tmp</code></p>
+<p>Optional reply attachment, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFC40.tmp</code></p>
         </div>
         </form>
 
@@ -39686,10 +39686,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"title\": \"mqeopfuudtdsufvyvddqa\",
     \"description\": \"Molestias ipsam sit veniam sed fuga aspernatur.\",
     \"location\": \"oynlazghdtqtqxbajwbpi\",
-    \"start_at\": \"2026-07-02T10:54:52\",
-    \"end_at\": \"2107-07-31\",
+    \"start_at\": \"2026-07-09T11:23:06\",
+    \"end_at\": \"2107-08-07\",
     \"quota\": 45,
-    \"status\": \"closed\"
+    \"status\": \"open\"
 }"
 </code></pre></div>
 
@@ -39710,10 +39710,10 @@ let body = {
     "title": "mqeopfuudtdsufvyvddqa",
     "description": "Molestias ipsam sit veniam sed fuga aspernatur.",
     "location": "oynlazghdtqtqxbajwbpi",
-    "start_at": "2026-07-02T10:54:52",
-    "end_at": "2107-07-31",
+    "start_at": "2026-07-09T11:23:06",
+    "end_at": "2107-08-07",
     "quota": 45,
-    "status": "closed"
+    "status": "open"
 };
 
 fetch(url, {
@@ -39877,10 +39877,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="start_at"                data-endpoint="POSTapi-panel-volunteer-opportunities"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>end_at</code></b>&nbsp;&nbsp;
@@ -39889,10 +39889,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="end_at"                data-endpoint="POSTapi-panel-volunteer-opportunities"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>start_at</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>start_at</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>quota</code></b>&nbsp;&nbsp;
@@ -39913,10 +39913,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="status"                data-endpoint="POSTapi-panel-volunteer-opportunities"
-               value="closed"
+               value="open"
                data-component="body">
     <br>
-<p>Example: <code>closed</code></p>
+<p>Example: <code>open</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>open</code></li> <li><code>closed</code></li> <li><code>archived</code></li></ul>
         </div>
@@ -40691,16 +40691,16 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Accept: application/json" \
     --data "{
     \"title\": \"vmqeopfuudtdsufvyvddq\",
-    \"kind\": \"network\",
+    \"kind\": \"internship\",
     \"summary\": \"amniihfqcoynlazghdtqt\",
     \"body\": \"qxbajwbpilpmufinllwlo\",
     \"link_url\": \"http:\\/\\/www.schmitt.org\\/\",
-    \"starts_at\": \"2026-07-02T10:54:52\",
-    \"ends_at\": \"2026-07-02T10:54:52\",
-    \"published_at\": \"2026-07-02T10:54:52\",
-    \"expires_at\": \"2026-07-02T10:54:52\",
+    \"starts_at\": \"2026-07-09T11:23:06\",
+    \"ends_at\": \"2026-07-09T11:23:06\",
+    \"published_at\": \"2026-07-09T11:23:06\",
+    \"expires_at\": \"2026-07-09T11:23:06\",
     \"target_audience\": [
-        \"alumni\"
+        \"student\"
     ]
 }"
 </code></pre></div>
@@ -40719,16 +40719,16 @@ const headers = {
 
 let body = {
     "title": "vmqeopfuudtdsufvyvddq",
-    "kind": "network",
+    "kind": "internship",
     "summary": "amniihfqcoynlazghdtqt",
     "body": "qxbajwbpilpmufinllwlo",
     "link_url": "http:\/\/www.schmitt.org\/",
-    "starts_at": "2026-07-02T10:54:52",
-    "ends_at": "2026-07-02T10:54:52",
-    "published_at": "2026-07-02T10:54:52",
-    "expires_at": "2026-07-02T10:54:52",
+    "starts_at": "2026-07-09T11:23:06",
+    "ends_at": "2026-07-09T11:23:06",
+    "published_at": "2026-07-09T11:23:06",
+    "expires_at": "2026-07-09T11:23:06",
     "target_audience": [
-        "alumni"
+        "student"
     ]
 };
 
@@ -40845,10 +40845,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="kind"                data-endpoint="POSTapi-panel-alumni-opportunities"
-               value="network"
+               value="internship"
                data-component="body">
     <br>
-<p>Example: <code>network</code></p>
+<p>Example: <code>internship</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>internship</code></li> <li><code>network</code></li> <li><code>event</code></li> <li><code>other</code></li></ul>
         </div>
@@ -40907,10 +40907,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="starts_at"                data-endpoint="POSTapi-panel-alumni-opportunities"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>ends_at</code></b>&nbsp;&nbsp;
@@ -40919,10 +40919,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="ends_at"                data-endpoint="POSTapi-panel-alumni-opportunities"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>published_at</code></b>&nbsp;&nbsp;
@@ -40931,10 +40931,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="published_at"                data-endpoint="POSTapi-panel-alumni-opportunities"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>expires_at</code></b>&nbsp;&nbsp;
@@ -40943,10 +40943,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="expires_at"                data-endpoint="POSTapi-panel-alumni-opportunities"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>target_audience</code></b>&nbsp;&nbsp;
@@ -40990,12 +40990,12 @@ Must be one of:
     \"summary\": \"amniihfqcoynlazghdtqt\",
     \"body\": \"qxbajwbpilpmufinllwlo\",
     \"link_url\": \"http:\\/\\/www.schmitt.org\\/\",
-    \"starts_at\": \"2026-07-02T10:54:52\",
-    \"ends_at\": \"2026-07-02T10:54:52\",
-    \"published_at\": \"2026-07-02T10:54:52\",
-    \"expires_at\": \"2026-07-02T10:54:52\",
+    \"starts_at\": \"2026-07-09T11:23:06\",
+    \"ends_at\": \"2026-07-09T11:23:06\",
+    \"published_at\": \"2026-07-09T11:23:06\",
+    \"expires_at\": \"2026-07-09T11:23:06\",
     \"target_audience\": [
-        \"student\"
+        \"alumni\"
     ]
 }"
 </code></pre></div>
@@ -41018,12 +41018,12 @@ let body = {
     "summary": "amniihfqcoynlazghdtqt",
     "body": "qxbajwbpilpmufinllwlo",
     "link_url": "http:\/\/www.schmitt.org\/",
-    "starts_at": "2026-07-02T10:54:52",
-    "ends_at": "2026-07-02T10:54:52",
-    "published_at": "2026-07-02T10:54:52",
-    "expires_at": "2026-07-02T10:54:52",
+    "starts_at": "2026-07-09T11:23:06",
+    "ends_at": "2026-07-09T11:23:06",
+    "published_at": "2026-07-09T11:23:06",
+    "expires_at": "2026-07-09T11:23:06",
     "target_audience": [
-        "student"
+        "alumni"
     ]
 };
 
@@ -41215,10 +41215,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="starts_at"                data-endpoint="PUTapi-panel-alumni-opportunities--id-"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>ends_at</code></b>&nbsp;&nbsp;
@@ -41227,10 +41227,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="ends_at"                data-endpoint="PUTapi-panel-alumni-opportunities--id-"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>published_at</code></b>&nbsp;&nbsp;
@@ -41239,10 +41239,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="published_at"                data-endpoint="PUTapi-panel-alumni-opportunities--id-"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>expires_at</code></b>&nbsp;&nbsp;
@@ -41251,10 +41251,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="expires_at"                data-endpoint="PUTapi-panel-alumni-opportunities--id-"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>target_audience</code></b>&nbsp;&nbsp;
@@ -41621,11 +41621,11 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --data "{
     \"project_id\": 17,
     \"category\": \"mqeopfuudtdsufvyvddqa\",
-    \"from\": \"2026-07-02T10:54:50\",
-    \"to\": \"2107-07-31\",
+    \"from\": \"2026-07-09T11:23:04\",
+    \"to\": \"2107-08-07\",
     \"type\": \"forum_post\",
     \"unread_only\": true,
-    \"starred_only\": false,
+    \"starred_only\": true,
     \"pinned_only\": true
 }"
 </code></pre></div>
@@ -41658,11 +41658,11 @@ const headers = {
 let body = {
     "project_id": 17,
     "category": "mqeopfuudtdsufvyvddqa",
-    "from": "2026-07-02T10:54:50",
-    "to": "2107-07-31",
+    "from": "2026-07-09T11:23:04",
+    "to": "2107-08-07",
     "type": "forum_post",
     "unread_only": true,
-    "starred_only": false,
+    "starred_only": true,
     "pinned_only": true
 };
 
@@ -41948,10 +41948,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="from"                data-endpoint="GETapi-inbox-messages"
-               value="2026-07-02T10:54:50"
+               value="2026-07-09T11:23:04"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:50</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:04</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>to</code></b>&nbsp;&nbsp;
@@ -41960,10 +41960,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="to"                data-endpoint="GETapi-inbox-messages"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>type</code></b>&nbsp;&nbsp;
@@ -42021,7 +42021,7 @@ Must be one of:
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>false</code></p>
+<p>Example: <code>true</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>pinned_only</code></b>&nbsp;&nbsp;
@@ -42580,7 +42580,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "target_units[]=program"\
     --form "project_id=1"\
     --form "user_ids[]=12"\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php4126.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpF841.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -42805,7 +42805,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4126.tmp</code></p>
+<p>Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF841.tmp</code></p>
         </div>
         </form>
 
@@ -42833,8 +42833,8 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"project_id\": 17,
     \"sender_id\": 17,
     \"search\": \"mqeopfuudtdsufvyvddqa\",
-    \"date_from\": \"2026-07-02T10:54:51\",
-    \"date_to\": \"2107-07-31\",
+    \"date_from\": \"2026-07-09T11:23:05\",
+    \"date_to\": \"2107-08-07\",
     \"per_page\": 13
 }"
 </code></pre></div>
@@ -42870,8 +42870,8 @@ let body = {
     "project_id": 17,
     "sender_id": 17,
     "search": "mqeopfuudtdsufvyvddqa",
-    "date_from": "2026-07-02T10:54:51",
-    "date_to": "2107-07-31",
+    "date_from": "2026-07-09T11:23:05",
+    "date_to": "2107-08-07",
     "per_page": 13
 };
 
@@ -43154,10 +43154,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_from"                data-endpoint="GETapi-admin-announcements-communication-logs"
-               value="2026-07-02T10:54:51"
+               value="2026-07-09T11:23:05"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:51</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:05</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>date_to</code></b>&nbsp;&nbsp;
@@ -43166,10 +43166,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_to"                data-endpoint="GETapi-admin-announcements-communication-logs"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>per_page</code></b>&nbsp;&nbsp;
@@ -43204,13 +43204,13 @@ Must be one of:
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"type\": \"sms\",
+    \"type\": \"email\",
     \"status\": \"vmqeopfuudtdsufvyvddq\",
     \"project_id\": 17,
     \"sender_id\": 17,
     \"search\": \"mqeopfuudtdsufvyvddqa\",
-    \"date_from\": \"2026-07-02T10:54:51\",
-    \"date_to\": \"2107-07-31\"
+    \"date_from\": \"2026-07-09T11:23:05\",
+    \"date_to\": \"2107-08-07\"
 }"
 </code></pre></div>
 
@@ -43240,13 +43240,13 @@ const headers = {
 };
 
 let body = {
-    "type": "sms",
+    "type": "email",
     "status": "vmqeopfuudtdsufvyvddq",
     "project_id": 17,
     "sender_id": 17,
     "search": "mqeopfuudtdsufvyvddqa",
-    "date_from": "2026-07-02T10:54:51",
-    "date_to": "2107-07-31"
+    "date_from": "2026-07-09T11:23:05",
+    "date_to": "2107-08-07"
 };
 
 fetch(url, {
@@ -43456,10 +43456,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="type"                data-endpoint="GETapi-admin-announcements-communication-logs-export"
-               value="sms"
+               value="email"
                data-component="body">
     <br>
-<p>Example: <code>sms</code></p>
+<p>Example: <code>email</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>email</code></li> <li><code>sms</code></li></ul>
         </div>
@@ -43518,10 +43518,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_from"                data-endpoint="GETapi-admin-announcements-communication-logs-export"
-               value="2026-07-02T10:54:51"
+               value="2026-07-09T11:23:05"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:51</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:05</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>date_to</code></b>&nbsp;&nbsp;
@@ -43530,10 +43530,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_to"                data-endpoint="GETapi-admin-announcements-communication-logs-export"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-08-07</code></p>
         </div>
         </form>
 
@@ -44233,7 +44233,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "expires_at=2026-07-31 23:59:00"\
     --form "send_sms="\
     --form "send_email=1"\
-    --form "email_attachment=@C:\Users\kresc\AppData\Local\Temp\php417A.tmp" </code></pre></div>
+    --form "email_attachment=@C:\Users\kresc\AppData\Local\Temp\phpF885.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -44546,7 +44546,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php417A.tmp</code></p>
+<p>Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF885.tmp</code></p>
         </div>
         </form>
 
@@ -45200,10 +45200,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --data "{
     \"project_id\": 17,
     \"category\": \"mqeopfuudtdsufvyvddqa\",
-    \"from\": \"2026-07-02T10:54:51\",
-    \"to\": \"2107-07-31\",
+    \"from\": \"2026-07-09T11:23:05\",
+    \"to\": \"2107-08-07\",
     \"type\": \"opportunity\",
-    \"unread_only\": false,
+    \"unread_only\": true,
     \"starred_only\": true,
     \"pinned_only\": true
 }"
@@ -45237,10 +45237,10 @@ const headers = {
 let body = {
     "project_id": 17,
     "category": "mqeopfuudtdsufvyvddqa",
-    "from": "2026-07-02T10:54:51",
-    "to": "2107-07-31",
+    "from": "2026-07-09T11:23:05",
+    "to": "2107-08-07",
     "type": "opportunity",
-    "unread_only": false,
+    "unread_only": true,
     "starred_only": true,
     "pinned_only": true
 };
@@ -45527,10 +45527,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="from"                data-endpoint="GETapi-admin-inbox-messages"
-               value="2026-07-02T10:54:51"
+               value="2026-07-09T11:23:05"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:51</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:05</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>to</code></b>&nbsp;&nbsp;
@@ -45539,10 +45539,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="to"                data-endpoint="GETapi-admin-inbox-messages"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>type</code></b>&nbsp;&nbsp;
@@ -45578,7 +45578,7 @@ Must be one of:
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>false</code></p>
+<p>Example: <code>true</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>starred_only</code></b>&nbsp;&nbsp;
@@ -46159,7 +46159,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "target_units[]=program"\
     --form "project_id=1"\
     --form "user_ids[]=12"\
-    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\php44B2.tmp" </code></pre></div>
+    --form "attachment=@C:\Users\kresc\AppData\Local\Temp\phpFB8C.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -46384,7 +46384,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php44B2.tmp</code></p>
+<p>Optional attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFB8C.tmp</code></p>
         </div>
         </form>
 
@@ -46412,8 +46412,8 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"project_id\": 17,
     \"sender_id\": 17,
     \"search\": \"mqeopfuudtdsufvyvddqa\",
-    \"date_from\": \"2026-07-02T10:54:52\",
-    \"date_to\": \"2107-07-31\",
+    \"date_from\": \"2026-07-09T11:23:06\",
+    \"date_to\": \"2107-08-07\",
     \"per_page\": 13
 }"
 </code></pre></div>
@@ -46449,8 +46449,8 @@ let body = {
     "project_id": 17,
     "sender_id": 17,
     "search": "mqeopfuudtdsufvyvddqa",
-    "date_from": "2026-07-02T10:54:52",
-    "date_to": "2107-07-31",
+    "date_from": "2026-07-09T11:23:06",
+    "date_to": "2107-08-07",
     "per_page": 13
 };
 
@@ -46733,10 +46733,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_from"                data-endpoint="GETapi-panel-announcements-communication-logs"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>date_to</code></b>&nbsp;&nbsp;
@@ -46745,10 +46745,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_to"                data-endpoint="GETapi-panel-announcements-communication-logs"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>per_page</code></b>&nbsp;&nbsp;
@@ -46788,8 +46788,8 @@ Must be one of:
     \"project_id\": 17,
     \"sender_id\": 17,
     \"search\": \"mqeopfuudtdsufvyvddqa\",
-    \"date_from\": \"2026-07-02T10:54:52\",
-    \"date_to\": \"2107-07-31\"
+    \"date_from\": \"2026-07-09T11:23:06\",
+    \"date_to\": \"2107-08-07\"
 }"
 </code></pre></div>
 
@@ -46824,8 +46824,8 @@ let body = {
     "project_id": 17,
     "sender_id": 17,
     "search": "mqeopfuudtdsufvyvddqa",
-    "date_from": "2026-07-02T10:54:52",
-    "date_to": "2107-07-31"
+    "date_from": "2026-07-09T11:23:06",
+    "date_to": "2107-08-07"
 };
 
 fetch(url, {
@@ -47097,10 +47097,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_from"                data-endpoint="GETapi-panel-announcements-communication-logs-export"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>date_to</code></b>&nbsp;&nbsp;
@@ -47109,10 +47109,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="date_to"                data-endpoint="GETapi-panel-announcements-communication-logs-export"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>date_from</code>. Example: <code>2107-08-07</code></p>
         </div>
         </form>
 
@@ -47812,7 +47812,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "expires_at=2026-07-31 23:59:00"\
     --form "send_sms="\
     --form "send_email=1"\
-    --form "email_attachment=@C:\Users\kresc\AppData\Local\Temp\php44E7.tmp" </code></pre></div>
+    --form "email_attachment=@C:\Users\kresc\AppData\Local\Temp\phpFBC1.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -48125,7 +48125,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php44E7.tmp</code></p>
+<p>Optional email attachment. Allowed: pdf, jpg, png, docx. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFBC1.tmp</code></p>
         </div>
         </form>
 
@@ -48779,9 +48779,9 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --data "{
     \"project_id\": 17,
     \"category\": \"mqeopfuudtdsufvyvddqa\",
-    \"from\": \"2026-07-02T10:54:52\",
-    \"to\": \"2107-07-31\",
-    \"type\": \"opportunity\",
+    \"from\": \"2026-07-09T11:23:06\",
+    \"to\": \"2107-08-07\",
+    \"type\": \"forum_post\",
     \"unread_only\": false,
     \"starred_only\": true,
     \"pinned_only\": false
@@ -48816,9 +48816,9 @@ const headers = {
 let body = {
     "project_id": 17,
     "category": "mqeopfuudtdsufvyvddqa",
-    "from": "2026-07-02T10:54:52",
-    "to": "2107-07-31",
-    "type": "opportunity",
+    "from": "2026-07-09T11:23:06",
+    "to": "2107-08-07",
+    "type": "forum_post",
     "unread_only": false,
     "starred_only": true,
     "pinned_only": false
@@ -49106,10 +49106,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="from"                data-endpoint="GETapi-panel-inbox-messages"
-               value="2026-07-02T10:54:52"
+               value="2026-07-09T11:23:06"
                data-component="body">
     <br>
-<p>Must be a valid date. Example: <code>2026-07-02T10:54:52</code></p>
+<p>Must be a valid date. Example: <code>2026-07-09T11:23:06</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>to</code></b>&nbsp;&nbsp;
@@ -49118,10 +49118,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="to"                data-endpoint="GETapi-panel-inbox-messages"
-               value="2107-07-31"
+               value="2107-08-07"
                data-component="body">
     <br>
-<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-07-31</code></p>
+<p>Must be a valid date. Must be a date after or equal to <code>from</code>. Example: <code>2107-08-07</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>type</code></b>&nbsp;&nbsp;
@@ -49130,10 +49130,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="type"                data-endpoint="GETapi-panel-inbox-messages"
-               value="opportunity"
+               value="forum_post"
                data-component="body">
     <br>
-<p>Example: <code>opportunity</code></p>
+<p>Example: <code>forum_post</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>announcement</code></li> <li><code>opportunity</code></li> <li><code>forum_post</code></li></ul>
         </div>
@@ -58212,7 +58212,7 @@ Must be one of:
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"graduation_status\": \"not_completed\",
+    \"graduation_status\": \"graduated\",
     \"graduation_note\": \"vmqeopfuudtdsufvyvddq\"
 }"
 </code></pre></div>
@@ -58230,7 +58230,7 @@ const headers = {
 };
 
 let body = {
-    "graduation_status": "not_completed",
+    "graduation_status": "graduated",
     "graduation_note": "vmqeopfuudtdsufvyvddq"
 };
 
@@ -58348,10 +58348,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="graduation_status"                data-endpoint="PATCHapi-panel-participants--id--graduation"
-               value="not_completed"
+               value="graduated"
                data-component="body">
     <br>
-<p>Example: <code>not_completed</code></p>
+<p>Example: <code>graduated</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>completed</code></li> <li><code>graduated</code></li> <li><code>not_completed</code></li></ul>
         </div>
@@ -58388,9 +58388,9 @@ Must be one of:
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"public_profile_visible\": true,
-    \"public_photo_visible\": false,
-    \"public_alumni_visible\": true
+    \"public_profile_visible\": false,
+    \"public_photo_visible\": true,
+    \"public_alumni_visible\": false
 }"
 </code></pre></div>
 
@@ -58407,9 +58407,9 @@ const headers = {
 };
 
 let body = {
-    "public_profile_visible": true,
-    "public_photo_visible": false,
-    "public_alumni_visible": true
+    "public_profile_visible": false,
+    "public_photo_visible": true,
+    "public_alumni_visible": false
 };
 
 fetch(url, {
@@ -58539,7 +58539,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>true</code></p>
+<p>Example: <code>false</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>public_photo_visible</code></b>&nbsp;&nbsp;
@@ -58561,7 +58561,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>false</code></p>
+<p>Example: <code>true</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>public_alumni_visible</code></b>&nbsp;&nbsp;
@@ -58583,7 +58583,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>true</code></p>
+<p>Example: <code>false</code></p>
         </div>
         </form>
 
@@ -59299,7 +59299,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     \"participant_ids\": [
         17
     ],
-    \"graduation_status\": \"completed\",
+    \"graduation_status\": \"not_completed\",
     \"graduation_note\": \"mqeopfuudtdsufvyvddqa\"
 }"
 </code></pre></div>
@@ -59320,7 +59320,7 @@ let body = {
     "participant_ids": [
         17
     ],
-    "graduation_status": "completed",
+    "graduation_status": "not_completed",
     "graduation_note": "mqeopfuudtdsufvyvddqa"
 };
 
@@ -59439,10 +59439,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="graduation_status"                data-endpoint="POSTapi-coordinator-participants-bulk-graduation"
-               value="completed"
+               value="not_completed"
                data-component="body">
     <br>
-<p>Example: <code>completed</code></p>
+<p>Example: <code>not_completed</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>completed</code></li> <li><code>graduated</code></li> <li><code>not_completed</code></li></ul>
         </div>
@@ -59657,7 +59657,7 @@ Must be one of:
     --data "{
     \"public_profile_visible\": true,
     \"public_photo_visible\": false,
-    \"public_alumni_visible\": false
+    \"public_alumni_visible\": true
 }"
 </code></pre></div>
 
@@ -59676,7 +59676,7 @@ const headers = {
 let body = {
     "public_profile_visible": true,
     "public_photo_visible": false,
-    "public_alumni_visible": false
+    "public_alumni_visible": true
 };
 
 fetch(url, {
@@ -59850,7 +59850,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             <code>false</code>
         </label>
     <br>
-<p>Example: <code>false</code></p>
+<p>Example: <code>true</code></p>
         </div>
         </form>
 
@@ -75105,7 +75105,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "payment_date=2026-02-01"\
     --form "payment_method=bank_transfer"\
     --form "accounting_code=770.01"\
-    --form "invoice=@C:\Users\kresc\AppData\Local\Temp\php40A4.tmp" </code></pre></div>
+    --form "invoice=@C:\Users\kresc\AppData\Local\Temp\phpF7C0.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -75401,7 +75401,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional invoice file; pdf, jpg, jpeg, png, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php40A4.tmp</code></p>
+<p>Optional invoice file; pdf, jpg, jpeg, png, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF7C0.tmp</code></p>
         </div>
         </form>
 
@@ -77097,7 +77097,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "payment_date=2026-02-01"\
     --form "payment_method=bank_transfer"\
     --form "accounting_code=770.01"\
-    --form "invoice=@C:\Users\kresc\AppData\Local\Temp\php467D.tmp" </code></pre></div>
+    --form "invoice=@C:\Users\kresc\AppData\Local\Temp\phpFD15.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -77393,7 +77393,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional invoice file; pdf, jpg, jpeg, png, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php467D.tmp</code></p>
+<p>Optional invoice file; pdf, jpg, jpeg, png, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFD15.tmp</code></p>
         </div>
         </form>
 
@@ -78961,7 +78961,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "payment_date=2026-02-01"\
     --form "payment_method=bank_transfer"\
     --form "accounting_code=770.01"\
-    --form "invoice=@C:\Users\kresc\AppData\Local\Temp\php470B.tmp" </code></pre></div>
+    --form "invoice=@C:\Users\kresc\AppData\Local\Temp\phpFD84.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -79257,7 +79257,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional invoice file; pdf, jpg, jpeg, png, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php470B.tmp</code></p>
+<p>Optional invoice file; pdf, jpg, jpeg, png, max 10MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFD84.tmp</code></p>
         </div>
         </form>
 
@@ -84720,7 +84720,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             \"scopes\": [
                 {
                     \"permission_name\": \"consequatur\",
-                    \"scope_type\": \"self\"
+                    \"scope_type\": \"all\"
                 }
             ]
         }
@@ -84752,7 +84752,7 @@ let body = {
             "scopes": [
                 {
                     "permission_name": "consequatur",
-                    "scope_type": "self"
+                    "scope_type": "all"
                 }
             ]
         }
@@ -85074,10 +85074,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="granular_scopes.0.scopes.0.scope_type"                data-endpoint="PUTapi-admin-permissions-matrix"
-               value="self"
+               value="all"
                data-component="body">
     <br>
-<p>Example: <code>self</code></p>
+<p>Example: <code>all</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>all</code></li> <li><code>own_projects</code></li> <li><code>assigned_projects</code></li> <li><code>own_unit</code></li> <li><code>selected_projects</code></li> <li><code>self</code></li> <li><code>none</code></li></ul>
                     </div>
@@ -85914,10 +85914,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="overrides.0.scope_type"                data-endpoint="PUTapi-admin-permissions-matrix-users--id-"
-               value="self"
+               value="all"
                data-component="body">
     <br>
-<p>Example: <code>self</code></p>
+<p>Example: <code>all</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>all</code></li> <li><code>own_projects</code></li> <li><code>assigned_projects</code></li> <li><code>own_unit</code></li> <li><code>selected_projects</code></li> <li><code>self</code></li> <li><code>none</code></li></ul>
                     </div>
@@ -86797,10 +86797,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="scopes.0.scope_type"                data-endpoint="PUTapi-admin-permissions-matrix-roles--id-"
-               value="own_unit"
+               value="none"
                data-component="body">
     <br>
-<p>This field is required when <code>scopes</code> is present. Example: <code>own_unit</code></p>
+<p>This field is required when <code>scopes</code> is present. Example: <code>none</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>all</code></li> <li><code>own_projects</code></li> <li><code>assigned_projects</code></li> <li><code>own_unit</code></li> <li><code>selected_projects</code></li> <li><code>self</code></li> <li><code>none</code></li></ul>
                     </div>
@@ -87231,7 +87231,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
             \"scopes\": [
                 {
                     \"permission_name\": \"consequatur\",
-                    \"scope_type\": \"own_projects\"
+                    \"scope_type\": \"assigned_projects\"
                 }
             ]
         }
@@ -87263,7 +87263,7 @@ let body = {
             "scopes": [
                 {
                     "permission_name": "consequatur",
-                    "scope_type": "own_projects"
+                    "scope_type": "assigned_projects"
                 }
             ]
         }
@@ -87585,10 +87585,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="granular_scopes.0.scopes.0.scope_type"                data-endpoint="PUTapi-panel-permissions-matrix"
-               value="own_projects"
+               value="assigned_projects"
                data-component="body">
     <br>
-<p>Example: <code>own_projects</code></p>
+<p>Example: <code>assigned_projects</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>all</code></li> <li><code>own_projects</code></li> <li><code>assigned_projects</code></li> <li><code>own_unit</code></li> <li><code>selected_projects</code></li> <li><code>self</code></li> <li><code>none</code></li></ul>
                     </div>
@@ -88425,10 +88425,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="overrides.0.scope_type"                data-endpoint="PUTapi-panel-permissions-matrix-users--id-"
-               value="self"
+               value="all"
                data-component="body">
     <br>
-<p>Example: <code>self</code></p>
+<p>Example: <code>all</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>all</code></li> <li><code>own_projects</code></li> <li><code>assigned_projects</code></li> <li><code>own_unit</code></li> <li><code>selected_projects</code></li> <li><code>self</code></li> <li><code>none</code></li></ul>
                     </div>
@@ -89308,10 +89308,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="scopes.0.scope_type"                data-endpoint="PUTapi-panel-permissions-matrix-roles--id-"
-               value="selected_projects"
+               value="self"
                data-component="body">
     <br>
-<p>This field is required when <code>scopes</code> is present. Example: <code>selected_projects</code></p>
+<p>This field is required when <code>scopes</code> is present. Example: <code>self</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>all</code></li> <li><code>own_projects</code></li> <li><code>assigned_projects</code></li> <li><code>own_unit</code></li> <li><code>selected_projects</code></li> <li><code>self</code></li> <li><code>none</code></li></ul>
                     </div>
@@ -91215,7 +91215,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "label=CV"\
-    --form "document=@C:\Users\kresc\AppData\Local\Temp\php4113.tmp" </code></pre></div>
+    --form "document=@C:\Users\kresc\AppData\Local\Temp\phpF82F.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -91374,7 +91374,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4113.tmp</code></p>
+<p>Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF82F.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>label</code></b>&nbsp;&nbsp;
@@ -93065,7 +93065,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "label=CV"\
-    --form "document=@C:\Users\kresc\AppData\Local\Temp\php45C9.tmp" </code></pre></div>
+    --form "document=@C:\Users\kresc\AppData\Local\Temp\phpFC92.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -93224,7 +93224,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php45C9.tmp</code></p>
+<p>Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFC92.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>label</code></b>&nbsp;&nbsp;
@@ -95604,8 +95604,8 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Accept: application/json" \
     --data "{
     \"search\": \"vmqeopfuudtdsufvyvddq\",
-    \"status\": \"active\",
-    \"format\": \"excel\"
+    \"status\": \"candidate\",
+    \"format\": \"word\"
 }"
 </code></pre></div>
 
@@ -95631,8 +95631,8 @@ const headers = {
 
 let body = {
     "search": "vmqeopfuudtdsufvyvddq",
-    "status": "active",
-    "format": "excel"
+    "status": "candidate",
+    "format": "word"
 };
 
 fetch(url, {
@@ -95803,10 +95803,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="status"                data-endpoint="GETapi-panel-trainers-export"
-               value="active"
+               value="candidate"
                data-component="body">
     <br>
-<p>Example: <code>active</code></p>
+<p>Example: <code>candidate</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>active</code></li> <li><code>passive</code></li> <li><code>candidate</code></li></ul>
         </div>
@@ -95817,10 +95817,10 @@ Must be one of:
  &nbsp;
                 <input type="text" style="display: none"
                               name="format"                data-endpoint="GETapi-panel-trainers-export"
-               value="excel"
+               value="word"
                data-component="body">
     <br>
-<p>Example: <code>excel</code></p>
+<p>Example: <code>word</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>xlsx</code></li> <li><code>excel</code></li> <li><code>pdf</code></li> <li><code>docx</code></li> <li><code>word</code></li> <li><code>csv</code></li></ul>
         </div>
@@ -102122,7 +102122,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "folder=homepage-hero"\
-    --form "file=@C:\Users\kresc\AppData\Local\Temp\php4014.tmp" </code></pre></div>
+    --form "file=@C:\Users\kresc\AppData\Local\Temp\phpF731.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -102273,7 +102273,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4014.tmp</code></p>
+<p>Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF731.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>folder</code></b>&nbsp;&nbsp;
@@ -102309,7 +102309,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: multipart/form-data" \
     --header "Accept: application/json" \
     --form "folder=homepage-hero"\
-    --form "file=@C:\Users\kresc\AppData\Local\Temp\php460A.tmp" </code></pre></div>
+    --form "file=@C:\Users\kresc\AppData\Local\Temp\phpFCD2.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -102460,7 +102460,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php460A.tmp</code></p>
+<p>Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFCD2.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>folder</code></b>&nbsp;&nbsp;
@@ -102575,7 +102575,7 @@ fetch(url, {
                 <pre>
 
 <code class="language-json" style="max-height: 300px;">{
-    &quot;message&quot;: &quot;Veri asistani icin tum sistem kapsami gerekir.&quot;
+    &quot;message&quot;: &quot;Veri asistanı i&ccedil;in t&uuml;m sistem kapsamı gerekir.&quot;
 }</code>
  </pre>
             <blockquote>
@@ -102711,7 +102711,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"format\": \"docx\"
+    \"format\": \"pdf\"
 }"
 </code></pre></div>
 
@@ -102734,7 +102734,7 @@ const headers = {
 };
 
 let body = {
-    "format": "docx"
+    "format": "pdf"
 };
 
 fetch(url, {
@@ -102758,7 +102758,7 @@ fetch(url, {
         </blockquote>
                 <pre>
 
-<code class="language-json" style="max-height: 300px;">&quot;Gecersiz disa aktarma istegi.&quot;</code>
+<code class="language-json" style="max-height: 300px;">&quot;Ge&ccedil;ersiz dışa aktarma isteği.&quot;</code>
  </pre>
             <blockquote>
             <p>Example response (403):</p>
@@ -102772,7 +102772,7 @@ fetch(url, {
         </blockquote>
                 <pre>
 
-<code class="language-json" style="max-height: 300px;">&quot;Disa aktarma suresi dolmus veya gecersiz.&quot;</code>
+<code class="language-json" style="max-height: 300px;">&quot;Dışa aktarma s&uuml;resi dolmuş veya ge&ccedil;ersiz.&quot;</code>
  </pre>
             <blockquote>
             <p>Example response (422):</p>
@@ -102906,10 +102906,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="format"                data-endpoint="GETapi-admin-chatbot-export--token-"
-               value="docx"
+               value="pdf"
                data-component="body">
     <br>
-<p>Example: <code>docx</code></p>
+<p>Example: <code>pdf</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>csv</code></li> <li><code>xlsx</code></li> <li><code>excel</code></li> <li><code>pdf</code></li> <li><code>docx</code></li> <li><code>word</code></li></ul>
         </div>
@@ -103010,7 +103010,7 @@ fetch(url, {
                 <pre>
 
 <code class="language-json" style="max-height: 300px;">{
-    &quot;message&quot;: &quot;Veri asistani icin tum sistem kapsami gerekir.&quot;
+    &quot;message&quot;: &quot;Veri asistanı i&ccedil;in t&uuml;m sistem kapsamı gerekir.&quot;
 }</code>
  </pre>
             <blockquote>
@@ -103146,7 +103146,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"format\": \"pdf\"
+    \"format\": \"docx\"
 }"
 </code></pre></div>
 
@@ -103169,7 +103169,7 @@ const headers = {
 };
 
 let body = {
-    "format": "pdf"
+    "format": "docx"
 };
 
 fetch(url, {
@@ -103193,7 +103193,7 @@ fetch(url, {
         </blockquote>
                 <pre>
 
-<code class="language-json" style="max-height: 300px;">&quot;Gecersiz disa aktarma istegi.&quot;</code>
+<code class="language-json" style="max-height: 300px;">&quot;Ge&ccedil;ersiz dışa aktarma isteği.&quot;</code>
  </pre>
             <blockquote>
             <p>Example response (403):</p>
@@ -103207,7 +103207,7 @@ fetch(url, {
         </blockquote>
                 <pre>
 
-<code class="language-json" style="max-height: 300px;">&quot;Disa aktarma suresi dolmus veya gecersiz.&quot;</code>
+<code class="language-json" style="max-height: 300px;">&quot;Dışa aktarma s&uuml;resi dolmuş veya ge&ccedil;ersiz.&quot;</code>
  </pre>
             <blockquote>
             <p>Example response (422):</p>
@@ -103341,10 +103341,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="format"                data-endpoint="GETapi-panel-chatbot-export--token-"
-               value="pdf"
+               value="docx"
                data-component="body">
     <br>
-<p>Example: <code>pdf</code></p>
+<p>Example: <code>docx</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>csv</code></li> <li><code>xlsx</code></li> <li><code>excel</code></li> <li><code>pdf</code></li> <li><code>docx</code></li> <li><code>word</code></li></ul>
         </div>
@@ -103635,7 +103635,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Accept: application/json" \
     --data "{
     \"project_id\": 17,
-    \"context\": \"meeting_create\"
+    \"context\": \"meeting_manage\"
 }"
 </code></pre></div>
 
@@ -103660,7 +103660,7 @@ const headers = {
 
 let body = {
     "project_id": 17,
-    "context": "meeting_create"
+    "context": "meeting_manage"
 };
 
 fetch(url, {
@@ -103841,10 +103841,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="context"                data-endpoint="GETapi-panel-calendar-assignees"
-               value="meeting_create"
+               value="meeting_manage"
                data-component="body">
     <br>
-<p>Example: <code>meeting_create</code></p>
+<p>Example: <code>meeting_manage</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>program</code></li> <li><code>meeting_create</code></li> <li><code>meeting_manage</code></li></ul>
         </div>
@@ -104018,7 +104018,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     --data "{
-    \"panel\": \"admin\"
+    \"panel\": \"staff\"
 }"
 </code></pre></div>
 
@@ -104041,7 +104041,7 @@ const headers = {
 };
 
 let body = {
-    "panel": "admin"
+    "panel": "staff"
 };
 
 fetch(url, {
@@ -104190,10 +104190,10 @@ You can check the Dev Tools console for debugging information.</code></pre>
  &nbsp;
                 <input type="text" style="display: none"
                               name="panel"                data-endpoint="GETapi-panel-calendar-google-connect"
-               value="admin"
+               value="staff"
                data-component="body">
     <br>
-<p>Example: <code>admin</code></p>
+<p>Example: <code>staff</code></p>
 Must be one of:
 <ul style="list-style-type: square;"><li><code>admin</code></li> <li><code>coordinator</code></li> <li><code>staff</code></li></ul>
         </div>
@@ -110530,7 +110530,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "image_path=motivation-images/sample.png"\
     --form "sort_order=1"\
     --form "is_active=1"\
-    --form "image=@C:\Users\kresc\AppData\Local\Temp\php4157.tmp" </code></pre></div>
+    --form "image=@C:\Users\kresc\AppData\Local\Temp\phpF862.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -110706,7 +110706,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional quote image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4157.tmp</code></p>
+<p>Optional quote image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF862.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>image_path</code></b>&nbsp;&nbsp;
@@ -110779,7 +110779,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "image_path=motivation-images/new.png"\
     --form "sort_order=2"\
     --form "is_active=1"\
-    --form "image=@C:\Users\kresc\AppData\Local\Temp\php4159.tmp" </code></pre></div>
+    --form "image=@C:\Users\kresc\AppData\Local\Temp\phpF873.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -110954,7 +110954,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional replacement image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php4159.tmp</code></p>
+<p>Optional replacement image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpF873.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>image_path</code></b>&nbsp;&nbsp;
@@ -111918,7 +111918,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "image_path=motivation-images/sample.png"\
     --form "sort_order=1"\
     --form "is_active=1"\
-    --form "image=@C:\Users\kresc\AppData\Local\Temp\php44D4.tmp" </code></pre></div>
+    --form "image=@C:\Users\kresc\AppData\Local\Temp\phpFB9D.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -112094,7 +112094,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional quote image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php44D4.tmp</code></p>
+<p>Optional quote image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFB9D.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>image_path</code></b>&nbsp;&nbsp;
@@ -112167,7 +112167,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
     --form "image_path=motivation-images/new.png"\
     --form "sort_order=2"\
     --form "is_active=1"\
-    --form "image=@C:\Users\kresc\AppData\Local\Temp\php44D6.tmp" </code></pre></div>
+    --form "image=@C:\Users\kresc\AppData\Local\Temp\phpFBAF.tmp" </code></pre></div>
 
 
 <div class="javascript-example">
@@ -112342,7 +112342,7 @@ You can check the Dev Tools console for debugging information.</code></pre>
                value=""
                data-component="body">
     <br>
-<p>Optional replacement image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\php44D6.tmp</code></p>
+<p>Optional replacement image. Allowed: jpg, jpeg, png, webp. Max 8 MB. Example: <code>C:\Users\kresc\AppData\Local\Temp\phpFBAF.tmp</code></p>
         </div>
                 <div style=" padding-left: 28px;  clear: unset;">
             <b style="line-height: 2;"><code>image_path</code></b>&nbsp;&nbsp;

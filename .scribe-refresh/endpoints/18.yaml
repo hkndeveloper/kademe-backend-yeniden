@@ -1,0 +1,612 @@
+name: Feedback
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/feedbacks
+    metadata:
+      custom: []
+      groupName: Feedback
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List feedback forms for attended programs.'
+      description: 'Requires permission: `participant.feedback.create`. Returns completed programs where the user has valid attendance, including dynamic feedback questions and submission/credit state.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"questions":[{"id":"rating","type":"rating","required":true}],"programs":[{"id":1,"title":"Liderlik Atolyesi","feedback_submitted":false,"feedback_open":true,"credit_restored":false,"questions":[{"id":"rating","type":"rating"}]}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/feedbacks
+    metadata:
+      custom: []
+      groupName: Feedback
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Submit feedback for an attended program.'
+      description: 'Requires permission: `participant.feedback.create`. The program must be completed, targeted to the user role, attended with a valid attendance record, and still inside the feedback deadline. For students, the feedback credit restore is applied once.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      program_id:
+        custom: []
+        name: program_id
+        description: 'Program id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      responses:
+        custom: []
+        name: responses
+        description: 'Feedback answers keyed by question id.'
+        required: true
+        example:
+          rating: 5
+          comment: 'Cok faydaliydi'
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      program_id: 1
+      responses:
+        rating: 5
+        comment: 'Cok faydaliydi'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Degerlendirmen alindi ve oturuma ait kredi iadesi uygulandi.","current_credit":100,"anonymous_feedback_id":"fb_abc123"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu degerlendirme panel turunuz icin acik degil."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Degerlendirme formu etkinlik tamamlandiktan sonra acilir."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu oturum icin degerlendirme zaten gonderilmis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/feedback-form-templates
+    metadata:
+      custom: []
+      groupName: Feedback
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/feedback-form-templates
+    metadata:
+      custom: []
+      groupName: Feedback
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      name:
+        custom: []
+        name: name
+        description: 'Must not be greater than 255 characters.'
+        required: true
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Must not be greater than 1000 characters.'
+        required: false
+        example: 'Dolores molestias ipsam sit.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      is_default:
+        custom: []
+        name: is_default
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      is_active:
+        custom: []
+        name: is_active
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      questions:
+        custom: []
+        name: questions
+        description: 'Must have at least 1 items. Must not have more than 20 items.'
+        required: true
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].question_key':
+        custom: []
+        name: 'questions[].question_key'
+        description: 'Must match the regex /^[a-z0-9_]+$/. Must not be greater than 80 characters.'
+        required: true
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].label':
+        custom: []
+        name: 'questions[].label'
+        description: 'Must not be greater than 255 characters.'
+        required: true
+        example: amniihfqcoynlazghdtqt
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].type':
+        custom: []
+        name: 'questions[].type'
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].options':
+        custom: []
+        name: 'questions[].options'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example:
+          - mqeopfuudtdsufvyvddqa
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'questions[].min_value':
+        custom: []
+        name: 'questions[].min_value'
+        description: 'Must be at least 1. Must not be greater than 10.'
+        required: false
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'questions[].max_value':
+        custom: []
+        name: 'questions[].max_value'
+        description: 'Must be at least 1. Must not be greater than 10.'
+        required: false
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'questions[].is_required':
+        custom: []
+        name: 'questions[].is_required'
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: vmqeopfuudtdsufvyvddq
+      description: 'Dolores molestias ipsam sit.'
+      is_default: false
+      is_active: false
+      questions:
+        -
+          question_key: vmqeopfuudtdsufvyvddq
+          label: amniihfqcoynlazghdtqt
+          type: consequatur
+          options:
+            - mqeopfuudtdsufvyvddqa
+          min_value: 5
+          max_value: 6
+          is_required: true
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/feedback-form-templates/{id}'
+    metadata:
+      custom: []
+      groupName: Feedback
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the feedback form template.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Must not be greater than 1000 characters.'
+        required: false
+        example: 'Dolores molestias ipsam sit.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      is_default:
+        custom: []
+        name: is_default
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      is_active:
+        custom: []
+        name: is_active
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      questions:
+        custom: []
+        name: questions
+        description: 'Must have at least 1 items. Must not have more than 20 items.'
+        required: false
+        example: null
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].question_key':
+        custom: []
+        name: 'questions[].question_key'
+        description: 'This field is required when <code>questions</code> is present. Must match the regex /^[a-z0-9_]+$/. Must not be greater than 80 characters.'
+        required: false
+        example: hfqcoynlazghdtqtqxbaj
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].label':
+        custom: []
+        name: 'questions[].label'
+        description: 'This field is required when <code>questions</code> is present. Must not be greater than 255 characters.'
+        required: false
+        example: wbpilpmufinllwloauydl
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].type':
+        custom: []
+        name: 'questions[].type'
+        description: 'This field is required when <code>questions</code> is present.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'questions[].options':
+        custom: []
+        name: 'questions[].options'
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example:
+          - smsjuryvojcybzvrbyick
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'questions[].min_value':
+        custom: []
+        name: 'questions[].min_value'
+        description: 'Must be at least 1. Must not be greater than 10.'
+        required: false
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'questions[].max_value':
+        custom: []
+        name: 'questions[].max_value'
+        description: 'Must be at least 1. Must not be greater than 10.'
+        required: false
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'questions[].is_required':
+        custom: []
+        name: 'questions[].is_required'
+        description: ''
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: vmqeopfuudtdsufvyvddq
+      description: 'Dolores molestias ipsam sit.'
+      is_default: false
+      is_active: false
+      questions:
+        -
+          question_key: hfqcoynlazghdtqtqxbaj
+          label: wbpilpmufinllwloauydl
+          options:
+            - smsjuryvojcybzvrbyick
+          min_value: 10
+          max_value: 6
+          is_required: false
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/feedback-form-templates/{id}'
+    metadata:
+      custom: []
+      groupName: Feedback
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the feedback form template.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

@@ -750,7 +750,16 @@ class ProjectContentController extends Controller
                 'require_consent' => (bool) ($validated['require_consent'] ?? false),
                 'consent_text' => $validated['consent_text'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
-                'auto_reject_rules' => $validated['auto_reject_rules'] ?? null,
+                'auto_reject_rules' => isset($validated['auto_reject_rules'])
+                    ? array_map(fn (array $rule) => [
+                        'field_id' => $rule['field_id'],
+                        'field' => $rule['field_id'],
+                        'operator' => $rule['operator'],
+                        'value' => $rule['value'],
+                        'reason' => $rule['reason'] ?? null,
+                        'message' => $rule['reason'] ?? null,
+                    ], $validated['auto_reject_rules'])
+                    : null,
             ]
         );
 

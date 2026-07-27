@@ -16,8 +16,10 @@ use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\FeedbackFormResolver;
 use App\Support\MediaStorage;
+use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -31,7 +33,14 @@ class AdminProgramController extends Controller
     use AuthorizesGranularPermissions;
     use ResolvesProjectPeriodContext;
 
+    private const PUBLIC_HOMEPAGE_CACHE_KEY = 'public.homepage.v1';
+
     public function __construct(private readonly PermissionResolver $permissionResolver, private readonly CreditService $creditService) {}
+
+    private function clearPublicHomepageCache(): void
+    {
+        Cache::forget(self::PUBLIC_HOMEPAGE_CACHE_KEY);
+    }
 
     /**
      * List panel programs.
@@ -72,7 +81,7 @@ class AdminProgramController extends Controller
         $ctx=$this->resolveProjectPeriodContext($request,'programs.export',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
         $q=Program::query()->with(['project:id,name','period:id,name'])->orderByDesc('start_at');
         $this->applyProjectPeriodContext($q,$ctx);
-        $rows=$q->get()->map(fn(Program $p)=>[$p->id,$p->project?->name??'-',$p->period?->name??'-',$p->title,$p->location??'-',optional($p->start_at)?->format('d.m.Y H:i')??'-',optional($p->end_at)?->format('d.m.Y H:i')??'-',$p->status,$p->credit_deduction??0])->all();
+        $rows=$q->get()->map(fn(Program $p)=>[$p->id,$p->project?->name??'-',$p->period?->name??'-',$p->title,$p->location??'-',IstanbulDateTime::format($p->start_at),IstanbulDateTime::format($p->end_at),$p->status,$p->credit_deduction??0])->all();
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','programlar_'.now()->format('Ymd_His'),'Programlar',['ID','Proje','Donem','Program','Yer','Baslangic','Bitis','Durum','Kredi Kesintisi'],$rows);
     }
 
@@ -87,6 +96,10 @@ class AdminProgramController extends Controller
      * @bodyParam title string required Program title. Example: Haftalik Atolye
      * @bodyParam description string Optional description. Example: Uygulama calismasi.
      * @bodyParam location string Optional location text. Example: Kademe Salon 1
+     * @bodyParam location_place_name string Optional selected map place name. Example: Kademe Genel Merkez
+     * @bodyParam location_place_address string Optional selected map place address. Example: Bosna Hersek Mahallesi, Istanbul
+     * @bodyParam location_place_id string Optional selected map provider place ID. Example: osm:node:123
+     * @bodyParam location_place_provider string Optional selected map provider. Example: osm
      * @bodyParam latitude number Optional location latitude. Example: 41.0082
      * @bodyParam longitude number Optional location longitude. Example: 28.9784
      * @bodyParam radius_meters integer Optional QR geofence radius between 10 and 5000. Defaults to 100. Example: 150
@@ -112,6 +125,7 @@ class AdminProgramController extends Controller
         $this->assertPeriodWritable($request,(int)$v['period_id']);
         $this->assertNoOverlap($v['start_at'],$v['end_at']??null,null,$v['status']??'scheduled');
         $program=Program::query()->create($v+['created_by'=>$request->user()->id]);
+        $this->clearPublicHomepageCache();
         return response()->json(['program'=>$this->programPayload($program->load(['project:id,name','period:id,name']))],201);
     }
 
@@ -141,6 +155,7 @@ class AdminProgramController extends Controller
         $this->assertPeriodWritable($request,$periodId);
         $this->assertNoOverlap($v['start_at']??$program->start_at,$v['end_at']??$program->end_at,$program->id,$v['status']??$program->status);
         $program->update($v);
+        $this->clearPublicHomepageCache();
         return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
     }
 
@@ -525,29 +540,29 @@ class AdminProgramController extends Controller
         $this->assertPeriodWritable($request,$program->period_id);
         $v=$request->validate(['is_public'=>['sometimes','boolean'],'is_featured'=>['sometimes','boolean']]);
         $program->update($v);
+        $this->clearPublicHomepageCache();
         return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
     }
     private function validatedProgramData(Request $request,bool $creating,?Program $program=null): array
     {
-        $rules=['project_id'=>[$creating?'required':'sometimes','integer','exists:projects,id'],'period_id'=>[$creating?'required':'sometimes','integer','exists:periods,id'],'title'=>[$creating?'required':'sometimes','string','max:255'],'description'=>['nullable','string'],'location'=>['nullable','string','max:255'],'latitude'=>['nullable','numeric','between:-90,90'],'longitude'=>['nullable','numeric','between:-180,180'],'radius_meters'=>['nullable','integer','min:10','max:5000'],'guest_info'=>['nullable','array'],'start_at'=>[$creating?'required':'sometimes','date'],'end_at'=>[$creating?'required':'sometimes','date','after_or_equal:start_at'],'credit_deduction'=>['nullable','integer','min:0'],'application_quota'=>['nullable','integer','min:1'],'target_audience'=>['nullable','array'],'target_audience.*'=>['string',Rule::in(['student','alumni'])],'feedback_form_template_id'=>['nullable','integer','exists:feedback_form_templates,id'],'status'=>['nullable',Rule::in(['scheduled','active','completed','cancelled'])],'is_public'=>['nullable','boolean'],'is_featured'=>['nullable','boolean']];
+        $rules=['project_id'=>[$creating?'required':'sometimes','integer','exists:projects,id'],'period_id'=>[$creating?'required':'sometimes','integer','exists:periods,id'],'title'=>[$creating?'required':'sometimes','string','max:255'],'description'=>['nullable','string'],'location'=>['nullable','string','max:255'],'location_place_name'=>['nullable','string','max:255'],'location_place_address'=>['nullable','string','max:500'],'location_place_id'=>['nullable','string','max:255'],'location_place_provider'=>['nullable','string','max:50'],'latitude'=>['nullable','numeric','between:-90,90'],'longitude'=>['nullable','numeric','between:-180,180'],'radius_meters'=>['nullable','integer','min:10','max:5000'],'guest_info'=>['nullable','array'],'start_at'=>[$creating?'required':'sometimes','date'],'end_at'=>[$creating?'required':'sometimes','date','after_or_equal:start_at'],'credit_deduction'=>['nullable','integer','min:0'],'application_quota'=>['nullable','integer','min:1'],'target_audience'=>['nullable','array'],'target_audience.*'=>['string',Rule::in(['student','alumni'])],'feedback_form_template_id'=>['nullable','integer','exists:feedback_form_templates,id'],'status'=>['nullable',Rule::in(['scheduled','active','completed','cancelled'])],'is_public'=>['nullable','boolean'],'is_featured'=>['nullable','boolean']];
         $v=$request->validate($rules);
         if(isset($v['target_audience'])) $v['target_audience']=collect($v['target_audience'])->unique()->values()->all(); elseif($creating) $v['target_audience']=['student'];
         $v['radius_meters']=$v['radius_meters']??$program?->radius_meters??100;
         $v['credit_deduction']=$v['credit_deduction']??$program?->credit_deduction??0;
         $v['status']=$v['status']??$program?->status??'scheduled';
+        $v=IstanbulDateTime::normalizeFields($v,['start_at','end_at']);
         return $v;
     }
 
     private function assertNoOverlap(mixed $startAt,mixed $endAt,?int $ignoreId,?string $status): void
     {
-        if($status==='cancelled'||!$startAt||!$endAt) return;
-        $exists=Program::query()->when($ignoreId,fn($q)=>$q->where('id','!=',$ignoreId))->where('status','!=','cancelled')->where('start_at','<',$endAt)->where('end_at','>',$startAt)->exists();
-        if($exists) throw ValidationException::withMessages(['start_at'=>['Secilen saat araliginda baska bir program bulunuyor.']]);
+        return;
     }
 
     private function programPayload(Program $p): array
     {
-        return ['id'=>$p->id,'title'=>$p->title,'description'=>$p->description,'location'=>$p->location,'latitude'=>$p->latitude,'longitude'=>$p->longitude,'radius_meters'=>$p->radius_meters,'guest_info'=>$p->guest_info,'start_at'=>optional($p->start_at)?->toIso8601String(),'end_at'=>optional($p->end_at)?->toIso8601String(),'credit_deduction'=>$p->credit_deduction,'application_quota'=>$p->application_quota,'target_audience'=>$p->targetAudience(),'feedback_form_template_id'=>$p->feedback_form_template_id,'status'=>$p->status,'project_id'=>$p->project_id,'project'=>$p->project?['id'=>$p->project->id,'name'=>$p->project->name]:null,'period'=>$p->period?['id'=>$p->period->id,'name'=>$p->period->name]:null,'attendance_count'=>$p->attendances_count??null,'feedback_count'=>$p->feedbacks_count??null,'is_public'=>(bool)$p->is_public,'is_featured'=>(bool)$p->is_featured,'questions'=>FeedbackFormResolver::forProgram($p)];
+        return ['id'=>$p->id,'title'=>$p->title,'description'=>$p->description,'location'=>$p->location,'location_place_name'=>$p->location_place_name,'location_place_address'=>$p->location_place_address,'location_place_id'=>$p->location_place_id,'location_place_provider'=>$p->location_place_provider,'latitude'=>$p->latitude,'longitude'=>$p->longitude,'radius_meters'=>$p->radius_meters,'guest_info'=>$p->guest_info,'start_at'=>optional($p->start_at)?->toIso8601String(),'end_at'=>optional($p->end_at)?->toIso8601String(),'credit_deduction'=>$p->credit_deduction,'application_quota'=>$p->application_quota,'target_audience'=>$p->targetAudience(),'feedback_form_template_id'=>$p->feedback_form_template_id,'status'=>$p->status,'project_id'=>$p->project_id,'project'=>$p->project?['id'=>$p->project->id,'name'=>$p->project->name]:null,'period'=>$p->period?['id'=>$p->period->id,'name'=>$p->period->name]:null,'attendance_count'=>$p->attendances_count??null,'feedback_count'=>$p->feedbacks_count??null,'is_public'=>(bool)$p->is_public,'is_featured'=>(bool)$p->is_featured,'questions'=>FeedbackFormResolver::forProgram($p)];
     }
 
     private function programParticipantsQuery(Program $program)

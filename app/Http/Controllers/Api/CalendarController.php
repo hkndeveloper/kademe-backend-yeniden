@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Support\AdminExportResponder;
+use App\Support\IstanbulDateTime;
 use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
@@ -682,8 +683,8 @@ class CalendarController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'location' => $validated['location'] ?? null,
-            'start_at' => Carbon::parse($validated['start_at']),
-            'end_at' => ! empty($validated['end_at']) ? Carbon::parse($validated['end_at']) : null,
+            'start_at' => IstanbulDateTime::toUtc($validated['start_at']),
+            'end_at' => ! empty($validated['end_at']) ? IstanbulDateTime::toUtc($validated['end_at']) : null,
             'status' => 'scheduled',
             'created_by' => $user->id,
             'assigned_users' => $allowedIds->all(),

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AlumniOpportunity;
 use App\Models\Participant;
 use App\Services\PermissionResolver;
+use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -122,7 +123,8 @@ class AlumniOpportunityController extends Controller
                     ->orWhereJsonLength('target_audience', 0)
                     ->orWhereJsonContains('target_audience', $role);
             })
-            ->latest('published_at');
+            ->orderByDesc('published_at')
+            ->orderByDesc('created_at');
 
         return response()->json([
             'opportunities' => $query->limit(100)->get(),
@@ -156,7 +158,7 @@ class AlumniOpportunityController extends Controller
         $this->abortUnlessAllowed($request, 'announcements.create');
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'kind' => 'required|in:internship,network,event,other',
+            'kind' => 'required|in:internship,network,event,job,other',
             'summary' => 'nullable|string|max:4000',
             'body' => 'nullable|string|max:20000',
             'link_url' => 'nullable|string|max:2048',
@@ -168,6 +170,7 @@ class AlumniOpportunityController extends Controller
             'target_audience' => 'nullable|array',
             'target_audience.*' => 'in:student,alumni',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['starts_at', 'ends_at', 'published_at', 'expires_at']);
 
         if (! empty($validated['project_id'])) {
             $this->assertProjectOpportunityScope($request, (int) $validated['project_id'], 'announcements.create');
@@ -201,7 +204,7 @@ class AlumniOpportunityController extends Controller
 
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
-            'kind' => 'sometimes|in:internship,network,event,other',
+            'kind' => 'sometimes|in:internship,network,event,job,other',
             'summary' => 'nullable|string|max:4000',
             'body' => 'nullable|string|max:20000',
             'link_url' => 'nullable|string|max:2048',
@@ -213,6 +216,7 @@ class AlumniOpportunityController extends Controller
             'target_audience' => 'nullable|array',
             'target_audience.*' => 'in:student,alumni',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['starts_at', 'ends_at', 'published_at', 'expires_at']);
 
         if (array_key_exists('project_id', $validated)) {
             $newProjectId = $validated['project_id'];

@@ -160,9 +160,17 @@ class DigitalBohcaController extends Controller
             'user_id'            => 'nullable|exists:users,id',
             'title'              => 'required|string|max:255',
             'description'        => 'nullable|string|max:2000',
-            'file'               => 'required|file|max:20480',
+            'file'               => 'nullable|required_without:files|file|max:20480',
+            'files'              => 'nullable|required_without:file|array',
+            'files.*'            => 'file|max:20480',
             'visible_to_student' => 'sometimes|boolean',
             'category'           => ['nullable', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Models\DigitalBohca::CATEGORIES))],
+        ], [
+            'file.required_without' => 'Lutfen yuklemek icin en az bir dosya secin.',
+            'files.required_without' => 'Lutfen yuklemek icin en az bir dosya secin.',
+            'files.*.file' => 'Secilen dosyalardan biri yuklenebilir bir dosya degil.',
+            'files.*.max' => 'Her dosya en fazla 20 MB olabilir.',
+            'file.max' => 'Dosya en fazla 20 MB olabilir.',
         ]);
 
         if (! empty($validated['project_id'])) {
@@ -177,32 +185,45 @@ class DigitalBohcaController extends Controller
             $this->assertPeriodWritable($request, (int) $validated['period_id']);
         }
 
-        $file = $request->file('file');
-        $path = MediaStorage::putFile('digital-bohca', $file);
+        $files = collect($request->file('files', []));
+        if ($request->hasFile('file')) {
+            $files->push($request->file('file'));
+        }
 
-        $material = DigitalBohca::query()->create([
-            'project_id'         => $validated['project_id'] ?? null,
-            'period_id'          => $validated['period_id'] ?? null,
-            'user_id'            => $validated['user_id'] ?? null,
-            'title'              => $validated['title'],
-            'description'        => $validated['description'] ?? null,
-            'file_path'          => $path,
-            'file_type'          => $file->getClientOriginalExtension(),
-            'category'           => $validated['category'] ?? 'general',
-            'visible_to_student' => $validated['visible_to_student'] ?? true,
-            'uploaded_by'        => $request->user()->id,
-        ]);
-        $this->attachBohcaAudit($request, $material, 'created');
+        if ($files->isEmpty()) {
+            return response()->json(['message' => 'Lutfen yuklemek icin en az bir dosya secin.'], 422);
+        }
+
+        $materials = $files->values()->map(function ($file, int $index) use ($validated, $request, $files) {
+            $path = MediaStorage::putFile('digital-bohca', $file);
+            $title = $validated['title'];
+            if ($files->count() > 1) {
+                $title .= ' - '.$file->getClientOriginalName();
+            }
+
+            $material = DigitalBohca::query()->create([
+                'project_id'         => $validated['project_id'] ?? null,
+                'period_id'          => $validated['period_id'] ?? null,
+                'user_id'            => $validated['user_id'] ?? null,
+                'title'              => $title,
+                'description'        => $validated['description'] ?? null,
+                'file_path'          => $path,
+                'file_type'          => $file->getClientOriginalExtension(),
+                'category'           => $validated['category'] ?? 'general',
+                'visible_to_student' => $validated['visible_to_student'] ?? true,
+                'uploaded_by'        => $request->user()->id,
+            ]);
+            $this->attachBohcaAudit($request, $material, 'created');
+
+            return $material->load(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname']);
+        });
 
         return response()->json([
-            'message' => 'Dijital bohca materyali yuklendi.',
-            'material' => $this->materialPayload(
-                $material->load(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname']),
-                '/panel/digital-bohca'
-            ),
+            'message' => $materials->count() > 1 ? $materials->count().' dosya Dijital Bohca\'ya yuklendi.' : 'Dijital bohca materyali yuklendi.',
+            'material' => $this->materialPayload($materials->first(), '/panel/digital-bohca'),
+            'materials' => $materials->map(fn (DigitalBohca $material) => $this->materialPayload($material, '/panel/digital-bohca'))->values(),
         ], 201);
     }
-
     public function panelExport(Request $request)
     {
         $validated = $request->validate([

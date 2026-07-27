@@ -12,6 +12,7 @@ use App\Models\Period;
 use App\Models\User;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
+use App\Support\IstanbulDateTime;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
@@ -584,6 +585,7 @@ class AnnouncementController extends Controller
             'send_email'   => 'boolean',
             'email_attachment' => 'nullable|file|mimes:pdf,jpg,png,docx|max:10240',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['published_at', 'expires_at']);
 
         if (! empty($validated['project_id'])) {
             $this->assertProjectAnnouncementScope($request, (int) $validated['project_id'], 'announcements.create');
@@ -702,6 +704,7 @@ class AnnouncementController extends Controller
             'published_at' => 'nullable|date',
             'expires_at'   => 'nullable|date',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['published_at', 'expires_at']);
 
         $this->assertPeriodWritable($request, $announcement->period_id);
 

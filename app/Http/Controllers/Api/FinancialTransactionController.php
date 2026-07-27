@@ -265,6 +265,7 @@ class FinancialTransactionController extends Controller
             'period_id'   => 'nullable|exists:periods,id',
             'type'        => 'required|in:expense,payment',
             'category'    => 'required|string|max:80',
+            'category_note' => 'nullable|required_if:category,other|string|max:500',
             'spending_unit' => 'nullable|string|max:150',
             'payee_name'  => 'required|string|max:255',
             'amount'      => 'required|numeric|min:0.01',
@@ -304,6 +305,7 @@ class FinancialTransactionController extends Controller
             'period_id'    => $validated['period_id'] ?? null,
             'type'         => $validated['type'],
             'category'     => $validated['category'],
+            'category_note' => $validated['category_note'] ?? null,
             'spending_unit' => $validated['spending_unit'] ?? null,
             'payee_name'   => $validated['payee_name'],
             'amount'       => $validated['amount'],
@@ -627,6 +629,7 @@ class FinancialTransactionController extends Controller
             'Donem',
             'Tur',
             'Kategori',
+            'Diger Kategori Notu',
             'Odeme Yapilacak Kisi/Firma',
             'Fatura No',
             'Tutar',
@@ -646,6 +649,7 @@ class FinancialTransactionController extends Controller
             $transaction->period->name ?? '-',
             $transaction->type,
             $transaction->category,
+            $transaction->category_note ?? '-',
             $transaction->payee_name,
             $transaction->invoice_no ?? '-',
             number_format((float) $transaction->amount, 2, '.', ''),
@@ -750,13 +754,14 @@ class FinancialTransactionController extends Controller
         $this->applyFinancialFilters($query, $request);
 
         $transactions = $query->latest('submitted_at')->get();
-        $headings = ['ID', 'Proje', 'Birim', 'Donem', 'Kategori', 'Alici', 'Fatura No', 'Tutar', 'Durum', 'Odeme Tarihi', 'Odeme Yontemi', 'Muhasebe Kodu', 'Onaylayan', 'Gonderim Tarihi'];
+        $headings = ['ID', 'Proje', 'Birim', 'Donem', 'Kategori', 'Diger Kategori Notu', 'Alici', 'Fatura No', 'Tutar', 'Durum', 'Odeme Tarihi', 'Odeme Yontemi', 'Muhasebe Kodu', 'Onaylayan', 'Gonderim Tarihi'];
         $rows = $transactions->map(fn (FinancialTransaction $transaction) => [
             $transaction->id,
             $transaction->project?->name ?? '-',
             $transaction->spending_unit ?? '-',
             $transaction->period?->name ?? '-',
             $transaction->category,
+            $transaction->category_note ?? '-',
             $transaction->payee_name,
             $transaction->invoice_no ?? '-',
             number_format((float) $transaction->amount, 2, '.', ''),

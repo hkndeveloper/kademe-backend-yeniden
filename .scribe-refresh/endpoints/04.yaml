@@ -1,0 +1,451 @@
+name: Newsletter
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/newsletter/subscribe
+    metadata:
+      custom: []
+      groupName: Newsletter
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Subscribe to the newsletter.'
+      description: 'Public endpoint. No bearer token is required and the route is throttled. Existing subscribers are reactivated by clearing `unsubscribed_at`. A confirmation email is sent with a signed unsubscribe link.'
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      email:
+        custom: []
+        name: email
+        description: 'Subscriber email.'
+        required: true
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      name:
+        custom: []
+        name: name
+        description: 'Optional subscriber name.'
+        required: false
+        example: 'Hakan Kekec'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      email: hakan@example.com
+      name: 'Hakan Kekec'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-bulten aboneliginiz kaydedildi.","subscriber":{"id":1,"email":"hakan@example.com","name":"Hakan Kekec"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The email field is required.","errors":{"email":["The email field is required."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/newsletter/unsubscribe
+    metadata:
+      custom: []
+      groupName: Newsletter
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Unsubscribe from the newsletter.'
+      description: 'Public endpoint. No bearer token is required and the route is throttled. The `token` must match the SHA-256 hash generated from the email and application key by `generateUnsubscribeUrl`.'
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      email:
+        custom: []
+        name: email
+        description: 'Subscriber email.'
+        required: true
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      token:
+        custom: []
+        name: token
+        description: 'Unsubscribe token from email link.'
+        required: true
+        example: abc123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      email: hakan@example.com
+      token: abc123
+    bodyParameters:
+      email:
+        custom: []
+        name: email
+        description: 'Must be a valid email address.'
+        required: true
+        example: qkunze@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      token:
+        custom: []
+        name: token
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      email: qkunze@example.com
+      token: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-bulten aboneliginiz basariyla iptal edildi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Gecersiz abonelik cikarma baglantisi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"E-posta adresi e-bulten listesinde bulunamadi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/newsletter/subscribers
+    metadata:
+      custom: []
+      groupName: Newsletter
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List newsletter subscribers.'
+      description: 'Panel/admin endpoint exposed under `/admin/newsletter/subscribers` and `/panel/newsletter/subscribers`. Requires `newsletter.view` with global/tum sistem scope because subscriber emails are system-wide personal data. Returns active subscribers only and paginates by 50.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional email/name search.'
+        required: false
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: hakan@example.com
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"subscribers":{"data":[{"id":1,"email":"hakan@example.com","name":"Hakan","unsubscribed_at":null}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"E-bulten aboneleri icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/newsletter/subscribers/export
+    metadata:
+      custom: []
+      groupName: Newsletter
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export newsletter subscribers.'
+      description: 'Panel/admin endpoint exposed under `/admin/newsletter/subscribers/export` and `/panel/newsletter/subscribers/export`. Requires `newsletter.view` with global/tum sistem scope. By default exports only active subscribers; set `only_active=false` to include unsubscribed records. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional email/name search.'
+        required: false
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      only_active:
+        custom: []
+        name: only_active
+        description: 'Optional. Defaults to true.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format.'
+        required: false
+        example: csv
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: hakan@example.com
+      only_active: true
+      format: csv
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Export file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"E-bulten aboneleri icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/newsletter/subscribers
+    metadata:
+      custom: []
+      groupName: Newsletter
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List newsletter subscribers.'
+      description: 'Panel/admin endpoint exposed under `/admin/newsletter/subscribers` and `/panel/newsletter/subscribers`. Requires `newsletter.view` with global/tum sistem scope because subscriber emails are system-wide personal data. Returns active subscribers only and paginates by 50.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional email/name search.'
+        required: false
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: hakan@example.com
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"subscribers":{"data":[{"id":1,"email":"hakan@example.com","name":"Hakan","unsubscribed_at":null}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"E-bulten aboneleri icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/newsletter/subscribers/export
+    metadata:
+      custom: []
+      groupName: Newsletter
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export newsletter subscribers.'
+      description: 'Panel/admin endpoint exposed under `/admin/newsletter/subscribers/export` and `/panel/newsletter/subscribers/export`. Requires `newsletter.view` with global/tum sistem scope. By default exports only active subscribers; set `only_active=false` to include unsubscribed records. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional email/name search.'
+        required: false
+        example: hakan@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      only_active:
+        custom: []
+        name: only_active
+        description: 'Optional. Defaults to true.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format.'
+        required: false
+        example: csv
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: hakan@example.com
+      only_active: true
+      format: csv
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Export file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"E-bulten aboneleri icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

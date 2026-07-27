@@ -1386,6 +1386,81 @@ class PanelRegressionFixTest extends TestCase
         ]);
     }
 
+    public function test_program_location_place_metadata_is_persisted_and_returned(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Konum',
+            'start_date' => '2026-09-01',
+            'end_date' => '2026-12-31',
+            'status' => 'active',
+        ]);
+
+        $createResponse = $this->postJson('/api/panel/programs', [
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Konumlu Program',
+            'location' => 'Salon A',
+            'location_place_name' => 'Kademe Genel Merkez',
+            'location_place_address' => 'Bosna Hersek Mahallesi, Istanbul',
+            'location_place_id' => 'osm:node:123',
+            'location_place_provider' => 'osm',
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
+            'radius_meters' => 120,
+            'start_at' => '2026-10-12 10:00:00',
+            'end_at' => '2026-10-12 12:00:00',
+            'credit_deduction' => 10,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('program.location_place_name', 'Kademe Genel Merkez')
+            ->assertJsonPath('program.location_place_address', 'Bosna Hersek Mahallesi, Istanbul')
+            ->assertJsonPath('program.location_place_id', 'osm:node:123')
+            ->assertJsonPath('program.location_place_provider', 'osm');
+
+        $programId = $createResponse->json('program.id');
+
+        $this->assertDatabaseHas('programs', [
+            'id' => $programId,
+            'location_place_name' => 'Kademe Genel Merkez',
+            'location_place_address' => 'Bosna Hersek Mahallesi, Istanbul',
+            'location_place_id' => 'osm:node:123',
+            'location_place_provider' => 'osm',
+        ]);
+
+        $this->putJson('/api/panel/programs/'.$programId, [
+            'title' => 'Konumlu Program',
+            'description' => null,
+            'location' => 'Salon B',
+            'location_place_name' => 'Guncel Konum',
+            'location_place_address' => 'Guncel Adres, Istanbul',
+            'location_place_id' => 'osm:way:456',
+            'location_place_provider' => 'osm',
+            'latitude' => 41.1001,
+            'longitude' => 29.0002,
+            'radius_meters' => 150,
+            'guest_info' => null,
+            'start_at' => '2026-10-12 10:00:00',
+            'end_at' => '2026-10-12 12:00:00',
+            'credit_deduction' => 10,
+            'status' => 'scheduled',
+        ])
+            ->assertOk()
+            ->assertJsonPath('program.location_place_name', 'Guncel Konum')
+            ->assertJsonPath('program.location_place_address', 'Guncel Adres, Istanbul')
+            ->assertJsonPath('program.location_place_id', 'osm:way:456')
+            ->assertJsonPath('program.location_place_provider', 'osm');
+
+        $this->getJson('/api/panel/programs?project_id='.$project->id.'&period_id='.$period->id)
+            ->assertOk()
+            ->assertJsonPath('programs.0.location_place_name', 'Guncel Konum')
+            ->assertJsonPath('programs.0.location_place_address', 'Guncel Adres, Istanbul')
+            ->assertJsonPath('programs.0.location_place_id', 'osm:way:456')
+            ->assertJsonPath('programs.0.location_place_provider', 'osm');
+    }
+
     public function test_program_update_rejects_overlapping_time_and_allows_cancelled_conflicts(): void
     {
         $this->actingSuperAdmin();

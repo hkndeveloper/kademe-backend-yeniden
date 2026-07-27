@@ -263,6 +263,9 @@ class InboxController extends Controller
                 $announcementQuery->get()->map(function (Announcement $item) {
                     return [
                         'type' => 'announcement',
+                        'source_label' => 'Duyuru',
+                        'source_action_label' => 'Duyurular',
+                        'source_action_url' => '/panel/announcements',
                         'source_type' => Announcement::class,
                         'source_id' => $item->id,
                         'title' => $item->title,
@@ -318,6 +321,9 @@ class InboxController extends Controller
                 $opportunityQuery->get()->map(function (AlumniOpportunity $item) {
                     return [
                         'type' => 'opportunity',
+                        'source_label' => 'Kariyer Firsati',
+                        'source_action_label' => 'Kariyer Firsatlari',
+                        'source_action_url' => '/panel/alumni-opportunities',
                         'source_type' => AlumniOpportunity::class,
                         'source_id' => $item->id,
                         'title' => $item->title,
@@ -361,6 +367,9 @@ class InboxController extends Controller
                 $forumQuery->latest()->limit(200)->get()->map(function (ForumPost $item) {
                     return [
                         'type' => 'forum_post',
+                        'source_label' => 'Forum',
+                        'source_action_label' => 'Forum',
+                        'source_action_url' => null,
                         'source_type' => ForumPost::class,
                         'source_id' => $item->id,
                         'title' => $item->title,

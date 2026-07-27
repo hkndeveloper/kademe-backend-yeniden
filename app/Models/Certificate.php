@@ -17,14 +17,20 @@ class Certificate extends Model
         'project_id',
         'period_id',
         'type',
+        'title',
+        'issuer',
         'verification_code',
         'certificate_path',
         'issued_at',
         'created_by',
+        'uploaded_by_user_id',
+        'source',
+        'included_in_cv',
     ];
 
     protected $casts = [
         'issued_at' => 'datetime',
+        'included_in_cv' => 'boolean',
     ];
 
     public function user()
@@ -45,6 +51,11 @@ class Certificate extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function uploader()
+    {
+        return $this->belongsTo(User::class, 'uploaded_by_user_id');
     }
     public function getActivitylogOptions(): LogOptions
     {

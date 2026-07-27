@@ -12,6 +12,7 @@ use App\Services\PermissionResolver;
 use App\Services\WaitlistService;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
+use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,19 @@ class AdminApplicationController extends Controller
         private readonly WaitlistService $waitlistService,
     ) {}
 
+    private function applicationStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'accepted' => 'Kabul edildi',
+            'rejected' => 'Reddedildi',
+            'waitlisted' => 'Yedek liste',
+            'interview_planned' => 'Mulakat planlandi',
+            'interview_passed' => 'Mulakat olumlu',
+            'interview_failed' => 'Mulakat olumsuz',
+            default => 'Degerlendirme bekliyor',
+        };
+    }
+
     private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): void
     {
         $email = $application->user?->email;
@@ -39,10 +53,29 @@ class AdminApplicationController extends Controller
             return;
         }
 
-        $this->notificationService->sendEmail(
+        $lines = [
+            ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+            ['label' => 'Durum', 'value' => $this->applicationStatusLabel((string) $application->status)],
+        ];
+
+        if ($application->interview_at) {
+            $lines[] = ['label' => 'Mulakat tarihi', 'value' => IstanbulDateTime::format($application->interview_at)];
+        }
+        if ($application->rejection_reason) {
+            $lines[] = ['label' => 'Gerekce', 'value' => $application->rejection_reason];
+        }
+
+        $this->notificationService->sendTemplatedEmail(
             [$email],
             $subject,
-            $body,
+            'emails.application-status',
+            [
+                'title' => $subject,
+                'preheader' => 'Basvuru durumunuz guncellendi.',
+                'intro' => $body,
+                'lines' => $lines,
+                'plain_text' => $body,
+            ],
             $application->project_id,
             $senderId
         );
@@ -546,6 +579,9 @@ class AdminApplicationController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $this->abortUnlessAllowed($request, 'applications.update_status');
+        if ($request->filled('interview_at')) {
+            $request->merge(['interview_at' => IstanbulDateTime::toUtcIso($request->input('interview_at'))]);
+        }
 
         $validated = $request->validate([
             'status' => 'required|in:accepted,rejected,waitlisted,interview_planned,interview_passed,interview_failed',
@@ -670,6 +706,7 @@ class AdminApplicationController extends Controller
     public function planInterview(Request $request, $id)
     {
         $this->abortUnlessAllowed($request, 'applications.plan_interview');
+        $request->merge(['interview_at' => IstanbulDateTime::toUtcIso($request->input('interview_at'))]);
 
         $validated = $request->validate([
             'interview_at' => 'required|date|after:now',
@@ -700,7 +737,7 @@ class AdminApplicationController extends Controller
         $this->notifyApplicationUser(
             $application,
             'Mulakat planlandi',
-            'Proje: '.($application->project?->name ?? '-')."\nMulakat tarihi: {$validated['interview_at']}",
+            'Proje: '.($application->project?->name ?? '-')."\nMulakat tarihi: ".IstanbulDateTime::format($validated['interview_at']),
             $request->user()->id
         );
 
@@ -812,6 +849,9 @@ class AdminApplicationController extends Controller
     public function inviteFromWaitlist(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
+        if ($request->filled('expires_at')) {
+            $request->merge(['expires_at' => IstanbulDateTime::toUtcIso($request->input('expires_at'))]);
+        }
         $validated = $request->validate([
             'expires_at' => 'nullable|date|after:now',
         ]);

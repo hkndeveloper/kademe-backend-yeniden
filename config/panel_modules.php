@@ -516,6 +516,17 @@ return [
             'actions' => ['announcements.view'],
         ],
         [
+            'id' => 'forum_panel',
+            'panel_type' => 'authority',
+            'label' => 'Forum',
+            'section' => 'communication',
+            'href' => '/panel/forum',
+            'icon' => 'messages-square',
+            'order' => 255,
+            'view_permissions' => ['announcements.view'],
+            'actions' => ['announcements.view'],
+        ],
+        [
             'id' => 'motivation',
             'panel_type' => 'authority',
             'label' => 'Motivasyon',

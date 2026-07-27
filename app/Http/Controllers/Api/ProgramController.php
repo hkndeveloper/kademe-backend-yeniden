@@ -66,8 +66,7 @@ class ProgramController extends Controller
             ->whereIn('status', ['scheduled', 'active', 'completed'])
             ->where(function ($query) use ($user) {
                 if ($user->role === 'alumni') {
-                    $query->where('status', 'completed')
-                        ->orWhereJsonContains('target_audience', 'alumni');
+                    $query->whereJsonContains('target_audience', 'alumni');
 
                     return;
                 }
@@ -121,6 +120,10 @@ class ProgramController extends Controller
                     'title' => $program->title,
                     'description' => $program->description,
                     'location' => $program->location,
+                    'location_place_name' => $program->location_place_name,
+                    'location_place_address' => $program->location_place_address,
+                    'location_place_id' => $program->location_place_id,
+                    'location_place_provider' => $program->location_place_provider,
                     'latitude' => $program->latitude,
                     'longitude' => $program->longitude,
                     'radius_meters' => $program->radius_meters,
@@ -194,7 +197,7 @@ class ProgramController extends Controller
         )->exists();
 
         abort_unless(
-            $program->isTargetedTo($user->role) || ($user->role === 'alumni' && $program->status === 'completed'),
+            $program->isTargetedTo($user->role),
             403,
             'Bu etkinligi goruntuleme yetkiniz bulunmuyor.'
         );

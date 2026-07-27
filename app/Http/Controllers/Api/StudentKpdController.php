@@ -12,6 +12,7 @@ use App\Models\KpdRoom;
 use App\Models\Participant;
 use App\Models\User;
 use App\Support\MediaStorage;
+use App\Support\IstanbulDateTime;
 use App\Support\ProjectSpecialModuleCatalog;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
@@ -230,6 +231,10 @@ class StudentKpdController extends Controller
     {
         $participation = $this->abortUnlessKpdParticipant($request);
         $this->assertPeriodWritable($request, $participation->period_id);
+        $request->merge([
+            'start_at' => IstanbulDateTime::toUtcIso($request->input('start_at')),
+            'end_at' => IstanbulDateTime::toUtcIso($request->input('end_at')),
+        ]);
 
         $validated = $request->validate([
             'counselor_id' => 'required|exists:users,id',

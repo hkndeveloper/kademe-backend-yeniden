@@ -51,7 +51,8 @@ class NotificationService
         string $body,
         ?int $projectId = null,
         ?int $senderId = null,
-        ?string $attachmentPath = null
+        ?string $attachmentPath = null,
+        ?string $htmlBody = null
     ): int {
         $recipients = collect($emails)
             ->filter(fn ($email) => is_string($email) && trim($email) !== '')
@@ -84,7 +85,7 @@ class NotificationService
         $fromName = (string) config('services.resend.from_name', config('mail.from.name'));
         $from = $fromName !== '' ? "{$fromName} <{$fromAddress}>" : $fromAddress;
         $textContent = trim(strip_tags($body));
-        $htmlContent = nl2br(e($body));
+        $htmlContent = $htmlBody ?? nl2br(e($body));
 
         Log::info('resend.dispatch.start', [
             'subject' => $subject,
@@ -181,5 +182,27 @@ class NotificationService
         ]);
 
         return $successCount;
+    }
+    public function sendTemplatedEmail(
+        array $emails,
+        string $subject,
+        string $view,
+        array $data,
+        ?int $projectId = null,
+        ?int $senderId = null,
+        ?string $attachmentPath = null
+    ): int {
+        $html = view($view, $data)->render();
+        $body = trim((string) ($data['plain_text'] ?? strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $html))));
+
+        return $this->sendEmail(
+            $emails,
+            $subject,
+            $body !== '' ? $body : $subject,
+            $projectId,
+            $senderId,
+            $attachmentPath,
+            $html
+        );
     }
 }

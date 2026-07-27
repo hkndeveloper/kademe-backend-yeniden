@@ -3,18 +3,26 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Models\ForumPost;
 use App\Models\Participant;
 use App\Models\Period;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use App\Services\PermissionResolver;
 
 /**
  * @group Forum
  */
 class ForumController extends Controller
 {
+    use AuthorizesGranularPermissions;
+
+    public function __construct(
+        private readonly PermissionResolver $permissionResolver
+    ) {}
+
     /** @return int[] */
     private function participantProjectIds(int $userId): array
     {
@@ -98,7 +106,8 @@ class ForumController extends Controller
                 'author:id,name,surname',
                 'replies' => fn ($builder) => $builder
                     ->with('author:id,name,surname')
-                    ->latest(),
+                    ->orderBy('created_at')
+                    ->orderBy('id'),
             ])
             ->whereIn('project_id', $projectIds)
             ->where(function ($builder) use ($periodIds) {
@@ -135,6 +144,68 @@ class ForumController extends Controller
         ]);
     }
 
+    /**
+     * List forum posts for authority panel users.
+     *
+     * Requires permission: `announcements.view`. Returns read-only forum threads from projects visible to the panel user.
+     */
+    public function panelIndex(Request $request): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'announcements.view');
+
+        $validated = $request->validate([
+            'project_id' => 'nullable|integer|exists:projects,id',
+            'period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+
+        $user = $request->user();
+        $hasGlobalScope = $this->permissionResolver->hasGlobalScope($user, 'announcements.view');
+        $projectIds = $hasGlobalScope
+            ? []
+            : $this->permissionResolver->projectIdsForPermission($user, 'announcements.view');
+
+        $query = ForumPost::query()
+            ->with([
+                'project:id,name',
+                'period:id,name,status',
+                'author:id,name,surname',
+                'replies' => fn ($builder) => $builder
+                    ->with('author:id,name,surname')
+                    ->orderBy('created_at')
+                    ->orderBy('id'),
+            ])
+            ->withCount('replies')
+            ->orderByDesc('is_pinned')
+            ->orderByDesc('created_at');
+
+        if (! $hasGlobalScope) {
+            $query->whereIn('project_id', $projectIds);
+        }
+
+        if (! empty($validated['project_id'])) {
+            $projectId = (int) $validated['project_id'];
+            $this->abortUnlessProjectAllowed($request, 'announcements.view', $projectId);
+            $query->where('project_id', $projectId);
+        }
+
+        if (! empty($validated['period_id'])) {
+            $period = Period::query()->select(['id', 'project_id'])->findOrFail((int) $validated['period_id']);
+            if (! empty($validated['project_id']) && (int) $validated['project_id'] !== (int) $period->project_id) {
+                throw ValidationException::withMessages([
+                    'period_id' => ['Secilen donem bu projeye ait degil.'],
+                ]);
+            }
+            $this->abortUnlessProjectAllowed($request, 'announcements.view', (int) $period->project_id);
+            $query->where('project_id', (int) $period->project_id)
+                ->where(function ($builder) use ($period) {
+                    $builder->whereNull('period_id')->orWhere('period_id', (int) $period->id);
+                });
+        }
+
+        return response()->json([
+            'posts' => $query->paginate(20),
+        ]);
+    }
     /**
      * Create a forum post.
      *

@@ -41,8 +41,8 @@ return new class extends Migration
         [
             'group' => 'homepage',
             'key' => 'footer_copyright',
-            'old' => '© 2026 KADEME YONETIM SISTEMI | T3 VAKFI. TUM HAKLARI SAKLIDIR.',
-            'new' => '© 2026 KADEME YÖNETİM SİSTEMİ | T3 VAKFI. TÜM HAKLARI SAKLIDIR.',
+            'old' => '© 2026 KADEME YONETIM SISTEMI. TUM HAKLARI SAKLIDIR.',
+            'new' => '© 2026 KADEME YÖNETİM SİSTEMİ. TÜM HAKLARI SAKLIDIR.',
         ],
         [
             'group' => 'homepage',
@@ -71,8 +71,8 @@ return new class extends Migration
         [
             'group' => 'homepage',
             'key' => 'hero_description',
-            'old' => 'T3 Vakfi bunyesinde, Turkiye ekosisteminde kapsamli kariyer ve yetenek gelisim programlarina dahil olun.',
-            'new' => 'T3 Vakfı bünyesinde, Türkiye ekosisteminde kapsamlı kariyer ve yetenek gelişim programlarına dahil olun.',
+            'old' => 'KADEME ekosisteminde kapsamli kariyer ve yetenek gelisim programlarina dahil olun.',
+            'new' => 'KADEME ekosisteminde kapsamlı kariyer ve yetenek gelişim programlarına dahil olun.',
         ],
         [
             'group' => 'homepage',

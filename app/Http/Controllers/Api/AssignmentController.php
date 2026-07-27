@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
+use App\Models\AssignmentAttachment;
 use App\Models\AssignmentSubmission;
 use App\Models\Participant;
 use App\Models\Period;
@@ -13,6 +14,7 @@ use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
+use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -51,6 +53,20 @@ class AssignmentController extends Controller
         ];
     }
 
+    private function attachmentPayload(AssignmentAttachment $attachment, string $basePath): array
+    {
+        return [
+            'id' => $attachment->id,
+            'assignment_id' => $attachment->assignment_id,
+            'original_name' => $attachment->original_name,
+            'file_path' => $attachment->file_path,
+            'file_type' => $attachment->file_type,
+            'file_size' => $attachment->file_size,
+            'download_url' => "{$basePath}/{$attachment->id}/download",
+            'created_at' => $attachment->created_at,
+        ];
+    }
+
     private function assignmentPayload(Assignment $assignment, string $submissionBasePath): array
     {
         return [
@@ -71,10 +87,39 @@ class AssignmentController extends Controller
             'submissions_count' => $assignment->submissions_count ?? (
                 $assignment->relationLoaded('submissions') ? $assignment->submissions->count() : null
             ),
+            'attachments' => $assignment->relationLoaded('attachments')
+                ? $assignment->attachments->map(fn (AssignmentAttachment $attachment) => $this->attachmentPayload($attachment, str_replace('assignment-submissions', 'assignment-attachments', $submissionBasePath)))->values()
+                : [],
             'submissions' => $assignment->relationLoaded('submissions')
                 ? $assignment->submissions->map(fn (AssignmentSubmission $submission) => $this->submissionPayload($submission, $submissionBasePath))->values()
                 : [],
         ];
+    }
+
+    private function streamAttachmentFile(AssignmentAttachment $attachment): JsonResponse|StreamedResponse
+    {
+        if (! $attachment->file_path) {
+            return response()->json(['message' => 'Odev dosyasi bulunamadi.'], 404);
+        }
+
+        if ($this->isUrl($attachment->file_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
+            return response()->json([
+                'download_url' => MediaStorage::url($attachment->file_path),
+            ]);
+        }
+
+        if (! MediaStorage::exists($attachment->file_path)) {
+            return response()->json(['message' => 'Odev dosyasi storage uzerinde bulunamadi.'], 404);
+        }
+
+        $extension = pathinfo($attachment->file_path, PATHINFO_EXTENSION);
+        $baseName = $attachment->original_name ? pathinfo($attachment->original_name, PATHINFO_FILENAME) : 'odev_eki_'.$attachment->id;
+        $filename = str($baseName)->slug()->toString() ?: 'odev_eki_'.$attachment->id;
+
+        return MediaStorage::disk()->download(
+            $attachment->file_path,
+            $filename.($extension ? ".{$extension}" : '')
+        );
     }
 
     private function streamSubmissionFile(AssignmentSubmission $submission): JsonResponse|StreamedResponse
@@ -142,7 +187,7 @@ class AssignmentController extends Controller
         $assignments = Assignment::whereIn('project_id', $projectIds)
             ->whereIn('period_id', $periodIds)
             // Öğrencinin teslim durumunu (submission) relation olarak dahil et (eğer varsa)
-            ->with(['submissions' => function ($query) use ($user) {
+            ->with(['attachments', 'submissions' => function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             }])
             ->orderBy('due_date', 'asc')
@@ -280,6 +325,29 @@ class AssignmentController extends Controller
      * @response 200 {"download":"Binary submission file stream"}
      * @response 404 {"message":"Teslim dosyasi bulunamadi."}
      */
+    public function downloadAttachment(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $attachment = AssignmentAttachment::query()->with('assignment:id,project_id,period_id')->findOrFail($id);
+        $user = $request->user();
+
+        $canView = Participant::query()
+            ->where('user_id', $user->id)
+            ->where('project_id', $attachment->assignment->project_id)
+            ->where('period_id', $attachment->assignment->period_id)
+            ->where(function ($query) use ($user) {
+                $query->where('status', 'active');
+
+                if ($user->role === 'alumni') {
+                    $query->orWhere('graduation_status', 'graduated')
+                        ->orWhereNotNull('graduated_at');
+                }
+            })
+            ->exists();
+
+        abort_unless($canView, 403, 'Bu odev dosyasi icin erisim yetkiniz bulunmuyor.');
+
+        return $this->streamAttachmentFile($attachment);
+    }
     public function downloadSubmission(Request $request, int $id): JsonResponse|StreamedResponse
     {
         $submission = AssignmentSubmission::query()
@@ -309,6 +377,7 @@ class AssignmentController extends Controller
                 'period:id,name',
                 'program:id,title,start_at',
                 'creator:id,name,surname',
+                'attachments',
                 'submissions.user:id,name,surname,email',
                 'submissions.reviewer:id,name,surname',
             ])
@@ -333,7 +402,11 @@ class AssignmentController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:3000',
             'due_date' => 'nullable|date',
+            'attachment' => 'nullable|file|max:20480',
+            'attachments' => 'nullable|array',
+            'attachments.*' => 'file|max:20480',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['due_date']);
 
         $this->abortUnlessProjectAllowed($request, 'assignments.create', (int) $validated['project_id']);
 
@@ -357,6 +430,23 @@ class AssignmentController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        $files = collect($request->file('attachments', []));
+        if ($request->hasFile('attachment')) {
+            $files->push($request->file('attachment'));
+        }
+
+        $files->each(function ($file) use ($assignment, $request) {
+            $path = MediaStorage::putFile('assignment-attachments', $file);
+            AssignmentAttachment::query()->create([
+                'assignment_id' => $assignment->id,
+                'original_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'file_type' => $file->getClientOriginalExtension(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => $request->user()->id,
+            ]);
+        });
+
         $participantEmails = Participant::query()
             ->where('project_id', (int) $validated['project_id'])
             ->where('period_id', (int) $validated['period_id'])
@@ -379,7 +469,7 @@ class AssignmentController extends Controller
 
         return response()->json([
             'message' => 'Odev olusturuldu.',
-            'assignment' => $assignment->load(['project:id,name', 'period:id,name', 'program:id,title,start_at', 'creator:id,name,surname']),
+            'assignment' => $this->assignmentPayload($assignment->load(['project:id,name', 'period:id,name', 'program:id,title,start_at', 'creator:id,name,surname', 'attachments']), '/panel/assignment-submissions'),
         ], 201);
     }
 
@@ -446,10 +536,11 @@ class AssignmentController extends Controller
     public function panelDestroy(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'assignments.delete');
-        $assignment = Assignment::query()->with('submissions:id,assignment_id,file_path')->findOrFail($id);
+        $assignment = Assignment::query()->with(['submissions:id,assignment_id,file_path', 'attachments:id,assignment_id,file_path'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'assignments.delete', (int) $assignment->project_id);
         $this->assertPeriodWritable($request, $assignment->period_id);
         $assignment->submissions->each(fn (AssignmentSubmission $submission) => MediaStorage::delete($submission->file_path));
+        $assignment->attachments->each(fn (AssignmentAttachment $attachment) => MediaStorage::delete($attachment->file_path));
         $assignment->delete();
 
         return response()->json(['message' => 'Odev silindi.']);
@@ -496,6 +587,19 @@ class AssignmentController extends Controller
                 '/panel/assignment-submissions'
             ),
         ]);
+    }
+
+    public function panelDownloadAttachment(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $this->abortUnlessAllowed($request, 'assignments.view');
+
+        $attachment = AssignmentAttachment::query()
+            ->with('assignment:id,project_id,period_id,title')
+            ->findOrFail($id);
+
+        $this->abortUnlessProjectAllowed($request, 'assignments.view', (int) $attachment->assignment->project_id);
+
+        return $this->streamAttachmentFile($attachment);
     }
 
     public function panelDownloadSubmission(Request $request, int $id): JsonResponse|StreamedResponse

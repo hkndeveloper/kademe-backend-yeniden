@@ -1,0 +1,5343 @@
+name: 'Project Special Modules'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/projects/{id}/special-modules'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get project special module workspace.'
+      description: 'Requires at least one project-scoped module permission among internships, mentors, Eurodesk or rewards. The project must support the requested module family through `ProjectSpecialModuleCatalog`; unsupported families are hidden from the access matrix. Exposed under `/api/admin/projects/{id}/special-modules` and `/api/panel/projects/{id}/special-modules`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. Must belong to the project when provided.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      period_id: 3
+    bodyParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"project":{"id":1,"name":"Kademe+"},"access":{"projects.rewards.view":true},"applicable_modules":["reward_tiers","participants_by_module"],"participants":[],"kademe_modules":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje modulleri icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Bu proje turu bu ozel modulu desteklemiyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/internships'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create an internship record.'
+      description: 'Requires permission: `projects.internships.manage`, project access and project support for `internships`. Participant must belong to the project; participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      participant_id:
+        custom: []
+        name: participant_id
+        description: 'Participant ID in the project.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      company_name:
+        custom: []
+        name: company_name
+        description: 'Company name.'
+        required: true
+        example: 'ACME A.S.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      position:
+        custom: []
+        name: position
+        description: 'Position title.'
+        required: true
+        example: Stajyer
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-07-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'Optional end date.'
+        required: false
+        example: '2026-08-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      document_path:
+        custom: []
+        name: document_path
+        description: 'Optional document path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      participant_id: 42
+      company_name: 'ACME A.S.'
+      position: Stajyer
+      start_date: '2026-07-01'
+      end_date: '2026-08-30'
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      document_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Staj bilgisi kaydedildi.","internship":{"id":7,"company_name":"ACME A.S."}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen katilimci bu projeye ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/internships/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update an internship record.'
+      description: 'Requires permission: `projects.internships.manage`, project access and project support for `internships`. The internship must belong to a participant in the selected project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Internship ID.'
+        required: true
+        example: 7
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 7
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      company_name:
+        custom: []
+        name: company_name
+        description: 'Company name.'
+        required: true
+        example: 'ACME A.S.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      position:
+        custom: []
+        name: position
+        description: 'Position title.'
+        required: true
+        example: 'Junior Analyst'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-07-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'Optional end date.'
+        required: false
+        example: '2026-08-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      document_path:
+        custom: []
+        name: document_path
+        description: 'Optional document path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      company_name: 'ACME A.S.'
+      position: 'Junior Analyst'
+      start_date: '2026-07-01'
+      end_date: '2026-08-30'
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      document_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Staj bilgisi guncellendi.","internship":{"id":7}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/internships/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete an internship record.'
+      description: 'Requires permission: `projects.internships.manage`, project access and project support for `internships`. The participant period is checked for archive lock before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Internship ID.'
+        required: true
+        example: 7
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 7
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Staj bilgisi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/mentors'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a project mentor.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Mentor name.'
+        required: true
+        example: 'Ayse Kaya'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional mentor bio.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise.'
+        required: false
+        example: 'Kariyer Planlama'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      photo_path:
+        custom: []
+        name: photo_path
+        description: 'Optional photo path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Ayse Kaya'
+      bio: consequatur
+      expertise: 'Kariyer Planlama'
+      photo_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Mentor kaydedildi.","mentor":{"id":4,"name":"Ayse Kaya"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/mentors/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a project mentor.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      item: 4
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Mentor name.'
+        required: true
+        example: 'Ayse Kaya'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional mentor bio.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      photo_path:
+        custom: []
+        name: photo_path
+        description: 'Optional photo path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Ayse Kaya'
+      bio: consequatur
+      expertise: consequatur
+      photo_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Mentor guncellendi.","mentor":{"id":4}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/mentors/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a project mentor.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      item: 4
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Mentor silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/projects/{id}/special-modules/mentors/{mentorId}/participants'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List participants assigned to a mentor.'
+      description: 'Requires permission: `projects.mentors.view`, project access and project support for `mentors`. Optional period filter must belong to the project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      mentorId:
+        custom: []
+        name: mentorId
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      mentorId: 4
+    queryParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      period_id: 3
+    bodyParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"mentor":{"id":4,"name":"Ayse Kaya"},"participants":[]}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/mentors/{mentorId}/participants'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Assign a mentor to a participant.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`. Participant and mentor must belong to the project; optional period must belong to the project and match the participant period.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      mentorId:
+        custom: []
+        name: mentorId
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      mentorId: 4
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      participant_id:
+        custom: []
+        name: participant_id
+        description: 'Participant ID.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      note:
+        custom: []
+        name: note
+        description: 'Optional assignment note.'
+        required: false
+        example: 'Ilk gorusme planlandi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      participant_id: 42
+      period_id: 3
+      note: 'Ilk gorusme planlandi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Katilimci mentor ile eslendi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen katilimci bu doneme ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/mentors/{mentorId}/participants/{participantId}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Remove a mentor assignment from a participant.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      mentorId:
+        custom: []
+        name: mentorId
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      participantId:
+        custom: []
+        name: participantId
+        description: 'Participant ID.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      mentorId: 4
+      participantId: 42
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Katilimci mentor eslestirmesi kaldirildi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/eurodesk-projects'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a Eurodesk project record.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. Optional period must belong to the project and completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Eurodesk project title.'
+        required: true
+        example: 'Youth Exchange'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      partner_organizations:
+        custom: []
+        name: partner_organizations
+        description: 'Optional partner organization names.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      grant_amount:
+        custom: []
+        name: grant_amount
+        description: 'Optional grant amount.'
+        required: false
+        example: 25000.0
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      grant_status:
+        custom: []
+        name: grant_status
+        description: 'Grant status: `applied`, `approved`, `rejected` or `completed`.'
+        required: true
+        example: applied
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Optional start date.'
+        required: false
+        example: '2026-07-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'Optional end date.'
+        required: false
+        example: '2026-09-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      period_id: 3
+      title: 'Youth Exchange'
+      partner_organizations:
+        - consequatur
+      grant_amount: 25000.0
+      grant_status: applied
+      start_date: '2026-07-01'
+      end_date: '2026-09-01'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Eurodesk proje bilgisi kaydedildi.","eurodesk_project":{"id":9,"title":"Youth Exchange"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/eurodesk-projects/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a Eurodesk project record.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. Existing and target period scopes are checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      item: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Eurodesk project title.'
+        required: true
+        example: 'Youth Exchange 2026'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      grant_status:
+        custom: []
+        name: grant_status
+        description: 'Grant status: `applied`, `approved`, `rejected` or `completed`.'
+        required: true
+        example: approved
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Youth Exchange 2026'
+      grant_status: approved
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Eurodesk proje bilgisi guncellendi.","eurodesk_project":{"id":9}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/eurodesk-projects/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a Eurodesk project record.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The record period is checked for archive lock before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      item: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Eurodesk proje bilgisi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a Eurodesk partnership.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The parent Eurodesk project must belong to the selected project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      eurodeskProjectId:
+        custom: []
+        name: eurodeskProjectId
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      eurodeskProjectId: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      organization_name:
+        custom: []
+        name: organization_name
+        description: 'Organization name.'
+        required: true
+        example: 'Youth NGO'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      country:
+        custom: []
+        name: country
+        description: 'Optional country.'
+        required: false
+        example: Germany
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      contact_info:
+        custom: []
+        name: contact_info
+        description: 'Optional contact details.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      organization_name: 'Youth NGO'
+      country: Germany
+      contact_info: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Ortaklik kaydedildi.","partnership":{"id":3,"organization_name":"Youth NGO"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a Eurodesk partnership.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The partnership must belong to the parent Eurodesk project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      eurodeskProjectId:
+        custom: []
+        name: eurodeskProjectId
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      partnershipId:
+        custom: []
+        name: partnershipId
+        description: 'Partnership ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      eurodeskProjectId: 9
+      partnershipId: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      organization_name:
+        custom: []
+        name: organization_name
+        description: 'Organization name.'
+        required: true
+        example: 'Youth NGO'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      country:
+        custom: []
+        name: country
+        description: 'Optional country.'
+        required: false
+        example: Germany
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      contact_info:
+        custom: []
+        name: contact_info
+        description: 'Optional contact details.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      organization_name: 'Youth NGO'
+      country: Germany
+      contact_info: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Ortaklik guncellendi.","partnership":{"id":3}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a Eurodesk partnership.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      eurodeskProjectId:
+        custom: []
+        name: eurodeskProjectId
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      partnershipId:
+        custom: []
+        name: partnershipId
+        description: 'Partnership ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      eurodeskProjectId: 9
+      partnershipId: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Ortaklik silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/reward-tiers'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a reward tier.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Tier name.'
+        required: true
+        example: 'Altin Kademe'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      min_badges:
+        custom: []
+        name: min_badges
+        description: 'Minimum badge count.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      min_credits:
+        custom: []
+        name: min_credits
+        description: 'Minimum credit amount.'
+        required: true
+        example: 90
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      reward_description:
+        custom: []
+        name: reward_description
+        description: 'Reward description.'
+        required: true
+        example: 'Hediye kutusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Altin Kademe'
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      min_badges: 3
+      min_credits: 90
+      reward_description: 'Hediye kutusu'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Hediye kademesi kaydedildi.","reward_tier":{"id":2,"name":"Altin Kademe"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/reward-tiers/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a reward tier.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Only project-owned reward tiers are updated through this endpoint.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward tier ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Tier name.'
+        required: true
+        example: 'Altin Kademe'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      min_badges:
+        custom: []
+        name: min_badges
+        description: 'Minimum badge count.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      min_credits:
+        custom: []
+        name: min_credits
+        description: 'Minimum credit amount.'
+        required: true
+        example: 90
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      reward_description:
+        custom: []
+        name: reward_description
+        description: 'Reward description.'
+        required: true
+        example: 'Hediye kutusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Altin Kademe'
+      min_badges: 3
+      min_credits: 90
+      reward_description: 'Hediye kutusu'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye kademesi guncellendi.","reward_tier":{"id":2}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/reward-tiers/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a reward tier.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward tier ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye kademesi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/reward-awards'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a reward award for a participant.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant must belong to the project; optional tier must be global or project-owned. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      participant_id:
+        custom: []
+        name: participant_id
+        description: 'Participant ID in the project.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      reward_tier_id:
+        custom: []
+        name: reward_tier_id
+        description: 'Optional reward tier ID.'
+        required: false
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      reward_name:
+        custom: []
+        name: reward_name
+        description: 'Award name.'
+        required: true
+        example: 'Hediye Kutusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status: `planned`, `given` or `cancelled`. Defaults to given.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      awarded_at:
+        custom: []
+        name: awarded_at
+        description: 'Optional award date.'
+        required: false
+        example: '2026-06-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      note:
+        custom: []
+        name: note
+        description: 'Optional note.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      participant_id: 42
+      reward_tier_id: 2
+      reward_name: 'Hediye Kutusu'
+      status: planned
+      awarded_at: '2026-06-30'
+      note: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Hediye kaydi olusturuldu.","reward_award":{"id":10,"status":"planned"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen hediye kademesi bu proje icin uygun degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PATCH
+    uri: 'api/admin/projects/{id}/special-modules/reward-awards/{item}/deliver'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark a reward award as delivered.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward award ID.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 10
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye teslim edildi olarak isaretlendi.","award":{"id":10,"status":"given"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/reward-awards/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a reward award.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward award ID.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 10
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye kaydi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/projects/{id}/special-modules/kademe-modules'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a KADEME+ project module.'
+      description: 'Requires permission: `projects.rewards.manage` for the project and a project type that supports KADEME+ module workflow. Optional period must belong to the project and completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Module title.'
+        required: true
+        example: 'Liderlik Atolyesi'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional module description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      sort_order:
+        custom: []
+        name: sort_order
+        description: 'Optional display order.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_active:
+        custom: []
+        name: is_active
+        description: 'Optional active flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      application_open:
+        custom: []
+        name: application_open
+        description: 'Optional student enrollment flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      requires_consent:
+        custom: []
+        name: requires_consent
+        description: 'Optional consent requirement.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      consent_checkbox_label:
+        custom: []
+        name: consent_checkbox_label
+        description: 'Optional consent label.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      warning_text:
+        custom: []
+        name: warning_text
+        description: 'Optional warning text.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      requires_coordinator_approval:
+        custom: []
+        name: requires_coordinator_approval
+        description: 'Optional review requirement.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      outcomes:
+        custom: []
+        name: outcomes
+        description: 'Optional outcome bullets.'
+        required: false
+        example:
+          - 'Takim calismasi'
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      instructors:
+        custom: []
+        name: instructors
+        description: 'Optional instructor cards.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      faq_items:
+        custom: []
+        name: faq_items
+        description: 'Optional FAQ items.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Liderlik Atolyesi'
+      period_id: 3
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      sort_order: 1
+      is_active: true
+      application_open: true
+      requires_consent: true
+      consent_checkbox_label: consequatur
+      warning_text: consequatur
+      requires_coordinator_approval: false
+      outcomes:
+        - 'Takim calismasi'
+      instructors:
+        - []
+      faq_items:
+        - []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"KADEME+ modulu kaydedildi.","kademe_module":{"id":5,"title":"Liderlik Atolyesi"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu proje turu KADEME+ modullerini desteklemiyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/kademe-modules/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a KADEME+ project module.'
+      description: 'Requires permission: `projects.rewards.manage` for the project and KADEME+ workflow support. Existing and new period scopes are checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'KADEME+ module ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Optional module title.'
+        required: false
+        example: 'Guncel Liderlik Atolyesi'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID belonging to the project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional module description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      is_active:
+        custom: []
+        name: is_active
+        description: 'Optional active flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      application_open:
+        custom: []
+        name: application_open
+        description: 'Optional enrollment flag.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Guncel Liderlik Atolyesi'
+      period_id: 3
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      is_active: true
+      application_open: false
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"KADEME+ modulu guncellendi.","kademe_module":{"id":5,"title":"Guncel Liderlik Atolyesi"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/projects/{id}/special-modules/kademe-modules/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a KADEME+ project module.'
+      description: 'Requires permission: `projects.rewards.manage` for the project and KADEME+ workflow support. The module period is checked for archive lock before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'KADEME+ module ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"KADEME+ modulu silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/projects/{id}/special-modules/kademe-module-enrollments/{enrollment}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Review a KADEME+ module enrollment.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and support for `participants_by_module`. The enrollment must belong to a module in the selected project; completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      enrollment:
+        custom: []
+        name: enrollment
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      enrollmentId:
+        custom: []
+        name: enrollmentId
+        description: 'Enrollment ID.'
+        required: true
+        example: 12
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      enrollment: consequatur
+      enrollmentId: 12
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      status:
+        custom: []
+        name: status
+        description: 'Review status: `pending`, `approved` or `rejected`.'
+        required: true
+        example: approved
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      note:
+        custom: []
+        name: note
+        description: 'Optional reviewer note.'
+        required: false
+        example: 'Uygun goruldu.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      status: approved
+      note: 'Uygun goruldu.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Modul kaydi guncellendi.","enrollment":{"id":12,"status":"approved"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/projects/{id}/special-modules'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get project special module workspace.'
+      description: 'Requires at least one project-scoped module permission among internships, mentors, Eurodesk or rewards. The project must support the requested module family through `ProjectSpecialModuleCatalog`; unsupported families are hidden from the access matrix. Exposed under `/api/admin/projects/{id}/special-modules` and `/api/panel/projects/{id}/special-modules`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. Must belong to the project when provided.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      period_id: 3
+    bodyParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"project":{"id":1,"name":"Kademe+"},"access":{"projects.rewards.view":true},"applicable_modules":["reward_tiers","participants_by_module"],"participants":[],"kademe_modules":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje modulleri icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Bu proje turu bu ozel modulu desteklemiyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/internships'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create an internship record.'
+      description: 'Requires permission: `projects.internships.manage`, project access and project support for `internships`. Participant must belong to the project; participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      participant_id:
+        custom: []
+        name: participant_id
+        description: 'Participant ID in the project.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      company_name:
+        custom: []
+        name: company_name
+        description: 'Company name.'
+        required: true
+        example: 'ACME A.S.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      position:
+        custom: []
+        name: position
+        description: 'Position title.'
+        required: true
+        example: Stajyer
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-07-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'Optional end date.'
+        required: false
+        example: '2026-08-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      document_path:
+        custom: []
+        name: document_path
+        description: 'Optional document path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      participant_id: 42
+      company_name: 'ACME A.S.'
+      position: Stajyer
+      start_date: '2026-07-01'
+      end_date: '2026-08-30'
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      document_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Staj bilgisi kaydedildi.","internship":{"id":7,"company_name":"ACME A.S."}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen katilimci bu projeye ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/internships/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update an internship record.'
+      description: 'Requires permission: `projects.internships.manage`, project access and project support for `internships`. The internship must belong to a participant in the selected project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Internship ID.'
+        required: true
+        example: 7
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 7
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      company_name:
+        custom: []
+        name: company_name
+        description: 'Company name.'
+        required: true
+        example: 'ACME A.S.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      position:
+        custom: []
+        name: position
+        description: 'Position title.'
+        required: true
+        example: 'Junior Analyst'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-07-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'Optional end date.'
+        required: false
+        example: '2026-08-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      document_path:
+        custom: []
+        name: document_path
+        description: 'Optional document path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      company_name: 'ACME A.S.'
+      position: 'Junior Analyst'
+      start_date: '2026-07-01'
+      end_date: '2026-08-30'
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      document_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Staj bilgisi guncellendi.","internship":{"id":7}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/internships/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete an internship record.'
+      description: 'Requires permission: `projects.internships.manage`, project access and project support for `internships`. The participant period is checked for archive lock before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Internship ID.'
+        required: true
+        example: 7
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 7
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Staj bilgisi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/mentors'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a project mentor.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Mentor name.'
+        required: true
+        example: 'Ayse Kaya'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional mentor bio.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise.'
+        required: false
+        example: 'Kariyer Planlama'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      photo_path:
+        custom: []
+        name: photo_path
+        description: 'Optional photo path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Ayse Kaya'
+      bio: consequatur
+      expertise: 'Kariyer Planlama'
+      photo_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Mentor kaydedildi.","mentor":{"id":4,"name":"Ayse Kaya"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/mentors/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a project mentor.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      item: 4
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Mentor name.'
+        required: true
+        example: 'Ayse Kaya'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional mentor bio.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      photo_path:
+        custom: []
+        name: photo_path
+        description: 'Optional photo path or URL.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Ayse Kaya'
+      bio: consequatur
+      expertise: consequatur
+      photo_path: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Mentor guncellendi.","mentor":{"id":4}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/mentors/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a project mentor.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      item: 4
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Mentor silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/projects/{id}/special-modules/mentors/{mentorId}/participants'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List participants assigned to a mentor.'
+      description: 'Requires permission: `projects.mentors.view`, project access and project support for `mentors`. Optional period filter must belong to the project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      mentorId:
+        custom: []
+        name: mentorId
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      mentorId: 4
+    queryParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      period_id: 3
+    bodyParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"mentor":{"id":4,"name":"Ayse Kaya"},"participants":[]}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/mentors/{mentorId}/participants'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Assign a mentor to a participant.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`. Participant and mentor must belong to the project; optional period must belong to the project and match the participant period.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      mentorId:
+        custom: []
+        name: mentorId
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      mentorId: 4
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      participant_id:
+        custom: []
+        name: participant_id
+        description: 'Participant ID.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      note:
+        custom: []
+        name: note
+        description: 'Optional assignment note.'
+        required: false
+        example: 'Ilk gorusme planlandi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      participant_id: 42
+      period_id: 3
+      note: 'Ilk gorusme planlandi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Katilimci mentor ile eslendi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen katilimci bu doneme ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/mentors/{mentorId}/participants/{participantId}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Remove a mentor assignment from a participant.'
+      description: 'Requires permission: `projects.mentors.manage`, project access and project support for `mentors`. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      mentorId:
+        custom: []
+        name: mentorId
+        description: 'Mentor ID.'
+        required: true
+        example: 4
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      participantId:
+        custom: []
+        name: participantId
+        description: 'Participant ID.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 2
+      mentorId: 4
+      participantId: 42
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Katilimci mentor eslestirmesi kaldirildi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/eurodesk-projects'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a Eurodesk project record.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. Optional period must belong to the project and completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Eurodesk project title.'
+        required: true
+        example: 'Youth Exchange'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      partner_organizations:
+        custom: []
+        name: partner_organizations
+        description: 'Optional partner organization names.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      grant_amount:
+        custom: []
+        name: grant_amount
+        description: 'Optional grant amount.'
+        required: false
+        example: 25000.0
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      grant_status:
+        custom: []
+        name: grant_status
+        description: 'Grant status: `applied`, `approved`, `rejected` or `completed`.'
+        required: true
+        example: applied
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Optional start date.'
+        required: false
+        example: '2026-07-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'Optional end date.'
+        required: false
+        example: '2026-09-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      period_id: 3
+      title: 'Youth Exchange'
+      partner_organizations:
+        - consequatur
+      grant_amount: 25000.0
+      grant_status: applied
+      start_date: '2026-07-01'
+      end_date: '2026-09-01'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Eurodesk proje bilgisi kaydedildi.","eurodesk_project":{"id":9,"title":"Youth Exchange"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/eurodesk-projects/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a Eurodesk project record.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. Existing and target period scopes are checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      item: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Eurodesk project title.'
+        required: true
+        example: 'Youth Exchange 2026'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      grant_status:
+        custom: []
+        name: grant_status
+        description: 'Grant status: `applied`, `approved`, `rejected` or `completed`.'
+        required: true
+        example: approved
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Youth Exchange 2026'
+      grant_status: approved
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Eurodesk proje bilgisi guncellendi.","eurodesk_project":{"id":9}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/eurodesk-projects/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a Eurodesk project record.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The record period is checked for archive lock before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      item: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Eurodesk proje bilgisi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a Eurodesk partnership.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The parent Eurodesk project must belong to the selected project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      eurodeskProjectId:
+        custom: []
+        name: eurodeskProjectId
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      eurodeskProjectId: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      organization_name:
+        custom: []
+        name: organization_name
+        description: 'Organization name.'
+        required: true
+        example: 'Youth NGO'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      country:
+        custom: []
+        name: country
+        description: 'Optional country.'
+        required: false
+        example: Germany
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      contact_info:
+        custom: []
+        name: contact_info
+        description: 'Optional contact details.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      organization_name: 'Youth NGO'
+      country: Germany
+      contact_info: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Ortaklik kaydedildi.","partnership":{"id":3,"organization_name":"Youth NGO"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a Eurodesk partnership.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`. The partnership must belong to the parent Eurodesk project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      eurodeskProjectId:
+        custom: []
+        name: eurodeskProjectId
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      partnershipId:
+        custom: []
+        name: partnershipId
+        description: 'Partnership ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      eurodeskProjectId: 9
+      partnershipId: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      organization_name:
+        custom: []
+        name: organization_name
+        description: 'Organization name.'
+        required: true
+        example: 'Youth NGO'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      country:
+        custom: []
+        name: country
+        description: 'Optional country.'
+        required: false
+        example: Germany
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      contact_info:
+        custom: []
+        name: contact_info
+        description: 'Optional contact details.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      organization_name: 'Youth NGO'
+      country: Germany
+      contact_info: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Ortaklik guncellendi.","partnership":{"id":3}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/eurodesk-projects/{eurodeskProjectId}/partnerships/{partnershipId}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a Eurodesk partnership.'
+      description: 'Requires permission: `projects.eurodesk.manage`, project access and project support for `eurodesk_projects`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 6
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      eurodeskProjectId:
+        custom: []
+        name: eurodeskProjectId
+        description: 'Eurodesk project ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      partnershipId:
+        custom: []
+        name: partnershipId
+        description: 'Partnership ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 6
+      eurodeskProjectId: 9
+      partnershipId: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Ortaklik silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/reward-tiers'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a reward tier.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Tier name.'
+        required: true
+        example: 'Altin Kademe'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      min_badges:
+        custom: []
+        name: min_badges
+        description: 'Minimum badge count.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      min_credits:
+        custom: []
+        name: min_credits
+        description: 'Minimum credit amount.'
+        required: true
+        example: 90
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      reward_description:
+        custom: []
+        name: reward_description
+        description: 'Reward description.'
+        required: true
+        example: 'Hediye kutusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Altin Kademe'
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      min_badges: 3
+      min_credits: 90
+      reward_description: 'Hediye kutusu'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Hediye kademesi kaydedildi.","reward_tier":{"id":2,"name":"Altin Kademe"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/reward-tiers/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a reward tier.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Only project-owned reward tiers are updated through this endpoint.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward tier ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Tier name.'
+        required: true
+        example: 'Altin Kademe'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      min_badges:
+        custom: []
+        name: min_badges
+        description: 'Minimum badge count.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      min_credits:
+        custom: []
+        name: min_credits
+        description: 'Minimum credit amount.'
+        required: true
+        example: 90
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      reward_description:
+        custom: []
+        name: reward_description
+        description: 'Reward description.'
+        required: true
+        example: 'Hediye kutusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: 'Altin Kademe'
+      min_badges: 3
+      min_credits: 90
+      reward_description: 'Hediye kutusu'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye kademesi guncellendi.","reward_tier":{"id":2}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/reward-tiers/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a reward tier.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward tier ID.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye kademesi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/reward-awards'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a reward award for a participant.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant must belong to the project; optional tier must be global or project-owned. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      participant_id:
+        custom: []
+        name: participant_id
+        description: 'Participant ID in the project.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      reward_tier_id:
+        custom: []
+        name: reward_tier_id
+        description: 'Optional reward tier ID.'
+        required: false
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      reward_name:
+        custom: []
+        name: reward_name
+        description: 'Award name.'
+        required: true
+        example: 'Hediye Kutusu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status: `planned`, `given` or `cancelled`. Defaults to given.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      awarded_at:
+        custom: []
+        name: awarded_at
+        description: 'Optional award date.'
+        required: false
+        example: '2026-06-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      note:
+        custom: []
+        name: note
+        description: 'Optional note.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      participant_id: 42
+      reward_tier_id: 2
+      reward_name: 'Hediye Kutusu'
+      status: planned
+      awarded_at: '2026-06-30'
+      note: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Hediye kaydi olusturuldu.","reward_award":{"id":10,"status":"planned"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen hediye kademesi bu proje icin uygun degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PATCH
+    uri: 'api/panel/projects/{id}/special-modules/reward-awards/{item}/deliver'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark a reward award as delivered.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward award ID.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 10
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye teslim edildi olarak isaretlendi.","award":{"id":10,"status":"given"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/reward-awards/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a reward award.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and project support for `reward_tiers`. Participant period is checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'Reward award ID.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 5
+      item: 10
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Hediye kaydi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/projects/{id}/special-modules/kademe-modules'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a KADEME+ project module.'
+      description: 'Requires permission: `projects.rewards.manage` for the project and a project type that supports KADEME+ module workflow. Optional period must belong to the project and completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Module title.'
+        required: true
+        example: 'Liderlik Atolyesi'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional module description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      sort_order:
+        custom: []
+        name: sort_order
+        description: 'Optional display order.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_active:
+        custom: []
+        name: is_active
+        description: 'Optional active flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      application_open:
+        custom: []
+        name: application_open
+        description: 'Optional student enrollment flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      requires_consent:
+        custom: []
+        name: requires_consent
+        description: 'Optional consent requirement.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      consent_checkbox_label:
+        custom: []
+        name: consent_checkbox_label
+        description: 'Optional consent label.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      warning_text:
+        custom: []
+        name: warning_text
+        description: 'Optional warning text.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      requires_coordinator_approval:
+        custom: []
+        name: requires_coordinator_approval
+        description: 'Optional review requirement.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      outcomes:
+        custom: []
+        name: outcomes
+        description: 'Optional outcome bullets.'
+        required: false
+        example:
+          - 'Takim calismasi'
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      instructors:
+        custom: []
+        name: instructors
+        description: 'Optional instructor cards.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      faq_items:
+        custom: []
+        name: faq_items
+        description: 'Optional FAQ items.'
+        required: false
+        example:
+          - []
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Liderlik Atolyesi'
+      period_id: 3
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      sort_order: 1
+      is_active: true
+      application_open: true
+      requires_consent: true
+      consent_checkbox_label: consequatur
+      warning_text: consequatur
+      requires_coordinator_approval: false
+      outcomes:
+        - 'Takim calismasi'
+      instructors:
+        - []
+      faq_items:
+        - []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"KADEME+ modulu kaydedildi.","kademe_module":{"id":5,"title":"Liderlik Atolyesi"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu proje turu KADEME+ modullerini desteklemiyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/kademe-modules/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a KADEME+ project module.'
+      description: 'Requires permission: `projects.rewards.manage` for the project and KADEME+ workflow support. Existing and new period scopes are checked for archive lock.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'KADEME+ module ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Optional module title.'
+        required: false
+        example: 'Guncel Liderlik Atolyesi'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID belonging to the project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional module description.'
+        required: false
+        example: 'Dolores dolorum amet iste laborum eius est dolor.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      is_active:
+        custom: []
+        name: is_active
+        description: 'Optional active flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      application_open:
+        custom: []
+        name: application_open
+        description: 'Optional enrollment flag.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: 'Guncel Liderlik Atolyesi'
+      period_id: 3
+      description: 'Dolores dolorum amet iste laborum eius est dolor.'
+      is_active: true
+      application_open: false
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"KADEME+ modulu guncellendi.","kademe_module":{"id":5,"title":"Guncel Liderlik Atolyesi"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/projects/{id}/special-modules/kademe-modules/{item}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a KADEME+ project module.'
+      description: 'Requires permission: `projects.rewards.manage` for the project and KADEME+ workflow support. The module period is checked for archive lock before deletion.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      item:
+        custom: []
+        name: item
+        description: 'KADEME+ module ID.'
+        required: true
+        example: 5
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      item: 5
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"KADEME+ modulu silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/projects/{id}/special-modules/kademe-module-enrollments/{enrollment}'
+    metadata:
+      custom: []
+      groupName: 'Project Special Modules'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Review a KADEME+ module enrollment.'
+      description: 'Requires permission: `projects.rewards.manage`, project access and support for `participants_by_module`. The enrollment must belong to a module in the selected project; completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      enrollment:
+        custom: []
+        name: enrollment
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      enrollmentId:
+        custom: []
+        name: enrollmentId
+        description: 'Enrollment ID.'
+        required: true
+        example: 12
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+      enrollment: consequatur
+      enrollmentId: 12
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      status:
+        custom: []
+        name: status
+        description: 'Review status: `pending`, `approved` or `rejected`.'
+        required: true
+        example: approved
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      note:
+        custom: []
+        name: note
+        description: 'Optional reviewer note.'
+        required: false
+        example: 'Uygun goruldu.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      status: approved
+      note: 'Uygun goruldu.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Modul kaydi guncellendi.","enrollment":{"id":12,"status":"approved"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

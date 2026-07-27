@@ -12,6 +12,7 @@ use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\MediaStorage;
+use App\Support\IstanbulDateTime;
 use App\Support\ProjectSpecialModuleCatalog;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
@@ -529,6 +530,7 @@ class AdminKpdController extends Controller
             'end_at' => 'required|date|after:start_at',
             'notes' => 'nullable|string',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['start_at', 'end_at']);
 
         $this->abortUnlessUserInKpdScope($request, 'kpd.appointments.manage', (int) $validated['counselee_id']);
         $this->assertPeriodMatchesUser((int) $validated['counselee_id'], isset($validated['period_id']) ? (int) $validated['period_id'] : null);

@@ -18,6 +18,7 @@ class FinancialTransaction extends Model
         'period_id',
         'type',
         'category',
+        'category_note',
         'payee_name',
         'amount',
         'status',

@@ -166,6 +166,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
     Route::get('/digital-bohca', [DigitalBohcaController::class, 'index'])->middleware('scoped.permission:participant.bohca.view');
     Route::get('/digital-bohca/{id}/download', [DigitalBohcaController::class, 'download'])->middleware('scoped.permission:participant.bohca.view');
     Route::get('/certificates', [CertificateController::class, 'index'])->middleware('scoped.permission:participant.certificates.view');
+    Route::post('/certificates', [CertificateController::class, 'store'])->middleware('scoped.permission:participant.certificates.view');
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->middleware('scoped.permission:participant.feedback.create');
     Route::post('/feedbacks', [FeedbackController::class, 'store'])->middleware('scoped.permission:participant.feedback.create');
     Route::get('/requests', [RequestController::class, 'index'])->middleware('scoped.permission:participant.support.manage');
@@ -184,6 +185,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
     Route::get('/assignments', [AssignmentController::class, 'index'])->middleware('scoped.permission:participant.assignments.view');
     Route::post('/assignments/{id}/submit', [AssignmentController::class, 'submit'])->middleware('scoped.permission:participant.assignments.submit');
     Route::get('/assignment-submissions/{id}/download', [AssignmentController::class, 'downloadSubmission'])->middleware('scoped.permission:participant.assignments.view');
+    Route::get('/assignment-attachments/{id}/download', [AssignmentController::class, 'downloadAttachment'])->middleware('scoped.permission:participant.assignments.view');
 
     // Destek Talepleri (ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸renci TarafÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±)
     Route::get('/tickets', [SupportTicketController::class, 'myTickets'])->middleware('scoped.permission:participant.support.manage');
@@ -358,6 +360,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    Route::get('/forum/posts', [ForumController::class, 'panelIndex']);
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
     Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
 
@@ -436,6 +439,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/volunteer/opportunities', [VolunteerController::class, 'panelIndex']);
     Route::get('/volunteer/opportunities/export', [VolunteerController::class, 'panelExport']);
     Route::post('/volunteer/opportunities', [VolunteerController::class, 'panelStore']);
+    Route::put('/volunteer/opportunities/{id}', [VolunteerController::class, 'panelUpdate']);
     Route::put('/volunteer/applications/{id}', [VolunteerController::class, 'panelUpdateApplication']);
     Route::delete('/volunteer/opportunities/{id}', [VolunteerController::class, 'panelDestroy']);
 
@@ -501,6 +505,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/assignments', [AssignmentController::class, 'panelStore']);
     Route::delete('/assignments/{id}', [AssignmentController::class, 'panelDestroy']);
     Route::get('/assignment-submissions/{id}/download', [AssignmentController::class, 'panelDownloadSubmission']);
+    Route::get('/assignment-attachments/{id}/download', [AssignmentController::class, 'panelDownloadAttachment']);
     Route::put('/assignment-submissions/{id}/review', [AssignmentController::class, 'panelReviewSubmission']);
 
     Route::get('/kpd/appointments', [AdminKpdController::class, 'index']);
@@ -549,6 +554,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    Route::get('/forum/posts', [ForumController::class, 'panelIndex']);
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
     Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
 

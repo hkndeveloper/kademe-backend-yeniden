@@ -1,0 +1,883 @@
+name: Trainers
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/trainers/export
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export trainers.'
+      description: 'Requires permission: `trainers.export` with a usable scope. Applies the same search/status filters as the list endpoint and returns an exported file through the shared admin export responder. Supported formats include CSV, Excel/XLSX, PDF and Word/DOCX.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional search filter.'
+        required: false
+        example: liderlik
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter. Allowed values: active, passive, candidate.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: liderlik
+      status: active
+      format: xlsx
+    bodyParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: ''
+        required: false
+        example: candidate
+        type: string
+        enumValues:
+          - active
+          - passive
+          - candidate
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: ''
+        required: false
+        example: word
+        type: string
+        enumValues:
+          - xlsx
+          - excel
+          - pdf
+          - docx
+          - word
+          - csv
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+      status: candidate
+      format: word
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Trainer export file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin kapsam verilmemis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/trainers
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List trainers.'
+      description: 'Requires permission: `trainers.view` with a usable non-empty scope. Trainers are project-independent records, so no project ownership filter is applied; the scope check only decides whether the action is usable in the panel. Returns paginated trainers, summary stats and allowed status values.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional search across name, email, phone, title, organization and expertise.'
+        required: false
+        example: liderlik
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter. Allowed values: active, passive, candidate.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Optional page size between 5 and 100. Defaults to 20.'
+        required: false
+        example: 20
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: liderlik
+      status: active
+      per_page: 20
+    bodyParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: ''
+        required: false
+        example: active
+        type: string
+        enumValues:
+          - active
+          - passive
+          - candidate
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Must be at least 5. Must not be greater than 100.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+      status: active
+      per_page: 1
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"trainers":{"data":[{"id":1,"first_name":"Ayse","last_name":"Yilmaz","full_name":"Ayse Yilmaz","email":"ayse@example.com","status":"active","kademe_comment":"Guclu atolye yonetimi"}],"current_page":1},"stats":{"total":12,"active":8,"candidate":2,"with_email":10},"statuses":["active","passive","candidate"]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin kapsam verilmemis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/trainers
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a trainer.'
+      description: 'Requires permission: `trainers.create` with a usable scope. Creates a project-independent trainer profile, stores creator/updater metadata and prepares audit attributes for the activity log.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      first_name:
+        custom: []
+        name: first_name
+        description: 'Trainer first name. Max 120 characters.'
+        required: true
+        example: Ayse
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      last_name:
+        custom: []
+        name: last_name
+        description: 'Optional trainer last name. Max 120 characters.'
+        required: false
+        example: Yilmaz
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      email:
+        custom: []
+        name: email
+        description: 'Optional trainer email.'
+        required: false
+        example: ayse@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      phone:
+        custom: []
+        name: phone
+        description: 'Optional phone number.'
+        required: false
+        example: '05550000000'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Optional title.'
+        required: false
+        example: Egitmen
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      organization:
+        custom: []
+        name: organization
+        description: 'Optional organization.'
+        required: false
+        example: Kademe
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise summary.'
+        required: false
+        example: 'Liderlik, iletisim'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status. Allowed values: active, passive, candidate. Defaults to active.'
+        required: false
+        example: candidate
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      last_worked_at:
+        custom: []
+        name: last_worked_at
+        description: 'Optional last worked date.'
+        required: false
+        example: '2026-06-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional biography. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      notes:
+        custom: []
+        name: notes
+        description: 'Optional internal notes. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      first_name: Ayse
+      last_name: Yilmaz
+      email: ayse@example.com
+      phone: '05550000000'
+      title: Egitmen
+      organization: Kademe
+      expertise: 'Liderlik, iletisim'
+      status: candidate
+      last_worked_at: '2026-06-01'
+      bio: consequatur
+      notes: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Egitmen kaydi olusturuldu.","trainer":{"id":1,"full_name":"Ayse Yilmaz","status":"candidate"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The first name field is required."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/trainers/{id}'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get trainer details.'
+      description: 'Requires permission: `trainers.view` with a usable scope. Includes creator, updater and Kademe comment updater metadata when available.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"trainer":{"id":1,"first_name":"Ayse","last_name":"Yilmaz","full_name":"Ayse Yilmaz","email":"ayse@example.com","phone":"05550000000","title":"Egitmen","organization":"Kademe","expertise":"Liderlik","status":"active","kademe_comment":"Guclu iletisim"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\Trainer] 1"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/trainers/{id}'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a trainer.'
+      description: 'Requires permission: `trainers.update` with a usable scope. All profile fields are optional on update; updater metadata and trainer audit attributes are refreshed.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      first_name:
+        custom: []
+        name: first_name
+        description: 'Optional trainer first name. Max 120 characters.'
+        required: false
+        example: Ayse
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      last_name:
+        custom: []
+        name: last_name
+        description: 'Optional trainer last name. Max 120 characters.'
+        required: false
+        example: Yilmaz
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      email:
+        custom: []
+        name: email
+        description: 'Optional trainer email.'
+        required: false
+        example: ayse@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      phone:
+        custom: []
+        name: phone
+        description: 'Optional phone number.'
+        required: false
+        example: '05550000000'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Optional title.'
+        required: false
+        example: 'Bas Egitmen'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      organization:
+        custom: []
+        name: organization
+        description: 'Optional organization.'
+        required: false
+        example: Kademe
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise summary.'
+        required: false
+        example: 'Kariyer planlama'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status. Allowed values: active, passive, candidate.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      last_worked_at:
+        custom: []
+        name: last_worked_at
+        description: 'Optional last worked date.'
+        required: false
+        example: '2026-06-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional biography. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      notes:
+        custom: []
+        name: notes
+        description: 'Optional internal notes. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      first_name: Ayse
+      last_name: Yilmaz
+      email: ayse@example.com
+      phone: '05550000000'
+      title: 'Bas Egitmen'
+      organization: Kademe
+      expertise: 'Kariyer planlama'
+      status: active
+      last_worked_at: '2026-06-01'
+      bio: consequatur
+      notes: consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Egitmen kaydi guncellendi.","trainer":{"id":1,"full_name":"Ayse Yilmaz","status":"active"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PATCH
+    uri: 'api/panel/trainers/{id}/comment'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update the Kademe comment for a trainer.'
+      description: 'Requires permission: `trainers.comment` with a usable scope. This stores the single editable Kademe impression/comment for the trainer, comment updater metadata and an audit event.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      kademe_comment:
+        custom: []
+        name: kademe_comment
+        description: 'Optional Kademe comment. Null or empty clears the comment. Max 5000 characters.'
+        required: false
+        example: 'Atolye sonrasi geri bildirimleri olumlu.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      kademe_comment: 'Atolye sonrasi geri bildirimleri olumlu.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Kademe yorumu guncellendi.","trainer":{"id":1,"kademe_comment":"Atolye sonrasi geri bildirimleri olumlu."}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin kapsam verilmemis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/trainers/{id}/email'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Send an email to a trainer.'
+      description: 'Requires permission: `trainers.email` with a usable scope. The trainer must have an email address. Sends through the existing notification/email service and stores trainer email audit attributes.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      subject:
+        custom: []
+        name: subject
+        description: 'Email subject. Max 180 characters.'
+        required: true
+        example: 'Program Daveti'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      body:
+        custom: []
+        name: body
+        description: 'Email body. Max 10000 characters.'
+        required: true
+        example: 'Merhaba, sizi yeni programa davet etmek isteriz.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      subject: 'Program Daveti'
+      body: 'Merhaba, sizi yeni programa davet etmek isteriz.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-posta gonderildi.","sent_count":1}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu egitmen icin e-posta adresi bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/trainers/{id}'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a trainer.'
+      description: 'Requires permission: `trainers.delete` with a usable scope. Trainers use soft deletes, so the row is marked deleted after audit attributes are prepared.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Egitmen kaydi silindi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

@@ -55,7 +55,7 @@ class SiteSettingsController extends Controller
             'contact' => [
                 'contact_email' => 'info@kademe.org',
                 'contact_phone' => '0212 XXX XX XX',
-                'contact_address' => 'T3 Vakfi Genel Merkezi, Istanbul, Turkiye',
+                'contact_address' => 'KADEME Iletisim Merkezi, Istanbul, Turkiye',
             ],
             'social_media' => [
                 'instagram_url' => '',
@@ -86,7 +86,7 @@ class SiteSettingsController extends Controller
                 'footer_project_links' => [],
             ],
             'homepage' => [
-                'block_order' => ['hero', 'intro', 'stats', 'projects', 'activities', 'about', 'blog', 'newsletter', 'certificate_verify'],
+                'block_order' => ['hero', 'intro', 'stats', 'projects', 'activities', 'about', 'blog', 'newsletter', 'certificate_verify', 'marquee'],
                 'block_visibility' => [
                     'hero' => true,
                     'intro' => true,
@@ -97,13 +97,14 @@ class SiteSettingsController extends Controller
                     'blog' => true,
                     'newsletter' => true,
                     'certificate_verify' => true,
+                    'marquee' => true,
                 ],
                 'hero_badge' => 'KADEME: Geleceğin Liderlik Okulu',
                 'hero_title_line_1' => 'YETENEĞİNİ',
                 'hero_title_line_2' => 'KEŞFET',
                 'hero_title_line_3' => 'GELECEĞİ',
                 'hero_title_line_4' => 'YÖNET',
-                'hero_description' => 'T3 Vakfı bünyesinde, Türkiye ekosisteminde kapsamlı kariyer ve yetenek gelişim programlarına dahil olun.',
+                'hero_description' => 'KADEME ekosisteminde kapsamlı kariyer ve yetenek gelişim programlarına dahil olun.',
                 'hero_background_image_url' => '',
                 'hero_primary_label' => 'Hemen Başvur',
                 'hero_primary_href' => '/auth/register',
@@ -125,7 +126,7 @@ class SiteSettingsController extends Controller
                         'cta_href' => '/projects',
                     ],
                     [
-                        'title' => 'Etkinlik ve Basvuru Akisi',
+                        'title' => 'Etkinlik ve Başvuru Akisi',
                         'description' => 'Yaklasan faaliyetler, blog yazilari, duyurular ve basvuru surecleri ayni dijital deneyim icinde sunulur.',
                         'image_url' => '',
                         'cta_label' => 'Faaliyetlere Git',
@@ -137,6 +138,8 @@ class SiteSettingsController extends Controller
                 'activities_title' => 'FAALIYETLERIMIZ',
                 'activities_description' => 'Yaklasan etkinlikler, programlar ve proje bazli faaliyet ozeti.',
                 'featured_activity_ids' => [],
+                'marquee_items' => ['KADEME', 'Projeler', 'Faaliyetler', 'Mentorluk', 'Gelişim', 'Başvuru', 'Sertifika'],
+                'marquee_speed_seconds' => 45,
                 'about_teaser_title' => 'KADEME VE PROJE EKOSISTEMI',
                 'about_teaser_description' => 'Mentorluk, psikolojik danismanlik, rozet sistemi, dijital bohca ve proje bazli etkinlik akislariyla cok katmanli bir gelisim yapisi sunuyoruz.',
                 'about_teaser_image_url' => '',
@@ -151,8 +154,8 @@ class SiteSettingsController extends Controller
                 'certificate_verify_description' => 'KADEME tarafindan verilen sertifikalari dogrulama kodu ile kamusal olarak sorgulayabilirsiniz.',
                 'certificate_verify_cta_label' => 'Dogrulama Ekranina Git',
                 'certificate_verify_cta_href' => '/certificates/verify',
-                'footer_description' => 'T3 Vakfi Kariyer Gelisim Merkezi. Gelecegin liderlerini bugunden yetistiriyoruz.',
-                'footer_copyright' => '© 2026 KADEME YÖNETİM SİSTEMİ | T3 VAKFI. TÜM HAKLARI SAKLIDIR.',
+                'footer_description' => 'KADEME Kariyer Gelişim Merkezi. Gelecegin liderlerini bugunden yetistiriyoruz.',
+                'footer_copyright' => '© 2026 KADEME YÖNETİM SİSTEMİ. TÜM HAKLARI SAKLIDIR.',
                 'stats' => [
                     ['label' => 'Aktif Ogrenci', 'value' => '2,500+', 'icon' => 'users'],
                     ['label' => 'Tamamlanan Proje', 'value' => '450+', 'icon' => 'trophy'],
@@ -163,7 +166,7 @@ class SiteSettingsController extends Controller
             ],
             'about' => [
                 'hero_title' => 'Biz Kimiz?',
-                'hero_description' => 'KADEME, T3 Vakfi bunyesinde yetenek, kariyer ve liderlik gelisimi odakli bir ekosistemdir. Ogrenciler, mezunlar ve profesyoneller icin surekli gelisim alanlari uretir.',
+                'hero_description' => 'KADEME, yetenek, kariyer ve liderlik gelisimi odakli bir ekosistemdir. Ogrenciler, mezunlar ve profesyoneller icin surekli gelisim alanlari uretir.',
                 'mission_title' => 'Misyonumuz',
                 'mission_text' => 'Genc yeteneklerin potansiyelini ortaya cikarmak, onlara cagimizin gerektirdigi bilgi ve becerileri kazandirmak ve uzun vadeli bir gelisim yolculugu sunmak.',
                 'vision_title' => 'Vizyonumuz',
@@ -176,7 +179,7 @@ class SiteSettingsController extends Controller
                 'blog_teaser_text' => 'KADEME dünyasından seçili yazılar ve güncel içerikler burada yer alır.',
                 'activities_teaser_title' => 'Faaliyetler',
                 'activities_teaser_text' => 'Program ve etkinlik akislarimiz proje bazli ilerler.',
-                'journey_title' => 'Gelisim Yolculugu',
+                'journey_title' => 'Gelişim Yolculugu',
                 'journey_text' => 'Projeler, faaliyetler, blog, SSS ve iletişim akışları birlikte KADEME\'nin public katmanını oluşturur.',
             ],
             'blog_page' => [
@@ -339,7 +342,8 @@ class SiteSettingsController extends Controller
         $blockOrder = is_array($homepage['block_order'] ?? null)
             ? array_values(array_filter($homepage['block_order'], fn ($key) => is_string($key) && in_array($key, $allowedBlocks, true)))
             : $defaults['homepage']['block_order'];
-        $homepage['block_order'] = count($blockOrder) > 0 ? $blockOrder : $defaults['homepage']['block_order'];
+        $blockOrder = count($blockOrder) > 0 ? $blockOrder : $defaults['homepage']['block_order'];
+        $homepage['block_order'] = array_values(array_unique(array_merge($blockOrder, array_diff($allowedBlocks, $blockOrder))));
 
         $incomingVisibility = is_array($homepage['block_visibility'] ?? null) ? $homepage['block_visibility'] : [];
         $homepage['block_visibility'] = array_map(
@@ -353,6 +357,9 @@ class SiteSettingsController extends Controller
         $homepage['featured_project_slugs'] = $this->normalizeStringList($homepage['featured_project_slugs'] ?? null, $defaults['homepage']['featured_project_slugs']);
         $homepage['featured_blog_slugs'] = $this->normalizeStringList($homepage['featured_blog_slugs'] ?? null, $defaults['homepage']['featured_blog_slugs']);
         $homepage['featured_activity_ids'] = $this->normalizeNumberList($homepage['featured_activity_ids'] ?? null, $defaults['homepage']['featured_activity_ids']);
+        $homepage['marquee_items'] = $this->normalizeStringList($homepage['marquee_items'] ?? null, $defaults['homepage']['marquee_items']);
+        $marqueeSpeed = is_numeric($homepage['marquee_speed_seconds'] ?? null) ? (int) $homepage['marquee_speed_seconds'] : $defaults['homepage']['marquee_speed_seconds'];
+        $homepage['marquee_speed_seconds'] = max(8, min(90, $marqueeSpeed));
         $homepage['stats'] = $this->normalizeStats($homepage['stats'] ?? null, $defaults['homepage']['stats']);
         $settings['homepage'] = $homepage;
 
@@ -453,6 +460,7 @@ class SiteSettingsController extends Controller
                 ->where('is_public', true)
                 ->whereIn('status', ['scheduled', 'active', 'completed'])
                 ->where('start_at', '>=', now()->subYear())
+                ->orderByDesc('is_featured')
                 ->orderBy('start_at')
                 ->take(8)
                 ->get();

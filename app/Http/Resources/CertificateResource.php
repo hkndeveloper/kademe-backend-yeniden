@@ -18,6 +18,11 @@ class CertificateResource extends JsonResource
         return [
             'id' => $this->id,
             'type' => $this->type,
+            'title' => $this->title,
+            'issuer' => $this->issuer,
+            'source' => $this->source,
+            'included_in_cv' => (bool) $this->included_in_cv,
+            'uploaded_by_user_id' => $this->uploaded_by_user_id,
             'verification_code' => $this->verification_code,
             'issued_at' => $this->issued_at,
             'certificate_path' => $this->certificate_path,

@@ -111,10 +111,20 @@ class WaitlistService
 
         $application->loadMissing(['project:id,name', 'user:id,email']);
         if ($application->user?->email) {
-            $this->notificationService->sendEmail(
+            $this->notificationService->sendTemplatedEmail(
                 [$application->user->email],
                 'Yedek listeden davet edildiniz',
-                'Proje: '.($application->project?->name ?? '-')."\nYedek listeden davet edildiniz. Son yanit tarihi: {$expiresAt}",
+                'emails.application-status',
+                [
+                    'title' => 'Yedek Liste Daveti',
+                    'preheader' => 'Yedek listeden davet edildiniz.',
+                    'intro' => 'Kontenjan uygunlugu nedeniyle yedek listeden davet edildiniz.',
+                    'lines' => [
+                        ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+                        ['label' => 'Son yanit tarihi', 'value' => $expiresAt->format('d.m.Y H:i')],
+                    ],
+                    'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nYedek listeden davet edildiniz. Son yanit tarihi: {$expiresAt}",
+                ],
                 $application->project_id,
                 $senderId
             );

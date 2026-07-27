@@ -1,0 +1,276 @@
+name: Forum
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/forum/posts
+    metadata:
+      custom: []
+      groupName: Forum
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List forum posts for participant projects.'
+      description: 'Requires permission: `participant.forum.view`. Returns posts from projects and periods where the current user participates. Completed period archives can be listed but write endpoints are locked.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 1
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: ''
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"posts":{"data":[{"id":1,"title":"Tanisma","content":"Merhaba","project":{"id":1,"name":"KADEME"},"replies":[]}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje forumuna erisiminiz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/forum/posts
+    metadata:
+      custom: []
+      groupName: Forum
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a forum post.'
+      description: 'Requires permission: `participant.forum.view`. The current user must participate in the selected project and, when `period_id` is given, that period. Completed period archives cannot receive new posts.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period id.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Post title.'
+        required: true
+        example: Tanisma
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      content:
+        custom: []
+        name: content
+        description: 'Post content, max 8000 characters.'
+        required: true
+        example: 'Merhaba herkese.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      period_id: 1
+      title: Tanisma
+      content: 'Merhaba herkese.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Forum konusu olusturuldu.","post":{"id":1,"title":"Tanisma","content":"Merhaba herkese."}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje forumuna erisiminiz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Forum arsivine yeni konu veya yanit eklenemez."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/forum/posts/{postId}/replies'
+    metadata:
+      custom: []
+      groupName: Forum
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Reply to a forum post.'
+      description: 'Requires permission: `participant.forum.view`. The parent post project/period must be accessible to the current participant. Completed period archives cannot receive replies.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      postId:
+        custom: []
+        name: postId
+        description: 'Forum post id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      postId: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      content:
+        custom: []
+        name: content
+        description: 'Reply content, max 5000 characters.'
+        required: true
+        example: 'Ben de katiliyorum.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      content: 'Ben de katiliyorum.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Yanit eklendi.","reply":{"id":1,"content":"Ben de katiliyorum."}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje forumuna erisiminiz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The content field is required.","errors":{"content":["The content field is required."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null

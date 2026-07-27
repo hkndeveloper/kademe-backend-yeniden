@@ -11,6 +11,7 @@ use App\Models\VolunteerOpportunity;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
+use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -62,7 +63,8 @@ class VolunteerController extends Controller
                     ]),
             ])
             ->where('status', 'open')
-            ->orderBy('start_at')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
 
         $myApplications = VolunteerApplication::query()
@@ -244,6 +246,7 @@ class VolunteerController extends Controller
             'quota' => 'nullable|integer|min:1',
             'status' => 'required|in:open,closed,archived',
         ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['start_at', 'end_at']);
 
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $validated['project_id']);
 
@@ -270,6 +273,50 @@ class VolunteerController extends Controller
         ], 201);
     }
 
+
+    public function panelUpdate(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'volunteer.manage');
+
+        $opportunity = VolunteerOpportunity::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $opportunity->project_id);
+        $this->assertPeriodWritable($request, $opportunity->period_id);
+
+        $validated = $request->validate([
+            'project_id' => 'sometimes|required|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'title' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string|max:4000',
+            'location' => 'nullable|string|max:255',
+            'start_at' => 'nullable|date',
+            'end_at' => 'nullable|date|after_or_equal:start_at',
+            'quota' => 'nullable|integer|min:1',
+            'status' => 'sometimes|required|in:open,closed,archived',
+        ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['start_at', 'end_at']);
+
+        $targetProjectId = (int) ($validated['project_id'] ?? $opportunity->project_id);
+        $this->abortUnlessProjectAllowed($request, 'volunteer.manage', $targetProjectId);
+
+        if (array_key_exists('period_id', $validated) && ! empty($validated['period_id'])) {
+            abort_unless(
+                \App\Models\Period::query()
+                    ->whereKey((int) $validated['period_id'])
+                    ->where('project_id', $targetProjectId)
+                    ->exists(),
+                422,
+                'Secilen donem bu projeye ait degil.'
+            );
+            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+        }
+
+        $opportunity->update($validated);
+
+        return response()->json([
+            'message' => 'Gonullu ilani guncellendi.',
+            'opportunity' => $opportunity->fresh(['project:id,name', 'period:id,name,status', 'creator:id,name,surname']),
+        ]);
+    }
     public function panelExport(Request $request)
     {
         $validated = $request->validate([

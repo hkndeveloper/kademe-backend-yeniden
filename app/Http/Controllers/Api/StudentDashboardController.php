@@ -187,18 +187,6 @@ class StudentDashboardController extends Controller
             ->orderByDesc('issued_at')
             ->get();
 
-        $badges = $user->badges()
-            ->with('project:id,name,slug')
-            ->orderByDesc('user_badges.awarded_at')
-            ->get();
-
-        $creditHistory = CreditLog::query()
-            ->where('user_id', $user->id)
-            ->with(['project:id,name,slug', 'program:id,title'])
-            ->orderByDesc('created_at')
-            ->take(25)
-            ->get();
-
         return response()->json([
             'profile' => [
                 'full_name' => trim(($user->name ?? '').' '.($user->surname ?? '')),
@@ -215,55 +203,25 @@ class StudentDashboardController extends Controller
             ],
             'saved_draft' => $user->profile?->digital_cv_data,
             'approved' => [
-                'title' => 'KADEME Onayli Dijital CV',
+                'title' => 'KADEME Dijital CV',
                 'generated_at' => now()->toIso8601String(),
-                'total_credit' => (int) $participations->sum('credit'),
-                'completed_project_count' => $participations
-                    ->filter(fn (Participant $participation) => in_array($participation->graduation_status, ['completed', 'graduated'], true) || $participation->graduated_at !== null)
-                    ->count(),
-                'badge_count' => $badges->count(),
                 'certificate_count' => $certificates->count(),
             ],
-            'projects' => $participations
-                ->filter(fn (Participant $participation) => $participation->project !== null)
-                ->map(fn (Participant $participation) => [
-                    'id' => $participation->project->id,
-                    'name' => $participation->project->name,
-                    'type' => $participation->project->type,
-                    'description' => $participation->project->short_description ?: $participation->project->description,
-                    'period' => $participation->period?->name,
-                    'status' => $participation->status,
-                    'graduation_status' => $participation->graduation_status,
-                    'credit' => (int) $participation->credit,
-                    'enrolled_at' => optional($participation->enrolled_at)?->toIso8601String(),
-                    'graduated_at' => optional($participation->graduated_at)?->toIso8601String(),
-                ])
-                ->values(),
-            'badges' => $badges->map(fn (Badge $badge) => [
-                'id' => $badge->id,
-                'name' => $badge->name,
-                'description' => $badge->description,
-                'tier' => $badge->tier,
-                'title_label' => $badge->title_label,
-                'project' => $badge->project?->name,
-                'awarded_at' => optional($badge->pivot?->awarded_at)?->toIso8601String(),
-            ])->values(),
+            'projects' => [],
+            'badges' => [],
             'certificates' => $certificates->map(fn (Certificate $certificate) => [
                 'id' => $certificate->id,
                 'type' => $certificate->type,
+                'title' => $certificate->title,
+                'issuer' => $certificate->issuer,
                 'project' => $certificate->project?->name,
                 'period' => $certificate->period?->name,
                 'verification_code' => $certificate->verification_code,
                 'issued_at' => optional($certificate->issued_at)?->toIso8601String(),
+                'included_in_cv' => (bool) $certificate->included_in_cv,
+                'source' => $certificate->source,
             ])->values(),
-            'credit_history' => $creditHistory->map(fn (CreditLog $log) => [
-                'amount' => (int) $log->amount,
-                'type' => $log->type,
-                'reason' => $log->reason,
-                'project' => $log->project?->name,
-                'program' => $log->program?->title,
-                'created_at' => optional($log->created_at)?->toIso8601String(),
-            ])->values(),
+            'credit_history' => [],
         ]);
     }
 
@@ -307,26 +265,28 @@ class StudentDashboardController extends Controller
             'form.education' => 'nullable|array|max:50',
             'form.projects' => 'nullable|array|max:50',
             'form.certificates' => 'nullable|array|max:50',
+            'form.certificateIds' => 'nullable|array|max:100',
+            'form.certificateIds.*' => 'integer|exists:certificates,id',
             'form.experience.*.id' => 'nullable|string|max:120',
-            'form.experience.*.title' => 'nullable|string|max:255',
-            'form.experience.*.subtitle' => 'nullable|string|max:255',
-            'form.experience.*.date' => 'nullable|string|max:120',
-            'form.experience.*.description' => 'nullable|string|max:5000',
+            'form.experience.*.title' => 'required|string|max:255',
+            'form.experience.*.subtitle' => 'required|string|max:255',
+            'form.experience.*.date' => ['required', 'string', 'max:20', 'regex:/^[0-9]+$/'],
+            'form.experience.*.description' => 'required|string|max:5000',
             'form.education.*.id' => 'nullable|string|max:120',
-            'form.education.*.title' => 'nullable|string|max:255',
-            'form.education.*.subtitle' => 'nullable|string|max:255',
-            'form.education.*.date' => 'nullable|string|max:120',
-            'form.education.*.description' => 'nullable|string|max:5000',
+            'form.education.*.title' => 'required|string|max:255',
+            'form.education.*.subtitle' => 'required|string|max:255',
+            'form.education.*.date' => ['required', 'string', 'max:20', 'regex:/^[0-9]+$/'],
+            'form.education.*.description' => 'required|string|max:5000',
             'form.projects.*.id' => 'nullable|string|max:120',
-            'form.projects.*.title' => 'nullable|string|max:255',
-            'form.projects.*.subtitle' => 'nullable|string|max:255',
-            'form.projects.*.date' => 'nullable|string|max:120',
-            'form.projects.*.description' => 'nullable|string|max:5000',
+            'form.projects.*.title' => 'required|string|max:255',
+            'form.projects.*.subtitle' => 'required|string|max:255',
+            'form.projects.*.date' => ['required', 'string', 'max:20', 'regex:/^[0-9]+$/'],
+            'form.projects.*.description' => 'required|string|max:5000',
             'form.certificates.*.id' => 'nullable|string|max:120',
-            'form.certificates.*.title' => 'nullable|string|max:255',
-            'form.certificates.*.subtitle' => 'nullable|string|max:255',
-            'form.certificates.*.date' => 'nullable|string|max:120',
-            'form.certificates.*.description' => 'nullable|string|max:5000',
+            'form.certificates.*.title' => 'required|string|max:255',
+            'form.certificates.*.subtitle' => 'required|string|max:255',
+            'form.certificates.*.date' => ['required', 'string', 'max:20', 'regex:/^[0-9]+$/'],
+            'form.certificates.*.description' => 'required|string|max:5000',
         ]);
 
         $profile = UserProfile::query()->updateOrCreate(

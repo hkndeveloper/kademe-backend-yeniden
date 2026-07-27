@@ -122,7 +122,7 @@ class AdminCertificateController extends Controller
             });
         }
 
-        $certificates = $query->orderByDesc('issued_at')->paginate(20)->through(fn (Certificate $certificate) => [
+        $certificates = $query->orderByDesc('issued_at')->orderByDesc('created_at')->paginate(20)->through(fn (Certificate $certificate) => [
             'id' => $certificate->id,
             'type' => $certificate->type,
             'verification_code' => $certificate->verification_code,
@@ -185,7 +185,7 @@ class AdminCertificateController extends Controller
             });
         }
 
-        $certificates = $query->orderByDesc('issued_at')->get();
+        $certificates = $query->orderByDesc('issued_at')->orderByDesc('created_at')->get();
         $headings = ['ID', 'Ad', 'Soyad', 'E-posta', 'Proje', 'Tur', 'Dogrulama Kodu', 'Verilis Tarihi'];
         $rows = $certificates->map(fn (Certificate $certificate) => [
             $certificate->id,

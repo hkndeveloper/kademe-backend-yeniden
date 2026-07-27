@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectResource;
 use App\Models\ApplicationForm;
-use App\Models\DigitalBohca;
 use App\Models\EurodeskProject;
 use App\Models\Internship;
 use App\Models\KpdRoom;
@@ -106,6 +105,7 @@ class ProjectController extends Controller
         $programs = Program::query()
             ->where('project_id', $project->id)
             ->with('period:id,name')
+            ->where('is_public', true)
             ->whereIn('status', ['scheduled', 'active', 'completed'])
             ->orderBy('start_at')
             ->get();
@@ -186,6 +186,13 @@ class ProjectController extends Controller
             'title' => $program->title,
             'description' => $program->description,
             'location' => $program->location,
+            'location_place_name' => $program->location_place_name,
+            'location_place_address' => $program->location_place_address,
+            'location_place_id' => $program->location_place_id,
+            'location_place_provider' => $program->location_place_provider,
+            'latitude' => $program->latitude,
+            'longitude' => $program->longitude,
+            'radius_meters' => $program->radius_meters,
             'guest_info' => $program->guest_info,
             'status' => $program->status,
             'start_at' => optional($program->start_at)->toIso8601String(),
@@ -229,27 +236,6 @@ class ProjectController extends Controller
                     'bio' => $mentor->bio,
                     'expertise' => $mentor->expertise,
                     'photo' => MediaStorage::url($mentor->photo_path),
-                ])
-                ->values();
-        }
-
-        if (in_array('uploaded_files', $keys, true)) {
-            $currentPeriod = $project->periods->firstWhere('status', 'active');
-            $payload['uploaded_files'] = DigitalBohca::query()
-                ->where('project_id', $project->id)
-                ->where('visible_to_student', true)
-                ->when($currentPeriod, fn ($query) => $query->where(function ($builder) use ($currentPeriod) {
-                    $builder->whereNull('period_id')->orWhere('period_id', $currentPeriod->id);
-                }))
-                ->latest()
-                ->take(8)
-                ->get()
-                ->map(fn (DigitalBohca $material) => [
-                    'id' => $material->id,
-                    'title' => $material->title,
-                    'description' => $material->description,
-                    'file_type' => $material->file_type,
-                    'category' => $material->category,
                 ])
                 ->values();
         }

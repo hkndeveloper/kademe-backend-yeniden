@@ -8,6 +8,7 @@ use App\Models\Certificate;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -32,11 +33,51 @@ class CertificateController extends Controller
         $certificates = Certificate::with(['project:id,name,slug', 'period:id,name'])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('issued_at')
+            ->orderByDesc('created_at')
             ->get();
 
         return response()->json([
             'certificates' => CertificateResource::collection($certificates),
         ]);
+    }
+    /**
+     * Upload a participant-owned certificate.
+     *
+     * The authenticated participant can add external certificates to their own certificate library and CV selections. Uploaded certificates are marked as `student_upload` and do not require a project/period.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'issuer' => 'required|string|max:255',
+            'type' => 'nullable|string|max:80',
+            'issued_at' => 'nullable|date',
+            'included_in_cv' => 'nullable|boolean',
+            'certificate_file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:20480',
+        ]);
+
+        $certificatePath = MediaStorage::putFile('certificates/student-uploads', $request->file('certificate_file'));
+
+        $certificate = Certificate::query()->create([
+            'user_id' => $request->user()->id,
+            'project_id' => null,
+            'period_id' => null,
+            'type' => $validated['type'] ?? 'achievement',
+            'title' => trim((string) $validated['title']),
+            'issuer' => trim((string) $validated['issuer']),
+            'verification_code' => strtoupper(Str::random(10)),
+            'certificate_path' => $certificatePath,
+            'issued_at' => $validated['issued_at'] ?? now(),
+            'created_by' => $request->user()->id,
+            'uploaded_by_user_id' => $request->user()->id,
+            'source' => 'student_upload',
+            'included_in_cv' => (bool) ($validated['included_in_cv'] ?? true),
+        ]);
+
+        return response()->json([
+            'message' => 'Sertifika basariyla yuklendi.',
+            'certificate' => CertificateResource::make($certificate->load(['project:id,name,slug', 'period:id,name'])),
+        ], 201);
     }
 
     /**

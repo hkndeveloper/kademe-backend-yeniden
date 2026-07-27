@@ -117,6 +117,31 @@ class ApplicationController extends Controller
         ];
     }
 
+    private function applicationStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'accepted' => 'Kabul edildi',
+            'rejected' => 'Reddedildi',
+            'waitlisted' => 'Yedek liste',
+            'interview_planned' => 'Mulakat planlandi',
+            'interview_passed' => 'Mulakat olumlu',
+            'interview_failed' => 'Mulakat olumsuz',
+            default => 'Degerlendirme bekliyor',
+        };
+    }
+
+    private function sendApplicationEmail(array $emails, string $subject, array $data, ?int $projectId = null, ?int $senderId = null): int
+    {
+        return $this->notificationService->sendTemplatedEmail(
+            $emails,
+            $subject,
+            'emails.application-status',
+            $data,
+            $projectId,
+            $senderId
+        );
+    }
+
     /**
      * Aynı tarih/saat aralığında başka aktif/kabul bekleyen bir başvurusu var mı kontrol eder.
      * Şartname 14.2: Çakışma kontrolü.
@@ -226,14 +251,24 @@ class ApplicationController extends Controller
             'rejection_reason' => $autoRejectReason,
         ]);
 
-        $this->notificationService->sendEmail(
+        $this->sendApplicationEmail(
             array_filter([$user->email]),
             'Basvurunuz alindi',
-            "Proje: {$project->name}\n".
-            ($program ? "Program: {$program->title}\n" : '').
-            ($autoRejectReason
-                ? "Basvurunuz otomatik degerlendirme kurali nedeniyle reddedildi: {$autoRejectReason}"
-                : 'Basvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz.'.($initialStatus === 'waitlisted' ? "\nKontenjan dolu oldugu icin basvurunuz yedek listeye alindi." : '')),
+            [
+                'title' => $autoRejectReason ? 'Basvurunuz Degerlendirildi' : 'Basvurunuz Alindi',
+                'preheader' => "{$project->name} basvurunuz sisteme kaydedildi.",
+                'intro' => $autoRejectReason
+                    ? 'Basvurunuz otomatik degerlendirme kuraliyla sonuclandi.'
+                    : 'Basvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz.',
+                'lines' => array_values(array_filter([
+                    ['label' => 'Proje', 'value' => $project->name],
+                    $program ? ['label' => 'Program', 'value' => $program->title] : null,
+                    ['label' => 'Durum', 'value' => $this->applicationStatusLabel($initialStatus)],
+                    $initialStatus === 'waitlisted' ? ['label' => 'Not', 'value' => 'Kontenjan dolu oldugu icin basvurunuz yedek listeye alindi.'] : null,
+                    $autoRejectReason ? ['label' => 'Gerekce', 'value' => $autoRejectReason] : null,
+                ])),
+                'plain_text' => "Proje: {$project->name}\nDurum: ".$this->applicationStatusLabel($initialStatus).($autoRejectReason ? "\nGerekce: {$autoRejectReason}" : ''),
+            ],
             $project->id,
             $user->id
         );
@@ -246,10 +281,22 @@ class ApplicationController extends Controller
             ->all();
 
         if ($coordinatorEmails !== []) {
-            $this->notificationService->sendEmail(
+            $this->sendApplicationEmail(
                 $coordinatorEmails,
                 'Yeni basvuru alindi',
-                "Proje: {$project->name}\nYeni bir basvuru sisteme dustu. Basvuru ID: {$application->id}",
+                [
+                    'title' => 'Yeni Basvuru Alindi',
+                    'preheader' => "{$project->name} icin yeni basvuru var.",
+                    'intro' => 'Yeni bir basvuru sisteme dustu.',
+                    'lines' => array_values(array_filter([
+                        ['label' => 'Basvuru ID', 'value' => (string) $application->id],
+                        ['label' => 'Proje', 'value' => $project->name],
+                        $program ? ['label' => 'Program', 'value' => $program->title] : null,
+                        ['label' => 'Aday', 'value' => trim($user->name.' '.$user->surname)],
+                        ['label' => 'Durum', 'value' => $this->applicationStatusLabel($initialStatus)],
+                    ])),
+                    'plain_text' => "Proje: {$project->name}\nYeni bir basvuru sisteme dustu. Basvuru ID: {$application->id}",
+                ],
                 $project->id,
                 $user->id
             );
@@ -487,7 +534,7 @@ class ApplicationController extends Controller
     private function autoRejectReason(?ApplicationForm $form, array $formData, User $user): ?string
     {
         foreach (($form?->auto_reject_rules ?? []) as $rule) {
-            $field = $rule['field'] ?? null;
+            $field = $rule['field'] ?? $rule['field_id'] ?? null;
             $operator = $rule['operator'] ?? 'equals';
             if (! is_string($field) || $field === '') {
                 continue;
@@ -499,17 +546,29 @@ class ApplicationController extends Controller
                 default => $formData[$field] ?? null,
             };
             $expected = $rule['value'] ?? null;
+            $actualText = is_array($actual) ? implode(' ', array_map('strval', $actual)) : (string) $actual;
+            $expectedText = is_array($expected) ? implode(' ', array_map('strval', $expected)) : (string) $expected;
+            $actualNumber = is_numeric($actualText) ? (float) $actualText : null;
+            $expectedNumber = is_numeric($expectedText) ? (float) $expectedText : null;
+
             $matched = match ($operator) {
-                'not_equals' => (string) $actual !== (string) $expected,
+                'not_equals' => $actualText !== $expectedText,
+                'contains' => is_array($actual)
+                    ? in_array($expected, $actual, true)
+                    : str_contains(mb_strtolower($actualText), mb_strtolower($expectedText)),
+                'gt' => $actualNumber !== null && $expectedNumber !== null && $actualNumber > $expectedNumber,
+                'lt' => $actualNumber !== null && $expectedNumber !== null && $actualNumber < $expectedNumber,
+                'gte' => $actualNumber !== null && $expectedNumber !== null && $actualNumber >= $expectedNumber,
+                'lte' => $actualNumber !== null && $expectedNumber !== null && $actualNumber <= $expectedNumber,
                 'in' => is_array($expected) && in_array($actual, $expected, true),
                 'not_in' => is_array($expected) && ! in_array($actual, $expected, true),
                 'empty' => $actual === null || $actual === '' || $actual === [],
                 'not_empty' => ! ($actual === null || $actual === '' || $actual === []),
-                default => (string) $actual === (string) $expected,
+                default => $actualText === $expectedText,
             };
 
             if ($matched) {
-                return trim((string) ($rule['message'] ?? 'Basvurunuz kriter uyumsuzlugu nedeniyle reddedilmistir.'));
+                return trim((string) ($rule['message'] ?? $rule['reason'] ?? 'Basvurunuz kriter uyumsuzlugu nedeniyle reddedilmistir.'));
             }
         }
 
@@ -778,20 +837,41 @@ class ApplicationController extends Controller
 
         $application->loadMissing(['project:id,name', 'project.coordinators:id,email,name,surname', 'period', 'program:id,title,start_at', 'form:id,fields', 'user:id,email,name,surname']);
 
-        $this->notificationService->sendEmail(
+        $this->sendApplicationEmail(
             array_filter([$application->user?->email]),
             $validated['decision'] === 'accept' ? 'Yedek liste davetiniz kabul edildi' : 'Yedek liste davetiniz reddedildi',
-            'Proje: '.($application->project?->name ?? '-')."\nDurum: ".($validated['decision'] === 'accept' ? 'Davet kabul edildi ve basvurunuz onaylandi.' : 'Davet reddedildi.'),
+            [
+                'title' => $validated['decision'] === 'accept' ? 'Davet Kabul Edildi' : 'Davet Reddedildi',
+                'preheader' => 'Yedek liste daveti yanitiniz kaydedildi.',
+                'intro' => $validated['decision'] === 'accept'
+                    ? 'Yedek liste davetiniz kabul edildi ve basvurunuz onaylandi.'
+                    : 'Yedek liste daveti yanitiniz reddedildi olarak kaydedildi.',
+                'lines' => [
+                    ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+                    ['label' => 'Durum', 'value' => $this->applicationStatusLabel((string) $application->status)],
+                ],
+                'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nDurum: ".($validated['decision'] === 'accept' ? 'Davet kabul edildi ve basvurunuz onaylandi.' : 'Davet reddedildi.'),
+            ],
             $application->project_id,
             $request->user()->id
         );
 
         $coordinatorEmails = $application->project?->coordinators?->pluck('email')->filter()->values()->all() ?? [];
         if ($coordinatorEmails !== []) {
-            $this->notificationService->sendEmail(
+            $this->sendApplicationEmail(
                 $coordinatorEmails,
                 'Yedek liste daveti yanitlandi',
-                'Proje: '.($application->project?->name ?? '-')."\nAday: ".trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))."\nYanit: ".($validated['decision'] === 'accept' ? 'Kabul' : 'Red'),
+                [
+                    'title' => 'Yedek Liste Daveti Yanitlandi',
+                    'preheader' => 'Bir aday yedek liste davetine yanit verdi.',
+                    'intro' => 'Yedek liste daveti yaniti sisteme kaydedildi.',
+                    'lines' => [
+                        ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+                        ['label' => 'Aday', 'value' => trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))],
+                        ['label' => 'Yanit', 'value' => $validated['decision'] === 'accept' ? 'Kabul' : 'Red'],
+                    ],
+                    'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nAday: ".trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))."\nYanit: ".($validated['decision'] === 'accept' ? 'Kabul' : 'Red'),
+                ],
                 $application->project_id,
                 $request->user()->id
             );

@@ -1,0 +1,3236 @@
+name: 'Programs & Attendance'
+description: ''
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/programs
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List participant programs.'
+      description: 'Requires permission: `participant.programs.view`. Lists programs for the current user active/graduated participations with attendance, credit, and feedback state.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"programs":[{"id":1,"title":"Liderlik Atolyesi","status":"scheduled","attendance_status":"pending","credit":{"deducted":false,"net_amount":0},"feedback_submitted":false,"project":{"id":1,"name":"KADEME"}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/programs/{id}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get participant program detail.'
+      description: 'Requires permission: `participant.programs.view`. The program must belong to one of the current user participations and must target the user role.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":1,"title":"Liderlik Atolyesi","status":"active","location":"Istanbul","project":{"id":1,"name":"KADEME"}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu etkinligi goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\Program]."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/attendances/qr
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark attendance with a QR token.'
+      description: 'Requires permission: `participant.qr.use`. The QR token can be the raw token or a scanned URL containing `token`. If the program has coordinates, latitude and longitude are required and checked against the configured radius.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      qr_token:
+        custom: []
+        name: qr_token
+        description: 'Raw QR token or scanned URL.'
+        required: true
+        example: qr_abc123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      latitude:
+        custom: []
+        name: latitude
+        description: 'Optional participant latitude.'
+        required: false
+        example: 41.0082
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      longitude:
+        custom: []
+        name: longitude
+        description: 'Optional participant longitude.'
+        required: false
+        example: 28.9784
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      qr_token: qr_abc123
+      latitude: 41.0082
+      longitude: 28.9784
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Yoklamaniz basariyla alindi. Etkinlik tamamlandiktan sonra degerlendirme formu acilacaktir.","current_credit":100}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Yoklamaniz zaten alinmis."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 400
+        content: '{"message":"Gecersiz veya suresi dolmus QR kod."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu programa katilma yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu yoklama icin konum izni zorunludur."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Onceki oturumun degerlendirmesini tamamlamadan yeni QR yoklama veremezsin.","requires_feedback":true,"program_id":1,"redirect_to":"/student/evaluate"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/programs
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel programs.'
+      description: 'Requires permission: `programs.view`. Project and period filters are resolved through action+scope; global users see all programs, scoped users only see programs in permitted projects. Exposed under both `/api/admin/programs` and `/api/panel/programs` aliases.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. User must be allowed for `programs.view`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. Must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"programs":[{"id":8,"title":"Haftalik Atolye","project_id":1,"status":"scheduled","attendance_count":12,"feedback_count":4}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/programs/export
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel programs.'
+      description: 'Requires permission: `programs.export`. Project/period context is resolved through action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`. Exposed under `/api/admin/programs/export` and `/api/panel/programs/export`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      format: xlsx
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Programs export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/programs
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a panel program.'
+      description: 'Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Program time ranges cannot overlap another non-cancelled program.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Program title.'
+        required: true
+        example: 'Haftalik Atolye'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Uygulama calismasi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location:
+        custom: []
+        name: location
+        description: 'Optional location text.'
+        required: false
+        example: 'Kademe Salon 1'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      latitude:
+        custom: []
+        name: latitude
+        description: 'Optional location latitude.'
+        required: false
+        example: 41.0082
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      longitude:
+        custom: []
+        name: longitude
+        description: 'Optional location longitude.'
+        required: false
+        example: 28.9784
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      radius_meters:
+        custom: []
+        name: radius_meters
+        description: 'Optional QR geofence radius between 10 and 5000. Defaults to 100.'
+        required: false
+        example: 150
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      guest_info:
+        custom: []
+        name: guest_info
+        description: 'Optional guest/speaker metadata.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      start_at:
+        custom: []
+        name: start_at
+        description: 'Start datetime.'
+        required: true
+        example: '2026-07-10 14:00:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_at:
+        custom: []
+        name: end_at
+        description: 'End datetime, after or equal to start.'
+        required: true
+        example: '2026-07-10 16:00:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_deduction:
+        custom: []
+        name: credit_deduction
+        description: 'Optional credit deduction amount.'
+        required: false
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      application_quota:
+        custom: []
+        name: application_quota
+        description: 'Optional program-specific application quota.'
+        required: false
+        example: 30
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_audience:
+        custom: []
+        name: target_audience
+        description: 'Optional audience values: `student`, `alumni`.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      feedback_form_template_id:
+        custom: []
+        name: feedback_form_template_id
+        description: 'Optional feedback form template ID.'
+        required: false
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status: `scheduled`, `active`, `completed` or `cancelled`.'
+        required: false
+        example: scheduled
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_public:
+        custom: []
+        name: is_public
+        description: 'Optional public site visibility.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_featured:
+        custom: []
+        name: is_featured
+        description: 'Optional featured flag.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      period_id: 3
+      title: 'Haftalik Atolye'
+      description: 'Uygulama calismasi.'
+      location: 'Kademe Salon 1'
+      latitude: 41.0082
+      longitude: 28.9784
+      radius_meters: 150
+      guest_info: []
+      start_at: '2026-07-10 14:00:00'
+      end_at: '2026-07-10 16:00:00'
+      credit_deduction: 10
+      application_quota: 30
+      target_audience:
+        - student
+      feedback_form_template_id: 2
+      status: scheduled
+      is_public: true
+      is_featured: false
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"program":{"id":8,"title":"Haftalik Atolye","status":"scheduled"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/programs/{id}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a panel program.'
+      description: 'Requires permission: `programs.update` for the program project. If `period_id` changes, completed-period archive lock is checked against the target period. Time ranges cannot overlap another non-cancelled program.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Optional program title.'
+        required: false
+        example: 'Guncellenmis Atolye'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_at:
+        custom: []
+        name: start_at
+        description: 'Optional start datetime.'
+        required: false
+        example: '2026-07-10 14:30:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_at:
+        custom: []
+        name: end_at
+        description: 'Optional end datetime.'
+        required: false
+        example: '2026-07-10 16:30:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status: `scheduled`, `active`, `completed` or `cancelled`.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      period_id: 3
+      title: 'Guncellenmis Atolye'
+      start_at: '2026-07-10 14:30:00'
+      end_at: '2026-07-10 16:30:00'
+      status: active
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Guncellenmis Atolye","status":"active"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/programs/{id}/generate-qr'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Generate or rotate a program QR token.'
+      description: 'Requires permission: `programs.qr.manage` for the program project. The program attendance window must be open; scheduled programs are switched to active when QR is generated. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      rotation_seconds:
+        custom: []
+        name: rotation_seconds
+        description: 'Optional QR rotation window between 15 and 300 seconds. Defaults to program setting or 30.'
+        required: false
+        example: 30
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      rotation_seconds: 30
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"qr_token":"prg_8_xxxxx","expires_at":"2026-06-30T14:00:30+03:00","refresh_in_seconds":30}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid.","errors":{"start_at":["QR yoklama sadece program saat araliginda baslatilabilir."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/programs/{id}/complete'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Complete a program and reconcile credits.'
+      description: 'Requires permission: `programs.complete` for the program project. Marks the program completed and deducts credit once for active participants according to attendance/credit rules. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Program tamamlandi.","program":{"id":8,"status":"completed"},"deducted_participant_count":10}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/programs/{id}/attendances'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List program attendance details.'
+      description: 'Requires permission: `programs.attendance.view` for the program project. Returns participant attendance status, feedback state and credit impact summary for the selected program.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Haftalik Atolye"},"summary":{"attendance_count":12,"participant_count":20,"absent_count":8,"feedback_count":4},"records":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/programs/{id}/attendances/{participantId}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark participant attendance manually.'
+      description: 'Requires permission: `programs.attendance.manage` for the program project. Completed periods require archive update permission. For completed programs, credit deduction/restore is reconciled for the participant.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      participantId:
+        custom: []
+        name: participantId
+        description: 'Participant ID in the program project/period.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+      participantId: 42
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      is_valid:
+        custom: []
+        name: is_valid
+        description: 'Whether the participant attended.'
+        required: true
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      manual_note:
+        custom: []
+        name: manual_note
+        description: 'Optional manual attendance note.'
+        required: false
+        example: 'Imza listesiyle dogrulandi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      is_valid: true
+      manual_note: 'Imza listesiyle dogrulandi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Yoklama katildi olarak isaretlendi.","attendance":{"program_id":8,"is_valid":true,"method":"manual"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/programs/{id}/attendances/export'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export program attendance details.'
+      description: 'Requires permission: `programs.attendance.export` for the program project. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters:
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      format: pdf
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Program attendance export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/programs/feedback-summary
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get program feedback summary.'
+      description: 'Requires permission: `programs.view`. Project and period filters are resolved through action+scope. Returns aggregate feedback averages, question distributions, project/period breakdowns and recent anonymous comments.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"summary":{"program_count":2,"total_feedback":12,"with_comment":5,"overall_average":4.4},"programs":[],"question_stats":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/programs/feedback-summary/export
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export program feedback summary.'
+      description: 'Requires permission: `programs.view`. Uses the same project/period action+scope filters as the summary endpoint and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      format: xlsx
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Feedback summary export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/programs/{id}/feedback-stats'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get detailed feedback stats for a program.'
+      description: 'Requires permission: `programs.view` for the program project. Feedback identities are intentionally anonymized; the response includes question definitions, rating/choice distributions, anonymous text responses and public report IDs.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Haftalik Atolye"},"summary":{"total_feedback":12,"anonymous":true,"identity_redacted":true},"questions":[],"question_stats":[],"responses":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/programs/{id}/feedback-stats/export'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export detailed feedback for a program.'
+      description: 'Requires permission: `programs.view` for the program project. Exported rows use anonymous report IDs instead of participant identity and return a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters:
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: csv
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      format: csv
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Program feedback export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/programs
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel programs.'
+      description: 'Requires permission: `programs.view`. Project and period filters are resolved through action+scope; global users see all programs, scoped users only see programs in permitted projects. Exposed under both `/api/admin/programs` and `/api/panel/programs` aliases.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. User must be allowed for `programs.view`.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter. Must belong to the selected/allowed project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"programs":[{"id":8,"title":"Haftalik Atolye","project_id":1,"status":"scheduled","attendance_count":12,"feedback_count":4}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/programs/export
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel programs.'
+      description: 'Requires permission: `programs.export`. Project/period context is resolved through action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`. Exposed under `/api/admin/programs/export` and `/api/panel/programs/export`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      format: xlsx
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: 17
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 17
+      period_id: 17
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Programs export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/programs
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a panel program.'
+      description: 'Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Program time ranges cannot overlap another non-cancelled program.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Program title.'
+        required: true
+        example: 'Haftalik Atolye'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Optional description.'
+        required: false
+        example: 'Uygulama calismasi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location:
+        custom: []
+        name: location
+        description: 'Optional location text.'
+        required: false
+        example: 'Kademe Salon 1'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      latitude:
+        custom: []
+        name: latitude
+        description: 'Optional location latitude.'
+        required: false
+        example: 41.0082
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      longitude:
+        custom: []
+        name: longitude
+        description: 'Optional location longitude.'
+        required: false
+        example: 28.9784
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      radius_meters:
+        custom: []
+        name: radius_meters
+        description: 'Optional QR geofence radius between 10 and 5000. Defaults to 100.'
+        required: false
+        example: 150
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      guest_info:
+        custom: []
+        name: guest_info
+        description: 'Optional guest/speaker metadata.'
+        required: false
+        example: []
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      start_at:
+        custom: []
+        name: start_at
+        description: 'Start datetime.'
+        required: true
+        example: '2026-07-10 14:00:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_at:
+        custom: []
+        name: end_at
+        description: 'End datetime, after or equal to start.'
+        required: true
+        example: '2026-07-10 16:00:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_deduction:
+        custom: []
+        name: credit_deduction
+        description: 'Optional credit deduction amount.'
+        required: false
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      application_quota:
+        custom: []
+        name: application_quota
+        description: 'Optional program-specific application quota.'
+        required: false
+        example: 30
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      target_audience:
+        custom: []
+        name: target_audience
+        description: 'Optional audience values: `student`, `alumni`.'
+        required: false
+        example:
+          - student
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      feedback_form_template_id:
+        custom: []
+        name: feedback_form_template_id
+        description: 'Optional feedback form template ID.'
+        required: false
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status: `scheduled`, `active`, `completed` or `cancelled`.'
+        required: false
+        example: scheduled
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_public:
+        custom: []
+        name: is_public
+        description: 'Optional public site visibility.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_featured:
+        custom: []
+        name: is_featured
+        description: 'Optional featured flag.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      period_id: 3
+      title: 'Haftalik Atolye'
+      description: 'Uygulama calismasi.'
+      location: 'Kademe Salon 1'
+      latitude: 41.0082
+      longitude: 28.9784
+      radius_meters: 150
+      guest_info: []
+      start_at: '2026-07-10 14:00:00'
+      end_at: '2026-07-10 16:00:00'
+      credit_deduction: 10
+      application_quota: 30
+      target_audience:
+        - student
+      feedback_form_template_id: 2
+      status: scheduled
+      is_public: true
+      is_featured: false
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"program":{"id":8,"title":"Haftalik Atolye","status":"scheduled"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/programs/{id}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a panel program.'
+      description: 'Requires permission: `programs.update` for the program project. If `period_id` changes, completed-period archive lock is checked against the target period. Time ranges cannot overlap another non-cancelled program.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project ID.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period ID.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Optional program title.'
+        required: false
+        example: 'Guncellenmis Atolye'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_at:
+        custom: []
+        name: start_at
+        description: 'Optional start datetime.'
+        required: false
+        example: '2026-07-10 14:30:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_at:
+        custom: []
+        name: end_at
+        description: 'Optional end datetime.'
+        required: false
+        example: '2026-07-10 16:30:00'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status: `scheduled`, `active`, `completed` or `cancelled`.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      period_id: 3
+      title: 'Guncellenmis Atolye'
+      start_at: '2026-07-10 14:30:00'
+      end_at: '2026-07-10 16:30:00'
+      status: active
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Guncellenmis Atolye","status":"active"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/programs/{id}/complete'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Complete a program and reconcile credits.'
+      description: 'Requires permission: `programs.complete` for the program project. Marks the program completed and deducts credit once for active participants according to attendance/credit rules. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Program tamamlandi.","program":{"id":8,"status":"completed"},"deducted_participant_count":10}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 423
+        content: '{"message":"Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/programs/{id}/generate-qr'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Generate or rotate a program QR token.'
+      description: 'Requires permission: `programs.qr.manage` for the program project. The program attendance window must be open; scheduled programs are switched to active when QR is generated. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      rotation_seconds:
+        custom: []
+        name: rotation_seconds
+        description: 'Optional QR rotation window between 15 and 300 seconds. Defaults to program setting or 30.'
+        required: false
+        example: 30
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      rotation_seconds: 30
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"qr_token":"prg_8_xxxxx","expires_at":"2026-06-30T14:00:30+03:00","refresh_in_seconds":30}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid.","errors":{"start_at":["QR yoklama sadece program saat araliginda baslatilabilir."]}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}/attendances'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List program attendance details.'
+      description: 'Requires permission: `programs.attendance.view` for the program project. Returns participant attendance status, feedback state and credit impact summary for the selected program.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Haftalik Atolye"},"summary":{"attendance_count":12,"participant_count":20,"absent_count":8,"feedback_count":4},"records":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/programs/{id}/attendances/{participantId}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark participant attendance manually.'
+      description: 'Requires permission: `programs.attendance.manage` for the program project. Completed periods require archive update permission. For completed programs, credit deduction/restore is reconciled for the participant.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      participantId:
+        custom: []
+        name: participantId
+        description: 'Participant ID in the program project/period.'
+        required: true
+        example: 42
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+      participantId: 42
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      is_valid:
+        custom: []
+        name: is_valid
+        description: 'Whether the participant attended.'
+        required: true
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      manual_note:
+        custom: []
+        name: manual_note
+        description: 'Optional manual attendance note.'
+        required: false
+        example: 'Imza listesiyle dogrulandi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      is_valid: true
+      manual_note: 'Imza listesiyle dogrulandi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Yoklama katildi olarak isaretlendi.","attendance":{"program_id":8,"is_valid":true,"method":"manual"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}/attendances/export'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export program attendance details.'
+      description: 'Requires permission: `programs.attendance.export` for the program project. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters:
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      format: pdf
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Program attendance export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/programs/feedback-summary
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get program feedback summary.'
+      description: 'Requires permission: `programs.view`. Project and period filters are resolved through action+scope. Returns aggregate feedback averages, question distributions, project/period breakdowns and recent anonymous comments.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"summary":{"program_count":2,"total_feedback":12,"with_comment":5,"overall_average":4.4},"programs":[],"question_stats":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/programs/feedback-summary/export
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export program feedback summary.'
+      description: 'Requires permission: `programs.view`. Uses the same project/period action+scope filters as the summary endpoint and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: xlsx
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      period_id: 3
+      format: xlsx
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Feedback summary export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz yok."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}/feedback-stats'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get detailed feedback stats for a program.'
+      description: 'Requires permission: `programs.view` for the program project. Feedback identities are intentionally anonymized; the response includes question definitions, rating/choice distributions, anonymous text responses and public report IDs.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Haftalik Atolye"},"summary":{"total_feedback":12,"anonymous":true,"identity_redacted":true},"questions":[],"question_stats":[],"responses":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}/feedback-stats/export'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export detailed feedback for a program.'
+      description: 'Requires permission: `programs.view` for the program project. Exported rows use anonymous report IDs instead of participant identity and return a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters:
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: csv
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      format: csv
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Program feedback export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}/photos'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List program photos.'
+      description: 'Requires permission: `programs.view` for the program project. This media endpoint is exposed under the unified `/api/panel/programs/{id}/photos` route.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"photos":[{"id":1,"program_id":8,"caption":"Sahne"}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/programs/{id}/photos'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Upload a program photo.'
+      description: 'Requires permission: `programs.media.upload` for the program project. Send as `multipart/form-data`. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      photo:
+        custom: []
+        name: photo
+        description: 'Image file, maximum 5 MB.'
+        required: true
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      caption:
+        custom: []
+        name: caption
+        description: 'Optional photo caption.'
+        required: false
+        example: 'Atolye baslangici'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      caption: 'Atolye baslangici'
+    fileParameters:
+      photo: null
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"photo":{"id":1,"program_id":8,"caption":"Atolye baslangici"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/programs/{id}/photos/reorder'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Reorder program photos.'
+      description: 'Requires permission: `programs.media.upload` for the program project. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      photo_ids:
+        custom: []
+        name: photo_ids
+        description: 'Ordered photo IDs for the program.'
+        required: true
+        example:
+          - 3
+          - 1
+          - 2
+        type: 'integer[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      photo_ids:
+        - 3
+        - 1
+        - 2
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"photos":[]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/programs/{id}/photos/{photoId}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a program photo caption.'
+      description: 'Requires permission: `programs.media.upload` for the program project. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      photoId:
+        custom: []
+        name: photoId
+        description: 'Program photo ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+      photoId: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      caption:
+        custom: []
+        name: caption
+        description: 'Optional photo caption.'
+        required: false
+        example: 'Kapanis oturumu'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      caption: 'Kapanis oturumu'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"photo":{"id":3,"caption":"Kapanis oturumu"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/programs/{id}/photos/{photoId}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a program photo.'
+      description: 'Requires permission: `programs.media.upload` for the program project. Deletes the media file from configured storage and removes the photo row. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      photoId:
+        custom: []
+        name: photoId
+        description: 'Program photo ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+      photoId: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Fotograf silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PATCH
+    uri: 'api/panel/programs/{id}/visibility'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update public visibility for a program.'
+      description: 'Requires permission: `programs.update` for the program project. This panel-only endpoint toggles public listing and featured state without changing the rest of the program payload. Completed periods require archive update permission.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      is_public:
+        custom: []
+        name: is_public
+        description: 'Optional public visibility flag.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      is_featured:
+        custom: []
+        name: is_featured
+        description: 'Optional featured flag.'
+        required: false
+        example: false
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      is_public: true
+      is_featured: false
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"is_public":true,"is_featured":false}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
