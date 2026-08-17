@@ -473,6 +473,97 @@ class AssignmentController extends Controller
         ], 201);
     }
 
+    public function panelUpdate(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'assignments.update');
+
+        $assignment = Assignment::query()
+            ->withCount('submissions')
+            ->with(['project:id,name', 'period:id,name', 'program:id,title,start_at', 'creator:id,name,surname', 'attachments'])
+            ->findOrFail($id);
+
+        $this->abortUnlessProjectAllowed($request, 'assignments.update', (int) $assignment->project_id);
+        $this->assertPeriodWritable($request, $assignment->period_id);
+
+        $validated = $request->validate([
+            'project_id' => 'required|exists:projects,id',
+            'period_id' => 'required|exists:periods,id',
+            'program_id' => 'nullable|exists:programs,id',
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string|max:3000',
+            'due_date' => 'nullable|date',
+            'attachment' => 'nullable|file|max:20480',
+            'attachments' => 'nullable|array',
+            'attachments.*' => 'file|max:20480',
+        ]);
+        $validated = IstanbulDateTime::normalizeFields($validated, ['due_date']);
+
+        $nextProjectId = (int) $validated['project_id'];
+        $nextPeriodId = (int) $validated['period_id'];
+        $projectOrPeriodChanged = $nextProjectId !== (int) $assignment->project_id
+            || $nextPeriodId !== (int) $assignment->period_id;
+
+        if ($projectOrPeriodChanged && (int) $assignment->submissions_count > 0) {
+            return response()->json([
+                'message' => 'Teslimi olan odevin proje veya donemi degistirilemez.',
+            ], 422);
+        }
+
+        $this->abortUnlessProjectAllowed($request, 'assignments.update', $nextProjectId);
+
+        abort_unless(
+            Period::query()
+                ->where('id', $nextPeriodId)
+                ->where('project_id', $nextProjectId)
+                ->exists(),
+            422,
+            'Secilen donem bu projeye ait degil.'
+        );
+        $this->assertPeriodWritable($request, $nextPeriodId);
+
+        $assignment->update([
+            'project_id' => $nextProjectId,
+            'period_id' => $nextPeriodId,
+            'program_id' => $validated['program_id'] ?? null,
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'due_date' => $validated['due_date'] ?? null,
+        ]);
+
+        $files = collect($request->file('attachments', []));
+        if ($request->hasFile('attachment')) {
+            $files->push($request->file('attachment'));
+        }
+
+        $files->each(function ($file) use ($assignment, $request) {
+            $path = MediaStorage::putFile('assignment-attachments', $file);
+            AssignmentAttachment::query()->create([
+                'assignment_id' => $assignment->id,
+                'original_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'file_type' => $file->getClientOriginalExtension(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => $request->user()->id,
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Odev guncellendi.',
+            'assignment' => $this->assignmentPayload(
+                $assignment->fresh([
+                    'project:id,name',
+                    'period:id,name',
+                    'program:id,title,start_at',
+                    'creator:id,name,surname',
+                    'attachments',
+                    'submissions.user:id,name,surname,email',
+                    'submissions.reviewer:id,name,surname',
+                ])->loadCount('submissions'),
+                '/panel/assignment-submissions'
+            ),
+        ]);
+    }
+
     public function panelExport(Request $request)
     {
         $validated = $request->validate([

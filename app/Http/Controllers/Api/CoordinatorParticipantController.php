@@ -111,12 +111,17 @@ class CoordinatorParticipantController extends Controller
         $cvViewProjectIds = $canViewCv
             ? $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.student_cv.view')
             : [];
+        $canManageParticipants = $this->permissionResolver->hasPermission($coordinator, 'projects.participants.manage');
+        $participantManageProjectIds = $canManageParticipants
+            ? $this->permissionResolver->projectIdsForPermission($coordinator, 'projects.participants.manage')
+            : [];
 
         $query = Participant::with([
             'project:id,name',
             'period:id,name',
             'user:id,name,surname,email,phone,university,department,class_year,hometown,profile_photo_path,status',
             'user.profile:id,user_id,linkedin_url,github_url',
+            'creditLogs' => fn ($query) => $query->with('creator:id,name,surname')->latest()->limit(5),
         ]);
         $this->applyProjectPeriodContext($query, $context);
 
@@ -173,7 +178,7 @@ class CoordinatorParticipantController extends Controller
                     ? round($participants->avg('credit') ?? 0, 1)
                     : 0,
             ],
-            'participants' => $participants->map(function ($participant) use ($canViewCv, $canViewParticipants, $canViewAlumni, $participantViewProjectIds, $alumniViewProjectIds, $cvViewProjectIds) {
+            'participants' => $participants->map(function ($participant) use ($canViewCv, $canViewParticipants, $canViewAlumni, $canManageParticipants, $participantViewProjectIds, $alumniViewProjectIds, $cvViewProjectIds, $participantManageProjectIds) {
                 $user = $participant->user;
                 $profileAllowed = (
                     $canViewParticipants
@@ -185,6 +190,8 @@ class CoordinatorParticipantController extends Controller
                 );
                 $cvAllowed = $canViewCv
                     && in_array((int) $participant->project_id, $cvViewProjectIds, true);
+                $creditManageAllowed = $canManageParticipants
+                    && in_array((int) $participant->project_id, $participantManageProjectIds, true);
 
                 return [
                     'id' => $participant->id,
@@ -192,6 +199,14 @@ class CoordinatorParticipantController extends Controller
                     'graduation_status' => $participant->graduation_status,
                     'graduation_note' => $participant->graduation_note,
                     'credit' => $participant->credit,
+                    'credit_logs' => $creditManageAllowed ? $participant->creditLogs->map(fn (CreditLog $log) => [
+                        'id' => $log->id,
+                        'amount' => (int) $log->amount,
+                        'type' => $log->type,
+                        'reason' => $log->reason,
+                        'created_at' => optional($log->created_at)?->toIso8601String(),
+                        'created_by' => $log->creator ? trim($log->creator->name.' '.$log->creator->surname) : null,
+                    ])->values() : [],
                     'enrolled_at' => optional($participant->enrolled_at)?->toDateString(),
                     'graduated_at' => optional($participant->graduated_at)?->toDateString(),
                     'project' => [
@@ -797,3 +812,4 @@ class CoordinatorParticipantController extends Controller
         ]);
     }
 }
+

@@ -503,6 +503,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/assignments', [AssignmentController::class, 'panelIndex']);
     Route::get('/assignments/export', [AssignmentController::class, 'panelExport']);
     Route::post('/assignments', [AssignmentController::class, 'panelStore']);
+    Route::put('/assignments/{id}', [AssignmentController::class, 'panelUpdate']);
     Route::delete('/assignments/{id}', [AssignmentController::class, 'panelDestroy']);
     Route::get('/assignment-submissions/{id}/download', [AssignmentController::class, 'panelDownloadSubmission']);
     Route::get('/assignment-attachments/{id}/download', [AssignmentController::class, 'panelDownloadAttachment']);

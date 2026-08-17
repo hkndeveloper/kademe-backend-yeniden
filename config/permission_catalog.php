@@ -170,6 +170,7 @@ return [
         'Assignments' => [
             'assignments.view',
             'assignments.create',
+            'assignments.update',
             'assignments.delete',
             'assignments.submissions.view',
             'assignments.submissions.review',
@@ -376,6 +377,7 @@ return [
             'digital_bohca.delete',
             'assignments.view',
             'assignments.create',
+            'assignments.update',
             'assignments.delete',
             'assignments.submissions.view',
             'assignments.submissions.review',

@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
-use App\Models\Participant;
 use App\Models\CreditLog;
+use App\Models\Participant;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +23,7 @@ class AdminCreditController extends Controller
     }
 
     /**
-     * Öğrenciye manuel kredi ekleme/çıkarma
+     * Ogrenciye manuel kredi ekleme/cikarma.
      */
     public function adjustCredit(Request $request)
     {
@@ -61,23 +61,25 @@ class AdminCreditController extends Controller
             ]);
 
             $participant->increment('credit', $validated['amount']);
+            $participant->refresh();
+            $log->load('creator:id,name,surname');
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Kredi başarıyla güncellendi.',
-                'current_credit' => $participant->credit,
+                'message' => 'Kredi basariyla guncellendi.',
+                'current_credit' => (int) $participant->credit,
                 'log' => $log,
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
-            return response()->json(['message' => 'Bir hata oluştu.'], 500);
+            return response()->json(['message' => 'Bir hata olustu.'], 500);
         }
     }
 
     /**
-     * Öğrenciye manuel rozet verme
+     * Ogrenciye manuel rozet verme.
      */
     public function awardBadge(Request $request)
     {
@@ -110,7 +112,7 @@ class AdminCreditController extends Controller
             ->exists();
 
         if ($hasBadge) {
-            return response()->json(['message' => 'Kullanıcı bu rozete zaten sahip.'], 400);
+            return response()->json(['message' => 'Kullanici bu rozete zaten sahip.'], 400);
         }
 
         $user->badges()->attach($validated['badge_id'], [
@@ -120,7 +122,7 @@ class AdminCreditController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Rozet başarıyla tanımlandı.',
+            'message' => 'Rozet basariyla tanimlandi.',
         ]);
     }
 }
