@@ -108,6 +108,7 @@ class PanelRegressionFixTest extends TestCase
         $response->assertJsonPath('user.id', $alumni->id);
         $response->assertJsonPath('user.applications.0.form.project.name', $project->name);
     }
+
     public function test_site_config_normalizes_legacy_malformed_array_settings(): void
     {
         SystemSetting::query()->create([
@@ -373,6 +374,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonCount(1, 'projects.0.active_students')
             ->assertJsonCount(0, 'projects.0.alumni');
     }
+
     public function test_scoped_content_blog_permissions_are_limited_to_owned_projects(): void
     {
         $project = $this->project();
@@ -665,6 +667,53 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame($material->id, (int) $deleteLog->subject_id);
         $this->assertSame('digital_bohca_deleted', data_get($deleteLog->properties->toArray(), 'domain.operation'));
         $this->assertSame($material->file_path, data_get($deleteLog->properties->toArray(), 'domain.file_path'));
+    }
+
+    public function test_digital_bohca_accepts_multiple_files_without_type_restriction(): void
+    {
+        $this->actingSuperAdmin();
+        Storage::fake(config('filesystems.media_disk', 'public'));
+        $project = $this->project();
+        $spreadsheet = UploadedFile::fake()->create(
+            'katilimcilar.xlsx',
+            12,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        $customFile = UploadedFile::fake()->create('arsiv.custom', 8, 'application/octet-stream');
+
+        $response = $this->post('/api/panel/digital-bohca', [
+            'project_id' => $project->id,
+            'title' => 'Karma Dosyalar',
+            'visible_to_student' => true,
+            'files' => [$spreadsheet, $customFile],
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonCount(2, 'materials')
+            ->assertJsonPath('materials.0.file_type', 'xlsx')
+            ->assertJsonPath('materials.1.file_type', 'custom');
+
+        $materials = DigitalBohca::query()
+            ->where('project_id', $project->id)
+            ->where('title', 'like', 'Karma Dosyalar%')
+            ->get();
+
+        $this->assertCount(2, $materials);
+        $materials->each(fn (DigitalBohca $material) => Storage::disk(config('filesystems.media_disk', 'public'))->assertExists($material->file_path));
+    }
+
+    public function test_digital_bohca_missing_file_validation_message_is_turkish(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+
+        $this->postJson('/api/panel/digital-bohca', [
+            'project_id' => $project->id,
+            'title' => 'Dosyasiz Materyal',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonFragment(['Lütfen yüklemek için en az bir dosya seçin.']);
     }
 
     public function test_participant_graduation_status_updates_user_and_creates_certificate(): void
@@ -2757,6 +2806,7 @@ class PanelRegressionFixTest extends TestCase
             'start_at' => now()->subDays(10),
             'end_at' => now()->subDays(10)->addHour(),
             'status' => 'completed',
+            'target_audience' => ['alumni'],
         ]);
 
         $this->getJson('/api/programs')
@@ -4414,4 +4464,3 @@ class PanelRegressionFixTest extends TestCase
         $this->assertStringContainsString('@anon.local', (string) $updatedStudent->email);
     }
 }
-

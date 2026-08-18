@@ -7,11 +7,14 @@ use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\DigitalBohca;
 use App\Models\Participant;
+use App\Models\Period;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -50,6 +53,7 @@ class DigitalBohcaController extends Controller
      * Requires permission: `participant.bohca.view`. Returns visible materials for the current user projects, periods, user-specific files, and general public materials.
      *
      * @group Digital Bohca
+     *
      * @authenticated
      *
      * @response 200 {"materials":[{"id":1,"title":"Program Rehberi","file_type":"pdf","category":"general","download_url":"/digital-bohca/1/download","visible_to_student":true,"project_id":1}]}
@@ -155,22 +159,31 @@ class DigitalBohcaController extends Controller
     {
         $this->abortUnlessAllowed($request, 'digital_bohca.create');
         $validated = $request->validate([
-            'project_id'         => 'nullable|exists:projects,id',
-            'period_id'          => 'nullable|exists:periods,id',
-            'user_id'            => 'nullable|exists:users,id',
-            'title'              => 'required|string|max:255',
-            'description'        => 'nullable|string|max:2000',
-            'file'               => 'nullable|required_without:files|file|max:20480',
-            'files'              => 'nullable|required_without:file|array',
-            'files.*'            => 'file|max:20480',
+            'project_id' => 'nullable|exists:projects,id',
+            'period_id' => 'nullable|exists:periods,id',
+            'user_id' => 'nullable|exists:users,id',
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'file' => 'nullable|required_without:files|file|max:20480',
+            'files' => 'nullable|required_without:file|array',
+            'files.*' => 'file|max:20480',
             'visible_to_student' => 'sometimes|boolean',
-            'category'           => ['nullable', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Models\DigitalBohca::CATEGORIES))],
+            'category' => ['nullable', 'string', Rule::in(array_keys(DigitalBohca::CATEGORIES))],
         ], [
-            'file.required_without' => 'Lutfen yuklemek icin en az bir dosya secin.',
-            'files.required_without' => 'Lutfen yuklemek icin en az bir dosya secin.',
-            'files.*.file' => 'Secilen dosyalardan biri yuklenebilir bir dosya degil.',
-            'files.*.max' => 'Her dosya en fazla 20 MB olabilir.',
+            'title.required' => 'Materyal başlığı zorunludur.',
+            'title.string' => 'Materyal başlığı geçerli bir metin olmalıdır.',
+            'title.max' => 'Materyal başlığı en fazla 255 karakter olabilir.',
+            'description.string' => 'Açıklama geçerli bir metin olmalıdır.',
+            'description.max' => 'Açıklama en fazla 2000 karakter olabilir.',
+            'file.required_without' => 'Lütfen yüklemek için en az bir dosya seçin.',
+            'files.required_without' => 'Lütfen yüklemek için en az bir dosya seçin.',
+            'files.array' => 'Dosyalar geçerli bir liste olarak gönderilmelidir.',
+            'file.file' => 'Seçilen içerik yüklenebilir bir dosya değil.',
+            'file.uploaded' => 'Dosya sunucuya yüklenemedi. Lütfen tekrar deneyin.',
             'file.max' => 'Dosya en fazla 20 MB olabilir.',
+            'files.*.file' => 'Seçilen dosyalardan biri yüklenebilir bir dosya değil.',
+            'files.*.uploaded' => 'Seçilen dosyalardan biri sunucuya yüklenemedi. Lütfen tekrar deneyin.',
+            'files.*.max' => 'Her dosya en fazla 20 MB olabilir.',
         ]);
 
         if (! empty($validated['project_id'])) {
@@ -180,7 +193,7 @@ class DigitalBohcaController extends Controller
         }
 
         if (! empty($validated['period_id'])) {
-            $periodProjectId = (int) \App\Models\Period::query()->whereKey((int) $validated['period_id'])->value('project_id');
+            $periodProjectId = (int) Period::query()->whereKey((int) $validated['period_id'])->value('project_id');
             abort_unless(! empty($validated['project_id']) && $periodProjectId === (int) $validated['project_id'], 422, 'Secilen donem bu projeye ait degil.');
             $this->assertPeriodWritable($request, (int) $validated['period_id']);
         }
@@ -191,39 +204,52 @@ class DigitalBohcaController extends Controller
         }
 
         if ($files->isEmpty()) {
-            return response()->json(['message' => 'Lutfen yuklemek icin en az bir dosya secin.'], 422);
+            return response()->json(['message' => 'Lütfen yüklemek için en az bir dosya seçin.'], 422);
         }
 
-        $materials = $files->values()->map(function ($file, int $index) use ($validated, $request, $files) {
-            $path = MediaStorage::putFile('digital-bohca', $file);
-            $title = $validated['title'];
-            if ($files->count() > 1) {
-                $title .= ' - '.$file->getClientOriginalName();
+        $storedPaths = [];
+        try {
+            $materials = DB::transaction(function () use ($validated, $request, $files, &$storedPaths) {
+                return $files->values()->map(function ($file) use ($validated, $request, $files, &$storedPaths) {
+                    $path = MediaStorage::putFile('digital-bohca', $file);
+                    $storedPaths[] = $path;
+                    $title = $validated['title'];
+                    if ($files->count() > 1) {
+                        $title = str($title.' - '.$file->getClientOriginalName())->limit(255, '')->toString();
+                    }
+
+                    $material = DigitalBohca::query()->create([
+                        'project_id' => $validated['project_id'] ?? null,
+                        'period_id' => $validated['period_id'] ?? null,
+                        'user_id' => $validated['user_id'] ?? null,
+                        'title' => $title,
+                        'description' => $validated['description'] ?? null,
+                        'file_path' => $path,
+                        'file_type' => $file->getClientOriginalExtension(),
+                        'category' => $validated['category'] ?? 'general',
+                        'visible_to_student' => $validated['visible_to_student'] ?? true,
+                        'uploaded_by' => $request->user()->id,
+                    ]);
+                    $this->attachBohcaAudit($request, $material, 'created');
+
+                    return $material->load(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname']);
+                });
+            });
+        } catch (\Throwable $exception) {
+            foreach ($storedPaths as $storedPath) {
+                MediaStorage::delete($storedPath);
             }
 
-            $material = DigitalBohca::query()->create([
-                'project_id'         => $validated['project_id'] ?? null,
-                'period_id'          => $validated['period_id'] ?? null,
-                'user_id'            => $validated['user_id'] ?? null,
-                'title'              => $title,
-                'description'        => $validated['description'] ?? null,
-                'file_path'          => $path,
-                'file_type'          => $file->getClientOriginalExtension(),
-                'category'           => $validated['category'] ?? 'general',
-                'visible_to_student' => $validated['visible_to_student'] ?? true,
-                'uploaded_by'        => $request->user()->id,
-            ]);
-            $this->attachBohcaAudit($request, $material, 'created');
-
-            return $material->load(['project:id,name', 'period:id,name,status', 'user:id,name,surname,email', 'uploader:id,name,surname']);
-        });
+            throw $exception;
+        }
 
         return response()->json([
-            'message' => $materials->count() > 1 ? $materials->count().' dosya Dijital Bohca\'ya yuklendi.' : 'Dijital bohca materyali yuklendi.',
+            'message' => $materials->count() > 1 ? $materials->count().' dosya Dijital Bohça\'ya yüklendi.' : 'Dijital Bohça materyali yüklendi.',
             'material' => $this->materialPayload($materials->first(), '/panel/digital-bohca'),
             'materials' => $materials->map(fn (DigitalBohca $material) => $this->materialPayload($material, '/panel/digital-bohca'))->values(),
         ], 201);
     }
+
     public function panelExport(Request $request)
     {
         $validated = $request->validate([
@@ -288,9 +314,11 @@ class DigitalBohcaController extends Controller
      * Requires permission: `participant.bohca.view`. The file must be visible to the student and must belong to one of the current user projects/periods, be user-specific, or be a general material.
      *
      * @group Digital Bohca
+     *
      * @authenticated
      *
      * @urlParam id integer required Material id. Example: 1
+     *
      * @response 200 {"download":"Binary file stream or {download_url} when direct downloads are enabled"}
      * @response 404 {"message":"Dosya bulunamadi."}
      * @response 404 {"message":"Dosya storage uzerinde bulunamadi."}
@@ -390,7 +418,7 @@ class DigitalBohcaController extends Controller
             'download_url' => "{$basePath}/{$material->id}/download",
             'file_type' => $material->file_type,
             'category' => $material->category ?? 'general',
-            'category_label' => \App\Models\DigitalBohca::CATEGORIES[$material->category ?? 'general'] ?? 'Genel',
+            'category_label' => DigitalBohca::CATEGORIES[$material->category ?? 'general'] ?? 'Genel',
             'visible_to_student' => $material->visible_to_student,
             'created_at' => optional($material->created_at)?->toIso8601String(),
             'updated_at' => optional($material->updated_at)?->toIso8601String(),
