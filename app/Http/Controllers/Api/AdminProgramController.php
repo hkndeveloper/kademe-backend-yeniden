@@ -63,6 +63,29 @@ class AdminProgramController extends Controller
     }
 
     /**
+     * Get one panel program.
+     *
+     * Requires permission: `programs.view` for the program project. The project scope is
+     * checked against the program itself so a guessed ID cannot bypass the action scope.
+     *
+     * @authenticated
+     * @urlParam id integer required Program ID. Example: 8
+     * @response 200 {"program":{"id":8,"title":"Haftalik Atolye","status":"scheduled"}}
+     * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
+     */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'programs.view');
+        $program = Program::query()
+            ->with(['project:id,name', 'period:id,name'])
+            ->withCount(['attendances', 'feedbacks'])
+            ->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request, 'programs.view', (int) $program->project_id);
+
+        return response()->json(['program' => $this->programPayload($program)]);
+    }
+
+    /**
      * Export panel programs.
      *
      * Requires permission: `programs.export`. Project/period context is resolved through action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`. Exposed under `/api/admin/programs/export` and `/api/panel/programs/export`.

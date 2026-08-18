@@ -219,6 +219,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     // Etkinlik (Program) ve QR YÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶netimi
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
+    Route::get('/programs/{id}', [AdminProgramController::class, 'show'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
     Route::post('/programs/{id}/generate-qr', [AdminProgramController::class, 'generateQr']);
@@ -404,6 +405,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
 
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
+    Route::get('/programs/{id}', [AdminProgramController::class, 'show'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
     Route::post('/programs/{id}/complete', [AdminProgramController::class, 'complete']);
