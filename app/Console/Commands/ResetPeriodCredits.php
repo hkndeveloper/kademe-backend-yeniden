@@ -2,9 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\CreditLog;
 use App\Models\Participant;
 use App\Models\Period;
+use App\Models\Project;
+use App\Services\PeriodWritePolicy;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -25,27 +28,47 @@ class ResetPeriodCredits extends Command
 
     protected $description = 'Donem degisiminde aktif katilimcilarin kredilerini donem baslangic degerine resetler.';
 
-    public function handle(): int
+    public function handle(PeriodWritePolicy $periodWritePolicy): int
     {
-        $periodQuery = Period::query()->where('status', 'active');
-
         if ($this->option('period')) {
-            $periodQuery->where('id', (int) $this->option('period'));
-        } elseif (! $this->option('force')) {
-            // Sadece bugün başlayan dönemleri işle
-            $periodQuery->whereDate('start_date', today());
-        }
+            $period = Period::query()->with(['project.currentPeriod'])->find((int) $this->option('period'));
+            $periods = collect();
+            if ($period
+                && $period->status === 'active'
+                && (int) optional($period->project->currentPeriodOrLegacy())->id === (int) $period->id) {
+                $periods->push($period);
+            }
+        } else {
+            $projects = Project::query()
+                ->where('status', 'active')
+                ->with([
+                    'currentPeriod',
+                    'periods' => fn ($query) => $query
+                        ->whereIn('status', ['active', 'closing'])
+                        ->orderByDesc('start_date'),
+                ])
+                ->get();
 
-        $periods = $periodQuery->get();
+            $periods = $projects
+                ->map(fn (Project $project) => $project->currentPeriodOrLegacy())
+                ->filter(fn (?Period $period) => $period?->status === 'active')
+                ->when(
+                    ! $this->option('force'),
+                    fn ($items) => $items->filter(fn (Period $period) => $period->start_date?->isToday()),
+                )
+                ->values();
+        }
 
         if ($periods->isEmpty()) {
             $this->info('Islenecek donem bulunamadi.');
+
             return 0;
         }
 
         $totalReset = 0;
 
         foreach ($periods as $period) {
+            $periodWritePolicy->assertAllowed(null, $period, PeriodWriteAction::RESOLVE_OPERATION);
             $startAmount = $period->credit_start_amount ?? 100;
             $this->info("Donem: {$period->name} (ID: {$period->id}) — Baslangic kredi: {$startAmount}");
 
@@ -64,14 +87,14 @@ class ResetPeriodCredits extends Command
                     $delta = $startAmount - $oldCredit;
                     CreditLog::create([
                         'participant_id' => $participant->id,
-                        'user_id'        => $participant->user_id,
-                        'project_id'     => $participant->project_id,
-                        'period_id'      => $period->id,
-                        'amount'         => $delta,
-                        'type'           => 'period_reset',
-                        'reason'         => "Donem degisimi kredi reseti ({$period->name})",
-                        'program_id'     => null,
-                        'created_by'     => null,
+                        'user_id' => $participant->user_id,
+                        'project_id' => $participant->project_id,
+                        'period_id' => $period->id,
+                        'amount' => $delta,
+                        'type' => 'period_reset',
+                        'reason' => "Donem degisimi kredi reseti ({$period->name})",
+                        'program_id' => null,
+                        'created_by' => null,
                     ]);
 
                     $participant->update(['credit' => $startAmount]);
@@ -84,6 +107,7 @@ class ResetPeriodCredits extends Command
         }
 
         $this->info("Tamamlandi. Toplam {$totalReset} katilimcinin kredisi resetlendi.");
+
         return 0;
     }
 }

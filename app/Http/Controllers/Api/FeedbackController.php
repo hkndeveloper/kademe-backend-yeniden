@@ -136,7 +136,7 @@ class FeedbackController extends Controller
 
         $user = $request->user();
         $program = Program::query()->findOrFail($validated['program_id']);
-        $this->assertPeriodWritable($request, $program->period_id);
+        $this->assertPeriodResolvable($request, $program->period_id);
         $questions = FeedbackFormResolver::forProgram($program);
         $responseRules = [];
 

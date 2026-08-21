@@ -1,4 +1,4 @@
-﻿{
+{
     "variable": [
         {
             "id": "baseUrl",
@@ -10,7 +10,7 @@
     ],
     "info": {
         "name": "KADEME API Documentation",
-        "_postman_id": "6e86cc2a-bd10-485b-a00a-b589c4bc30f7",
+        "_postman_id": "72191eeb-4656-4da7-9889-dbff05b6b123",
         "description": "KADEME backend API dokumantasyonu. Public, mobil katilimci ve tek panel endpointleri OpenAPI\/Swagger uyumlu olarak bu dokumanda toplanir.",
         "schema": "https:\/\/schema.getpostman.com\/json\/collection\/v2.1.0\/collection.json"
     },
@@ -266,7 +266,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"search\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"status\":\"completed\",\"from\":\"2026-07-09T11:23:04\",\"to\":\"2107-08-07\",\"per_page\":13}"
+                            "raw": "{\"search\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"status\":\"completed\",\"from\":\"2026-08-21T04:14:28\",\"to\":\"2107-09-19\",\"per_page\":13}"
                         },
                         "description": "",
                         "auth": {
@@ -902,7 +902,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"period_id\":3,\"program_id\":8,\"fields\":[{\"id\":\"motivation\",\"type\":\"longtext\",\"label\":\"Motivasyon mektubu\",\"required\":true,\"options\":[\"A\",\"B\"]}],\"require_consent\":true,\"consent_text\":\"consequatur\",\"is_active\":true,\"auto_reject_rules\":[{\"field_id\":\"byickznkygloigmkwxphl\",\"operator\":\"contains\",\"value\":\"vazjrcnfbaqywuxhgjjmz\",\"reason\":\"uxjubqouzswiwxtrkimfc\"}]}"
+                            "raw": "{\"period_id\":3,\"program_id\":8,\"fields\":[{\"id\":\"motivation\",\"type\":\"longtext\",\"label\":\"Motivasyon mektubu\",\"required\":true,\"options\":[\"A\",\"B\"]}],\"require_consent\":true,\"consent_text\":\"consequatur\",\"is_active\":true,\"auto_reject_rules\":[{\"field_id\":\"byickznkygloigmkwxphl\",\"operator\":\"gte\",\"value\":\"vazjrcnfbaqywuxhgjjmz\",\"reason\":\"uxjubqouzswiwxtrkimfc\"}]}"
                         },
                         "description": "Requires permission: `projects.application_form.update` for the project. Period and program must belong to the project; when a program is selected, its period is used. Previous active form for the same project\/period\/program context is deactivated before the new form is saved."
                     },
@@ -1281,7 +1281,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"period_id\":3,\"program_id\":8,\"fields\":[{\"id\":\"motivation\",\"type\":\"longtext\",\"label\":\"Motivasyon mektubu\",\"required\":true,\"options\":[\"A\",\"B\"]}],\"require_consent\":true,\"consent_text\":\"consequatur\",\"is_active\":true,\"auto_reject_rules\":[{\"field_id\":\"byickznkygloigmkwxphl\",\"operator\":\"equals\",\"value\":\"vazjrcnfbaqywuxhgjjmz\",\"reason\":\"uxjubqouzswiwxtrkimfc\"}]}"
+                            "raw": "{\"period_id\":3,\"program_id\":8,\"fields\":[{\"id\":\"motivation\",\"type\":\"longtext\",\"label\":\"Motivasyon mektubu\",\"required\":true,\"options\":[\"A\",\"B\"]}],\"require_consent\":true,\"consent_text\":\"consequatur\",\"is_active\":true,\"auto_reject_rules\":[{\"field_id\":\"byickznkygloigmkwxphl\",\"operator\":\"contains\",\"value\":\"vazjrcnfbaqywuxhgjjmz\",\"reason\":\"uxjubqouzswiwxtrkimfc\"}]}"
                         },
                         "description": "Requires permission: `projects.application_form.update` for the project. Period and program must belong to the project; when a program is selected, its period is used. Previous active form for the same project\/period\/program context is deactivated before the new form is saved."
                     },
@@ -1421,6 +1421,70 @@
                             "name": ""
                         }
                     ]
+                },
+                {
+                    "name": "Upload a participant-owned certificate.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/certificates",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/certificates"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "multipart\/form-data"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "title",
+                                    "value": "vmqeopfuudtdsufvyvddq",
+                                    "type": "text",
+                                    "description": "Must not be greater than 255 characters."
+                                },
+                                {
+                                    "key": "issuer",
+                                    "value": "amniihfqcoynlazghdtqt",
+                                    "type": "text",
+                                    "description": "Must not be greater than 255 characters."
+                                },
+                                {
+                                    "key": "type",
+                                    "value": "qxbajwbpilpmufinllwlo",
+                                    "type": "text",
+                                    "description": "Must not be greater than 80 characters."
+                                },
+                                {
+                                    "key": "issued_at",
+                                    "value": "2026-08-21T04:14:30",
+                                    "type": "text",
+                                    "description": "Must be a valid date."
+                                },
+                                {
+                                    "key": "included_in_cv",
+                                    "value": "",
+                                    "type": "text",
+                                    "description": ""
+                                },
+                                {
+                                    "key": "certificate_file",
+                                    "src": [],
+                                    "type": "file"
+                                }
+                            ]
+                        },
+                        "description": "The authenticated participant can add external certificates to their own certificate library and CV selections. Uploaded certificates are marked as `student_upload` and do not require a project\/period."
+                    },
+                    "response": []
                 },
                 {
                     "name": "List panel certificates.",
@@ -2813,7 +2877,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"form\":{\"fullName\":\"Hakan Kekec\",\"email\":\"kunde.eloisa@example.com\",\"phone\":\"hfqcoynlazghdtqtqxbaj\",\"location\":\"wbpilpmufinllwloauydl\",\"summary\":\"Sosyal etki odakli calismalar yapiyorum.\",\"university\":\"znkygloigmkwxphlvazjr\",\"department\":\"cnfbaqywuxhgjjmzuxjub\",\"classYear\":\"qouzswiwxtrkimfcatbxs\",\"linkedin\":\"pzmrazsroyjpxmqesedyg\",\"github\":\"henqcopwvownkbamlnfng\",\"instagram\":\"efbeilfzsyuxoezbdtabp\",\"skills\":\"Liderlik, iletisim, proje yonetimi\",\"languages\":\"cwsestcouxpqsydkigioy\",\"experience\":[{\"id\":\"oyprjkfdjsneawgaavuiw\",\"title\":\"lezlcraoooxrrjhbduowt\",\"subtitle\":\"baqrrtgxiuvujtzcirpln\",\"date\":\"fqsaymxpayeblqozckazp\",\"description\":\"Quidem commodi quia vel accusamus quam.\"}],\"education\":[{\"id\":\"uzgpjfumffsmqnmbekhso\",\"title\":\"bzoqisjmbiuqxdnvttnwp\",\"subtitle\":\"jqkxxmutyzaadbjkbosus\",\"date\":\"obdoqhlrecwgwnfrnqkqz\",\"description\":\"Ipsum esse consectetur deleniti aut voluptatibus dicta.\"}],\"projects\":[{\"id\":\"jkacxowxjfjhqnumftkwb\",\"title\":\"fqsgaywjxhjqovkxzlval\",\"subtitle\":\"yuwppfckszbujxazwsrqg\",\"date\":\"zomzeowirvzubjxoeqxih\",\"description\":\"Eaque numquam provident ratione quis.\"}],\"certificates\":[{\"id\":\"giswmddoraronrpbzlovd\",\"title\":\"mbhrpyvkublvfopexlama\",\"subtitle\":\"dlsacjsrgesfcxzbqmrck\",\"date\":\"wedjrwdsuajoeoqmqffvh\",\"description\":\"Doloribus perferendis aut id voluptas quo tempora.\"}]}}"
+                            "raw": "{\"form\":{\"fullName\":\"Hakan Kekec\",\"email\":\"kunde.eloisa@example.com\",\"phone\":\"hfqcoynlazghdtqtqxbaj\",\"location\":\"wbpilpmufinllwloauydl\",\"summary\":\"Sosyal etki odakli calismalar yapiyorum.\",\"university\":\"znkygloigmkwxphlvazjr\",\"department\":\"cnfbaqywuxhgjjmzuxjub\",\"classYear\":\"qouzswiwxtrkimfcatbxs\",\"linkedin\":\"pzmrazsroyjpxmqesedyg\",\"github\":\"henqcopwvownkbamlnfng\",\"instagram\":\"efbeilfzsyuxoezbdtabp\",\"skills\":\"Liderlik, iletisim, proje yonetimi\",\"languages\":\"cwsestcouxpqsydkigioy\",\"experience\":[{\"id\":\"mqeopfuudtdsufvyvddqa\",\"title\":\"mniihfqcoynlazghdtqtq\",\"subtitle\":\"xbajwbpilpmufinllwloa\",\"date\":\"uydlsmsjuryvojcyb\",\"description\":\"Illum est quae non quia dicta in aut provident.\"}],\"education\":[{\"id\":\"kygloigmkwxphlvazjrcn\",\"title\":\"fbaqywuxhgjjmzuxjubqo\",\"subtitle\":\"uzswiwxtrkimfcatbxspz\",\"date\":\"mrazsroyjpxmqesed\",\"description\":\"Magnam quis dolorem non harum aut iste animi pariatur.\"}],\"projects\":[{\"id\":\"vownkbamlnfngefbeilfz\",\"title\":\"syuxoezbdtabptcyyerev\",\"subtitle\":\"rljcbwkthjnescwsestco\",\"date\":\"uxpqsydkigioyoypr\",\"description\":\"Velit eius qui vel porro occaecati.\"}],\"certificates\":[{\"id\":\"eawgaavuiwlezlcraooox\",\"title\":\"rrjhbduowtbaqrrtgxiuv\",\"subtitle\":\"ujtzcirplnfqsaymxpaye\",\"date\":\"blqozckazplqjijwk\",\"description\":\"Doloribus quaerat deserunt consequatur eius et rem numquam.\"}],\"certificateIds\":[17]}}"
                         },
                         "description": "Requires permission: `participant.cv.manage`. Stores the editable CV builder payload under the user profile. The approved KADEME data is not overwritten by this endpoint."
                     },
@@ -3548,6 +3612,85 @@
                     ]
                 },
                 {
+                    "name": "Get one panel program.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/programs\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/programs\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "8",
+                                    "description": "Program ID."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Requires permission: `programs.view` for the program project. The project scope is\nchecked against the program itself so a guessed ID cannot bypass the action scope."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"program\":{\"id\":8,\"title\":\"Haftalik Atolye\",\"status\":\"scheduled\"}}",
+                            "name": ""
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Bu proje icin yetkiniz bulunmuyor.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Return the minimum scoped context needed by the QR attendance screen.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/programs\/:id\/qr-context",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/programs\/:id\/qr-context",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "1562",
+                                    "description": "The ID of the program."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
                     "name": "Create a panel program.",
                     "request": {
                         "url": {
@@ -3569,7 +3712,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":1,\"period_id\":3,\"title\":\"Haftalik Atolye\",\"description\":\"Uygulama calismasi.\",\"location\":\"Kademe Salon 1\",\"latitude\":41.0082,\"longitude\":28.9784,\"radius_meters\":150,\"guest_info\":[],\"start_at\":\"2026-07-10 14:00:00\",\"end_at\":\"2026-07-10 16:00:00\",\"credit_deduction\":10,\"application_quota\":30,\"target_audience\":[\"student\"],\"feedback_form_template_id\":2,\"status\":\"scheduled\",\"is_public\":true,\"is_featured\":false}"
+                            "raw": "{\"project_id\":1,\"period_id\":3,\"title\":\"Haftalik Atolye\",\"description\":\"Uygulama calismasi.\",\"location\":\"Kademe Salon 1\",\"location_place_name\":\"Kademe Genel Merkez\",\"location_place_address\":\"Bosna Hersek Mahallesi, Istanbul\",\"location_place_id\":\"osm:node:123\",\"location_place_provider\":\"osm\",\"latitude\":41.0082,\"longitude\":28.9784,\"radius_meters\":150,\"guest_info\":[],\"start_at\":\"2026-07-10 14:00:00\",\"end_at\":\"2026-07-10 16:00:00\",\"credit_deduction\":10,\"application_quota\":30,\"target_audience\":[\"student\"],\"feedback_form_template_id\":2,\"status\":\"scheduled\",\"is_public\":true,\"is_featured\":false}"
                         },
                         "description": "Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Program time ranges cannot overlap another non-cancelled program."
                     },
@@ -4244,6 +4387,85 @@
                     ]
                 },
                 {
+                    "name": "Get one panel program.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/programs\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/programs\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "8",
+                                    "description": "Program ID."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Requires permission: `programs.view` for the program project. The project scope is\nchecked against the program itself so a guessed ID cannot bypass the action scope."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"program\":{\"id\":8,\"title\":\"Haftalik Atolye\",\"status\":\"scheduled\"}}",
+                            "name": ""
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Bu proje icin yetkiniz bulunmuyor.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Return the minimum scoped context needed by the QR attendance screen.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/programs\/:id\/qr-context",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/programs\/:id\/qr-context",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "1562",
+                                    "description": "The ID of the program."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
                     "name": "Create a panel program.",
                     "request": {
                         "url": {
@@ -4265,7 +4487,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":1,\"period_id\":3,\"title\":\"Haftalik Atolye\",\"description\":\"Uygulama calismasi.\",\"location\":\"Kademe Salon 1\",\"latitude\":41.0082,\"longitude\":28.9784,\"radius_meters\":150,\"guest_info\":[],\"start_at\":\"2026-07-10 14:00:00\",\"end_at\":\"2026-07-10 16:00:00\",\"credit_deduction\":10,\"application_quota\":30,\"target_audience\":[\"student\"],\"feedback_form_template_id\":2,\"status\":\"scheduled\",\"is_public\":true,\"is_featured\":false}"
+                            "raw": "{\"project_id\":1,\"period_id\":3,\"title\":\"Haftalik Atolye\",\"description\":\"Uygulama calismasi.\",\"location\":\"Kademe Salon 1\",\"location_place_name\":\"Kademe Genel Merkez\",\"location_place_address\":\"Bosna Hersek Mahallesi, Istanbul\",\"location_place_id\":\"osm:node:123\",\"location_place_provider\":\"osm\",\"latitude\":41.0082,\"longitude\":28.9784,\"radius_meters\":150,\"guest_info\":[],\"start_at\":\"2026-07-10 14:00:00\",\"end_at\":\"2026-07-10 16:00:00\",\"credit_deduction\":10,\"application_quota\":30,\"target_audience\":[\"student\"],\"feedback_form_template_id\":2,\"status\":\"scheduled\",\"is_public\":true,\"is_featured\":false}"
                         },
                         "description": "Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Program time ranges cannot overlap another non-cancelled program."
                     },
@@ -5323,13 +5545,46 @@
                     ]
                 },
                 {
-                    "name": "Download my assignment submission file.",
+                    "name": "GET api\/assignment-submissions\/{id}\/download",
                     "request": {
                         "url": {
                             "host": "{{baseUrl}}",
                             "path": "api\/assignment-submissions\/:id\/download",
                             "query": [],
                             "raw": "{{baseUrl}}\/api\/assignment-submissions\/:id\/download",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the assignment submission."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Download my assignment submission file.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/assignment-attachments\/:id\/download",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/assignment-attachments\/:id\/download",
                             "variable": [
                                 {
                                     "id": "id",
@@ -5443,7 +5698,7 @@
                         "header": [
                             {
                                 "key": "Content-Type",
-                                "value": "application\/json"
+                                "value": "multipart\/form-data"
                             },
                             {
                                 "key": "Accept",
@@ -5451,8 +5706,131 @@
                             }
                         ],
                         "body": {
-                            "mode": "raw",
-                            "raw": "{\"project_id\":\"consequatur\",\"period_id\":\"consequatur\",\"title\":\"mqeopfuudtdsufvyvddqa\",\"description\":\"Molestias ipsam sit veniam sed fuga aspernatur.\",\"due_date\":\"2026-07-09T11:23:06\"}"
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "project_id",
+                                    "value": "consequatur",
+                                    "type": "text",
+                                    "description": "The <code>id<\/code> of an existing record in the projects table."
+                                },
+                                {
+                                    "key": "period_id",
+                                    "value": "consequatur",
+                                    "type": "text",
+                                    "description": "The <code>id<\/code> of an existing record in the periods table."
+                                },
+                                {
+                                    "key": "title",
+                                    "value": "mqeopfuudtdsufvyvddqa",
+                                    "type": "text",
+                                    "description": "Must not be greater than 255 characters."
+                                },
+                                {
+                                    "key": "description",
+                                    "value": "Molestias ipsam sit veniam sed fuga aspernatur.",
+                                    "type": "text",
+                                    "description": "Must not be greater than 3000 characters."
+                                },
+                                {
+                                    "key": "due_date",
+                                    "value": "2026-08-21T04:14:32",
+                                    "type": "text",
+                                    "description": "Must be a valid date."
+                                },
+                                {
+                                    "key": "attachment",
+                                    "src": [],
+                                    "type": "file"
+                                },
+                                {
+                                    "key": "attachments[]",
+                                    "src": [],
+                                    "type": "file"
+                                }
+                            ]
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "PUT api\/panel\/assignments\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/assignments\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/assignments\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the assignment."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "multipart\/form-data"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "project_id",
+                                    "value": "consequatur",
+                                    "type": "text",
+                                    "description": "The <code>id<\/code> of an existing record in the projects table."
+                                },
+                                {
+                                    "key": "period_id",
+                                    "value": "consequatur",
+                                    "type": "text",
+                                    "description": "The <code>id<\/code> of an existing record in the periods table."
+                                },
+                                {
+                                    "key": "title",
+                                    "value": "mqeopfuudtdsufvyvddqa",
+                                    "type": "text",
+                                    "description": "Must not be greater than 255 characters."
+                                },
+                                {
+                                    "key": "description",
+                                    "value": "Molestias ipsam sit veniam sed fuga aspernatur.",
+                                    "type": "text",
+                                    "description": "Must not be greater than 3000 characters."
+                                },
+                                {
+                                    "key": "due_date",
+                                    "value": "2026-08-21T04:14:32",
+                                    "type": "text",
+                                    "description": "Must be a valid date."
+                                },
+                                {
+                                    "key": "attachment",
+                                    "src": [],
+                                    "type": "file"
+                                },
+                                {
+                                    "key": "attachments[]",
+                                    "src": [],
+                                    "type": "file"
+                                },
+                                {
+                                    "key": "_method",
+                                    "value": "PUT",
+                                    "type": "text"
+                                }
+                            ]
                         },
                         "description": ""
                     },
@@ -5505,6 +5883,39 @@
                                     "key": "id",
                                     "value": "consequatur",
                                     "description": "The ID of the assignment submission."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/panel\/assignment-attachments\/{id}\/download",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/assignment-attachments\/:id\/download",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/assignment-attachments\/:id\/download",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the assignment attachment."
                                 }
                             ]
                         },
@@ -5755,7 +6166,7 @@
                                 },
                                 {
                                     "key": "visible_to_student",
-                                    "value": "1",
+                                    "value": "",
                                     "type": "text",
                                     "description": ""
                                 },
@@ -5767,6 +6178,11 @@
                                 },
                                 {
                                     "key": "file",
+                                    "src": [],
+                                    "type": "file"
+                                },
+                                {
+                                    "key": "files[]",
                                     "src": [],
                                     "type": "file"
                                 }
@@ -5992,7 +6408,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"name\":\"vmqeopfuudtdsufvyvddq\",\"description\":\"Dolores molestias ipsam sit.\",\"is_default\":false,\"is_active\":false,\"questions\":[{\"question_key\":\"vmqeopfuudtdsufvyvddq\",\"label\":\"amniihfqcoynlazghdtqt\",\"type\":\"consequatur\",\"options\":[\"mqeopfuudtdsufvyvddqa\"],\"min_value\":5,\"max_value\":6,\"is_required\":true}]}"
+                            "raw": "{\"name\":\"vmqeopfuudtdsufvyvddq\",\"description\":\"Dolores molestias ipsam sit.\",\"is_default\":true,\"is_active\":true,\"questions\":[{\"question_key\":\"vmqeopfuudtdsufvyvddq\",\"label\":\"amniihfqcoynlazghdtqt\",\"type\":\"consequatur\",\"options\":[\"mqeopfuudtdsufvyvddqa\"],\"min_value\":5,\"max_value\":6,\"is_required\":false}]}"
                         },
                         "description": ""
                     },
@@ -6028,7 +6444,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"name\":\"vmqeopfuudtdsufvyvddq\",\"description\":\"Dolores molestias ipsam sit.\",\"is_default\":false,\"is_active\":false,\"questions\":[{\"question_key\":\"hfqcoynlazghdtqtqxbaj\",\"label\":\"wbpilpmufinllwloauydl\",\"options\":[\"smsjuryvojcybzvrbyick\"],\"min_value\":10,\"max_value\":6,\"is_required\":false}]}"
+                            "raw": "{\"name\":\"vmqeopfuudtdsufvyvddq\",\"description\":\"Dolores molestias ipsam sit.\",\"is_default\":false,\"is_active\":true,\"questions\":[{\"question_key\":\"hfqcoynlazghdtqtqxbaj\",\"label\":\"wbpilpmufinllwloauydl\",\"options\":[\"smsjuryvojcybzvrbyick\"],\"min_value\":10,\"max_value\":6,\"is_required\":false}]}"
                         },
                         "description": ""
                     },
@@ -6228,6 +6644,62 @@
                             "name": ""
                         }
                     ]
+                },
+                {
+                    "name": "List forum posts for authority panel users.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/forum\/posts",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/forum\/posts"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"project_id\":17,\"period_id\":17}"
+                        },
+                        "description": "Requires permission: `announcements.view`. Returns read-only forum threads from projects visible to the panel user."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List forum posts for authority panel users.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/forum\/posts",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/forum\/posts"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"project_id\":17,\"period_id\":17}"
+                        },
+                        "description": "Requires permission: `announcements.view`. Returns read-only forum threads from projects visible to the panel user."
+                    },
+                    "response": []
                 }
             ]
         },
@@ -9474,7 +9946,43 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":\"consequatur\",\"title\":\"mqeopfuudtdsufvyvddqa\",\"description\":\"Molestias ipsam sit veniam sed fuga aspernatur.\",\"location\":\"oynlazghdtqtqxbajwbpi\",\"start_at\":\"2026-07-09T11:23:06\",\"end_at\":\"2107-08-07\",\"quota\":45,\"status\":\"open\"}"
+                            "raw": "{\"project_id\":\"consequatur\",\"title\":\"mqeopfuudtdsufvyvddqa\",\"description\":\"Molestias ipsam sit veniam sed fuga aspernatur.\",\"location\":\"oynlazghdtqtqxbajwbpi\",\"start_at\":\"2026-08-21T04:14:31\",\"end_at\":\"2107-09-19\",\"quota\":45,\"status\":\"closed\"}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "PUT api\/panel\/volunteer\/opportunities\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/volunteer\/opportunities\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/volunteer\/opportunities\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the opportunity."
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"title\":\"vmqeopfuudtdsufvyvddq\",\"description\":\"Dolores molestias ipsam sit.\",\"location\":\"hfqcoynlazghdtqtqxbaj\",\"start_at\":\"2026-08-21T04:14:31\",\"end_at\":\"2107-09-19\",\"quota\":45,\"status\":\"open\"}"
                         },
                         "description": ""
                     },
@@ -9510,7 +10018,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"status\":\"rejected\",\"evaluation_note\":\"vmqeopfuudtdsufvyvddq\"}"
+                            "raw": "{\"status\":\"pending\",\"evaluation_note\":\"vmqeopfuudtdsufvyvddq\"}"
                         },
                         "description": ""
                     },
@@ -9679,7 +10187,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"title\":\"vmqeopfuudtdsufvyvddq\",\"kind\":\"internship\",\"summary\":\"amniihfqcoynlazghdtqt\",\"body\":\"qxbajwbpilpmufinllwlo\",\"link_url\":\"http:\\\/\\\/www.schmitt.org\\\/\",\"starts_at\":\"2026-07-09T11:23:06\",\"ends_at\":\"2026-07-09T11:23:06\",\"published_at\":\"2026-07-09T11:23:06\",\"expires_at\":\"2026-07-09T11:23:06\",\"target_audience\":[\"student\"]}"
+                            "raw": "{\"title\":\"vmqeopfuudtdsufvyvddq\",\"kind\":\"job\",\"summary\":\"amniihfqcoynlazghdtqt\",\"body\":\"qxbajwbpilpmufinllwlo\",\"link_url\":\"http:\\\/\\\/www.schmitt.org\\\/\",\"starts_at\":\"2026-08-21T04:14:32\",\"ends_at\":\"2026-08-21T04:14:32\",\"published_at\":\"2026-08-21T04:14:32\",\"expires_at\":\"2026-08-21T04:14:32\",\"target_audience\":[\"student\"]}"
                         },
                         "description": ""
                     },
@@ -9715,7 +10223,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"title\":\"vmqeopfuudtdsufvyvddq\",\"kind\":\"internship\",\"summary\":\"amniihfqcoynlazghdtqt\",\"body\":\"qxbajwbpilpmufinllwlo\",\"link_url\":\"http:\\\/\\\/www.schmitt.org\\\/\",\"starts_at\":\"2026-07-09T11:23:06\",\"ends_at\":\"2026-07-09T11:23:06\",\"published_at\":\"2026-07-09T11:23:06\",\"expires_at\":\"2026-07-09T11:23:06\",\"target_audience\":[\"alumni\"]}"
+                            "raw": "{\"title\":\"vmqeopfuudtdsufvyvddq\",\"kind\":\"other\",\"summary\":\"amniihfqcoynlazghdtqt\",\"body\":\"qxbajwbpilpmufinllwlo\",\"link_url\":\"http:\\\/\\\/www.schmitt.org\\\/\",\"starts_at\":\"2026-08-21T04:14:32\",\"ends_at\":\"2026-08-21T04:14:32\",\"published_at\":\"2026-08-21T04:14:32\",\"expires_at\":\"2026-08-21T04:14:32\",\"target_audience\":[\"alumni\"]}"
                         },
                         "description": ""
                     },
@@ -9882,7 +10390,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":17,\"category\":\"mqeopfuudtdsufvyvddqa\",\"from\":\"2026-07-09T11:23:04\",\"to\":\"2107-08-07\",\"type\":\"forum_post\",\"unread_only\":true,\"starred_only\":true,\"pinned_only\":true}"
+                            "raw": "{\"project_id\":17,\"category\":\"mqeopfuudtdsufvyvddqa\",\"from\":\"2026-08-21T04:14:30\",\"to\":\"2107-09-19\",\"type\":\"opportunity\",\"unread_only\":false,\"starred_only\":false,\"pinned_only\":false}"
                         },
                         "description": "Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project\/global scope. Project filters must be inside the merged participant\/project permission scope."
                     },
@@ -10149,7 +10657,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"type\":\"email\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-07-09T11:23:05\",\"date_to\":\"2107-08-07\",\"per_page\":13}"
+                            "raw": "{\"type\":\"sms\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-08-21T04:14:31\",\"date_to\":\"2107-09-19\",\"per_page\":13}"
                         },
                         "description": "Requires permission: `announcements.view`. Global users can see all email\/SMS logs; project-scoped users see logs they sent or logs in accessible projects. Supports type, status, project, sender, search and date filters."
                     },
@@ -10233,7 +10741,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"type\":\"email\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-07-09T11:23:05\",\"date_to\":\"2107-08-07\"}"
+                            "raw": "{\"type\":\"email\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-08-21T04:14:31\",\"date_to\":\"2107-09-19\"}"
                         },
                         "description": "Requires permission: `announcements.view`. Applies the same communication log scope and filters as the list endpoint and exports through the shared admin export responder."
                     },
@@ -10749,7 +11257,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":17,\"category\":\"mqeopfuudtdsufvyvddqa\",\"from\":\"2026-07-09T11:23:05\",\"to\":\"2107-08-07\",\"type\":\"opportunity\",\"unread_only\":true,\"starred_only\":true,\"pinned_only\":true}"
+                            "raw": "{\"project_id\":17,\"category\":\"mqeopfuudtdsufvyvddqa\",\"from\":\"2026-08-21T04:14:31\",\"to\":\"2107-09-19\",\"type\":\"opportunity\",\"unread_only\":false,\"starred_only\":false,\"pinned_only\":false}"
                         },
                         "description": "Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project\/global scope. Project filters must be inside the merged participant\/project permission scope."
                     },
@@ -11016,7 +11524,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"type\":\"sms\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-07-09T11:23:06\",\"date_to\":\"2107-08-07\",\"per_page\":13}"
+                            "raw": "{\"type\":\"email\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-08-21T04:14:32\",\"date_to\":\"2107-09-19\",\"per_page\":13}"
                         },
                         "description": "Requires permission: `announcements.view`. Global users can see all email\/SMS logs; project-scoped users see logs they sent or logs in accessible projects. Supports type, status, project, sender, search and date filters."
                     },
@@ -11100,7 +11608,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"type\":\"email\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-07-09T11:23:06\",\"date_to\":\"2107-08-07\"}"
+                            "raw": "{\"type\":\"sms\",\"status\":\"vmqeopfuudtdsufvyvddq\",\"project_id\":17,\"sender_id\":17,\"search\":\"mqeopfuudtdsufvyvddqa\",\"date_from\":\"2026-08-21T04:14:32\",\"date_to\":\"2107-09-19\"}"
                         },
                         "description": "Requires permission: `announcements.view`. Applies the same communication log scope and filters as the list endpoint and exports through the shared admin export responder."
                     },
@@ -11616,7 +12124,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":17,\"category\":\"mqeopfuudtdsufvyvddqa\",\"from\":\"2026-07-09T11:23:06\",\"to\":\"2107-08-07\",\"type\":\"forum_post\",\"unread_only\":false,\"starred_only\":true,\"pinned_only\":false}"
+                            "raw": "{\"project_id\":17,\"category\":\"mqeopfuudtdsufvyvddqa\",\"from\":\"2026-08-21T04:14:32\",\"to\":\"2107-09-19\",\"type\":\"opportunity\",\"unread_only\":true,\"starred_only\":false,\"pinned_only\":true}"
                         },
                         "description": "Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project\/global scope. Project filters must be inside the merged participant\/project permission scope."
                     },
@@ -13969,7 +14477,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"participant_ids\":[17],\"graduation_status\":\"completed\",\"graduation_note\":\"mqeopfuudtdsufvyvddqa\"}"
+                            "raw": "{\"participant_ids\":[17],\"graduation_status\":\"graduated\",\"graduation_note\":\"mqeopfuudtdsufvyvddqa\"}"
                         },
                         "description": ""
                     },
@@ -14005,7 +14513,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"graduation_status\":\"graduated\",\"graduation_note\":\"vmqeopfuudtdsufvyvddq\"}"
+                            "raw": "{\"graduation_status\":\"completed\",\"graduation_note\":\"vmqeopfuudtdsufvyvddq\"}"
                         },
                         "description": ""
                     },
@@ -14041,7 +14549,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"public_profile_visible\":false,\"public_photo_visible\":true,\"public_alumni_visible\":false}"
+                            "raw": "{\"public_profile_visible\":false,\"public_photo_visible\":true,\"public_alumni_visible\":true}"
                         },
                         "description": ""
                     },
@@ -14191,7 +14699,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"participant_ids\":[17],\"graduation_status\":\"not_completed\",\"graduation_note\":\"mqeopfuudtdsufvyvddqa\"}"
+                            "raw": "{\"participant_ids\":[17],\"graduation_status\":\"graduated\",\"graduation_note\":\"mqeopfuudtdsufvyvddqa\"}"
                         },
                         "description": ""
                     },
@@ -14227,7 +14735,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"graduation_status\":\"graduated\",\"graduation_note\":\"vmqeopfuudtdsufvyvddq\"}"
+                            "raw": "{\"graduation_status\":\"completed\",\"graduation_note\":\"vmqeopfuudtdsufvyvddq\"}"
                         },
                         "description": ""
                     },
@@ -14263,7 +14771,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"public_profile_visible\":true,\"public_photo_visible\":false,\"public_alumni_visible\":true}"
+                            "raw": "{\"public_profile_visible\":true,\"public_photo_visible\":true,\"public_alumni_visible\":true}"
                         },
                         "description": ""
                     },
@@ -16969,7 +17477,7 @@
                                 {
                                     "key": "status",
                                     "value": "active",
-                                    "description": "Optional status filter: `active`, `passive` or `completed`.",
+                                    "description": "Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.",
                                     "disabled": false
                                 }
                             ],
@@ -17020,7 +17528,7 @@
                                 {
                                     "key": "status",
                                     "value": "completed",
-                                    "description": "Optional status filter: `active`, `passive` or `completed`.",
+                                    "description": "Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.",
                                     "disabled": false
                                 },
                                 {
@@ -17083,9 +17591,9 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":1,\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"active\"}"
+                            "raw": "{\"project_id\":1,\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"planned\"}"
                         },
-                        "description": "Requires permission: `periods.create` for the selected project. If the new period is active, other active periods in the same project are switched to passive."
+                        "description": "Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period."
                     },
                     "response": [
                         {
@@ -17107,6 +17615,39 @@
                             "name": ""
                         }
                     ]
+                },
+                {
+                    "name": "Show a single period workspace payload.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Requires `periods.view` in the period project. Includes the immutable\nlifecycle timeline needed by the panel detail workspace."
+                    },
+                    "response": []
                 },
                 {
                     "name": "Get period closure summary.",
@@ -17155,6 +17696,252 @@
                     ]
                 },
                 {
+                    "name": "GET api\/admin\/periods\/{id}\/archives",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/archives",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/archives",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/admin\/periods\/{id}\/archives\/{archiveId}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/archives\/:archiveId",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/archives\/:archiveId",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                },
+                                {
+                                    "id": "archiveId",
+                                    "key": "archiveId",
+                                    "value": "consequatur",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/admin\/periods\/{id}\/archives\/{archiveId}\/verify",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/archives\/:archiveId\/verify",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/archives\/:archiveId\/verify",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                },
+                                {
+                                    "id": "archiveId",
+                                    "key": "archiveId",
+                                    "value": "consequatur",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Activate a planned period.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/activate",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/activate",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Yeni donem baslangici.\"}"
+                        },
+                        "description": "Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active\/closing period exists."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Donem aktif edildi.\",\"period\":{\"id\":3,\"status\":\"active\",\"lifecycle\":{\"is_current\":true}}}",
+                            "name": ""
+                        },
+                        {
+                            "header": [],
+                            "code": 409,
+                            "body": "{\"message\":\"Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Start period closing preparation.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/closing\/start",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/closing\/start",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Donem sonu kontrolleri baslatildi.\"}"
+                        },
+                        "description": "Requires `periods.closing.start` in the period project."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Donem kapanis hazirligina alindi.\",\"period\":{\"id\":3,\"status\":\"closing\"}}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Cancel closing preparation and return the period to active.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/closing\/cancel",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/closing\/cancel",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Eksik basvuru kararlari tamamlanacak.\"}"
+                        },
+                        "description": "Requires `periods.closing.cancel` in the period project."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Donem kapanis hazirligindan cikarilip yeniden aktif edildi.\",\"period\":{\"id\":3,\"status\":\"active\"}}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
                     "name": "Complete and archive a period.",
                     "request": {
                         "url": {
@@ -17186,7 +17973,7 @@
                             "mode": "raw",
                             "raw": "{\"notes\":\"Donem kapanisi tamamlandi.\"}"
                         },
-                        "description": "Requires permission: `periods.update` for the period project. Creates an immutable period archive snapshot with summary, warnings, counts and integrity hash, then marks the period as completed."
+                        "description": "Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction."
                     },
                     "response": [
                         {
@@ -17204,7 +17991,7 @@
                     ]
                 },
                 {
-                    "name": "Reopen a completed\/passive period.",
+                    "name": "Reopen a completed period.",
                     "request": {
                         "url": {
                             "host": "{{baseUrl}}",
@@ -17233,9 +18020,9 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"status\":\"active\"}"
+                            "raw": "{\"target_status\":\"planned\",\"status\":\"passive\",\"reason\":\"Arsivdeki ogrenci sonucu duzeltilecek.\"}"
                         },
-                        "description": "Requires permission: `periods.update` for the period project. Reopens the period as passive by default, or active when requested; when reactivated, other active periods in the same project are switched to passive."
+                        "description": "Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail."
                     },
                     "response": [
                         {
@@ -17248,6 +18035,49 @@
                             "header": [],
                             "code": 403,
                             "body": "{\"message\":\"Bu proje icin yetkiniz bulunmuyor.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Cancel a planned period.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/periods\/:id\/cancel",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/periods\/:id\/cancel",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Proje takvimi degisti.\"}"
+                        },
+                        "description": "Requires `periods.cancel` in the period project."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Planlanan donem iptal edildi.\",\"period\":{\"id\":3,\"status\":\"cancelled\"}}",
                             "name": ""
                         }
                     ]
@@ -17282,9 +18112,9 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"passive\"}"
+                            "raw": "{\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"planned\"}"
                         },
-                        "description": "Requires permission: `periods.update` for the period project. If the period is set to active, other active periods in the same project are switched to passive."
+                        "description": "Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint."
                     },
                     "response": [
                         {
@@ -17317,7 +18147,7 @@
                                 {
                                     "key": "status",
                                     "value": "active",
-                                    "description": "Optional status filter: `active`, `passive` or `completed`.",
+                                    "description": "Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.",
                                     "disabled": false
                                 }
                             ],
@@ -17368,7 +18198,7 @@
                                 {
                                     "key": "status",
                                     "value": "completed",
-                                    "description": "Optional status filter: `active`, `passive` or `completed`.",
+                                    "description": "Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.",
                                     "disabled": false
                                 },
                                 {
@@ -17431,9 +18261,9 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":1,\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"active\"}"
+                            "raw": "{\"project_id\":1,\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"planned\"}"
                         },
-                        "description": "Requires permission: `periods.create` for the selected project. If the new period is active, other active periods in the same project are switched to passive."
+                        "description": "Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period."
                     },
                     "response": [
                         {
@@ -17455,6 +18285,39 @@
                             "name": ""
                         }
                     ]
+                },
+                {
+                    "name": "Show a single period workspace payload.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Requires `periods.view` in the period project. Includes the immutable\nlifecycle timeline needed by the panel detail workspace."
+                    },
+                    "response": []
                 },
                 {
                     "name": "Get period closure summary.",
@@ -17503,6 +18366,252 @@
                     ]
                 },
                 {
+                    "name": "GET api\/panel\/periods\/{id}\/archives",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/archives",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/archives",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/panel\/periods\/{id}\/archives\/{archiveId}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/archives\/:archiveId",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/archives\/:archiveId",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                },
+                                {
+                                    "id": "archiveId",
+                                    "key": "archiveId",
+                                    "value": "consequatur",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/panel\/periods\/{id}\/archives\/{archiveId}\/verify",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/archives\/:archiveId\/verify",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/archives\/:archiveId\/verify",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the period."
+                                },
+                                {
+                                    "id": "archiveId",
+                                    "key": "archiveId",
+                                    "value": "consequatur",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Activate a planned period.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/activate",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/activate",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Yeni donem baslangici.\"}"
+                        },
+                        "description": "Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active\/closing period exists."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Donem aktif edildi.\",\"period\":{\"id\":3,\"status\":\"active\",\"lifecycle\":{\"is_current\":true}}}",
+                            "name": ""
+                        },
+                        {
+                            "header": [],
+                            "code": 409,
+                            "body": "{\"message\":\"Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Start period closing preparation.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/closing\/start",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/closing\/start",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Donem sonu kontrolleri baslatildi.\"}"
+                        },
+                        "description": "Requires `periods.closing.start` in the period project."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Donem kapanis hazirligina alindi.\",\"period\":{\"id\":3,\"status\":\"closing\"}}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Cancel closing preparation and return the period to active.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/closing\/cancel",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/closing\/cancel",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Eksik basvuru kararlari tamamlanacak.\"}"
+                        },
+                        "description": "Requires `periods.closing.cancel` in the period project."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Donem kapanis hazirligindan cikarilip yeniden aktif edildi.\",\"period\":{\"id\":3,\"status\":\"active\"}}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
                     "name": "Complete and archive a period.",
                     "request": {
                         "url": {
@@ -17534,7 +18643,7 @@
                             "mode": "raw",
                             "raw": "{\"notes\":\"Donem kapanisi tamamlandi.\"}"
                         },
-                        "description": "Requires permission: `periods.update` for the period project. Creates an immutable period archive snapshot with summary, warnings, counts and integrity hash, then marks the period as completed."
+                        "description": "Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction."
                     },
                     "response": [
                         {
@@ -17552,7 +18661,7 @@
                     ]
                 },
                 {
-                    "name": "Reopen a completed\/passive period.",
+                    "name": "Reopen a completed period.",
                     "request": {
                         "url": {
                             "host": "{{baseUrl}}",
@@ -17581,9 +18690,9 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"status\":\"active\"}"
+                            "raw": "{\"target_status\":\"planned\",\"status\":\"active\",\"reason\":\"Arsivdeki ogrenci sonucu duzeltilecek.\"}"
                         },
-                        "description": "Requires permission: `periods.update` for the period project. Reopens the period as passive by default, or active when requested; when reactivated, other active periods in the same project are switched to passive."
+                        "description": "Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail."
                     },
                     "response": [
                         {
@@ -17596,6 +18705,49 @@
                             "header": [],
                             "code": 403,
                             "body": "{\"message\":\"Bu proje icin yetkiniz bulunmuyor.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Cancel a planned period.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/periods\/:id\/cancel",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/periods\/:id\/cancel",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "3",
+                                    "description": "Period ID."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"Proje takvimi degisti.\"}"
+                        },
+                        "description": "Requires `periods.cancel` in the period project."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Planlanan donem iptal edildi.\",\"period\":{\"id\":3,\"status\":\"cancelled\"}}",
                             "name": ""
                         }
                     ]
@@ -17630,9 +18782,9 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"passive\"}"
+                            "raw": "{\"name\":\"2026 Bahar\",\"start_date\":\"2026-03-01\",\"end_date\":\"2026-06-30\",\"credit_start_amount\":100,\"credit_threshold\":75,\"status\":\"planned\"}"
                         },
-                        "description": "Requires permission: `periods.update` for the period project. If the period is set to active, other active periods in the same project are switched to passive."
+                        "description": "Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint."
                     },
                     "response": [
                         {
@@ -17656,7 +18808,7 @@
             "description": "",
             "item": [
                 {
-                    "name": "\u00d6\u011frenciye manuel kredi ekleme\/\u00e7\u0131karma",
+                    "name": "Ogrenciye manuel kredi ekleme\/cikarma.",
                     "request": {
                         "url": {
                             "host": "{{baseUrl}}",
@@ -17684,13 +18836,69 @@
                     "response": []
                 },
                 {
-                    "name": "\u00d6\u011frenciye manuel rozet verme",
+                    "name": "Ogrenciye manuel rozet verme.",
                     "request": {
                         "url": {
                             "host": "{{baseUrl}}",
                             "path": "api\/admin\/badges\/award",
                             "query": [],
                             "raw": "{{baseUrl}}\/api\/admin\/badges\/award"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"user_id\":\"consequatur\",\"badge_id\":\"consequatur\"}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Ogrenciye manuel kredi ekleme\/cikarma.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/credits\/adjust",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/credits\/adjust"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"participant_id\":\"consequatur\",\"amount\":17,\"reason\":\"mqeopfuudtdsufvyvddqa\"}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Ogrenciye manuel rozet verme.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/badges\/award",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/badges\/award"
                         },
                         "method": "POST",
                         "header": [
@@ -17949,6 +19157,12 @@
                                     "value": "travel",
                                     "type": "text",
                                     "description": "Transaction category, max 80 chars."
+                                },
+                                {
+                                    "key": "category_note",
+                                    "value": "amniihfqcoynlazghdtqt",
+                                    "type": "text",
+                                    "description": "This field is required when <code>category<\/code> is <code>other<\/code>. Must not be greater than 500 characters."
                                 },
                                 {
                                     "key": "spending_unit",
@@ -18581,6 +19795,12 @@
                                     "description": "Transaction category, max 80 chars."
                                 },
                                 {
+                                    "key": "category_note",
+                                    "value": "amniihfqcoynlazghdtqt",
+                                    "type": "text",
+                                    "description": "This field is required when <code>category<\/code> is <code>other<\/code>. Must not be greater than 500 characters."
+                                },
+                                {
                                     "key": "spending_unit",
                                     "value": "Operasyon",
                                     "type": "text",
@@ -19179,6 +20399,12 @@
                                     "value": "travel",
                                     "type": "text",
                                     "description": "Transaction category, max 80 chars."
+                                },
+                                {
+                                    "key": "category_note",
+                                    "value": "amniihfqcoynlazghdtqt",
+                                    "type": "text",
+                                    "description": "This field is required when <code>category<\/code> is <code>other<\/code>. Must not be greater than 500 characters."
                                 },
                                 {
                                     "key": "spending_unit",
@@ -21141,7 +22367,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"matrix\":[\"consequatur\"],\"granular_matrix\":[\"consequatur\"],\"granular_scopes\":[{\"scopes\":[{\"permission_name\":\"consequatur\",\"scope_type\":\"assigned_projects\"}]}]}"
+                            "raw": "{\"matrix\":[\"consequatur\"],\"granular_matrix\":[\"consequatur\"],\"granular_scopes\":[{\"scopes\":[{\"permission_name\":\"consequatur\",\"scope_type\":\"own_projects\"}]}]}"
                         },
                         "description": "Requires permission: `permissions.matrix.update` with global `all` scope. Accepts either `granular_matrix` or legacy `matrix`, never both. Granular updates validate role\/permission compatibility, sync Spatie permissions, optionally sync role permission scopes and clear the permission cache. Super admin always receives all permissions."
                     },
@@ -23081,7 +24307,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"search\":\"vmqeopfuudtdsufvyvddq\",\"status\":\"candidate\",\"format\":\"word\"}"
+                            "raw": "{\"search\":\"vmqeopfuudtdsufvyvddq\",\"status\":\"active\",\"format\":\"csv\"}"
                         },
                         "description": "Requires permission: `trainers.export` with a usable scope. Applies the same search\/status filters as the list endpoint and returns an exported file through the shared admin export responder. Supported formats include CSV, Excel\/XLSX, PDF and Word\/DOCX."
                     },
@@ -23141,7 +24367,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"search\":\"vmqeopfuudtdsufvyvddq\",\"status\":\"active\",\"per_page\":1}"
+                            "raw": "{\"search\":\"vmqeopfuudtdsufvyvddq\",\"status\":\"passive\",\"per_page\":1}"
                         },
                         "description": "Requires permission: `trainers.view` with a usable non-empty scope. Trainers are project-independent records, so no project ownership filter is applied; the scope check only decides whether the action is usable in the panel. Returns paginated trainers, summary stats and allowed status values."
                     },
@@ -24654,7 +25880,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"format\":\"pdf\"}"
+                            "raw": "{\"format\":\"docx\"}"
                         },
                         "description": "Panel\/admin endpoint exposed under `\/admin\/chatbot\/export\/{token}` and `\/panel\/chatbot\/export\/{token}`. Requires global `all` scope for `chatbot.view` or `chatbot.manage`, validates the token shape, then confirms the cached export belongs to the authenticated user.\n\nThe token is generated only by successful chatbot answers with table data, is cached for 15 minutes, and is consumed by this endpoint through `AdminExportResponder`. Supported formats are `csv`, `xlsx`, `excel`, `pdf`, `docx`, and `word`; omitted format defaults to CSV."
                     },
@@ -24781,7 +26007,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"format\":\"docx\"}"
+                            "raw": "{\"format\":\"xlsx\"}"
                         },
                         "description": "Panel\/admin endpoint exposed under `\/admin\/chatbot\/export\/{token}` and `\/panel\/chatbot\/export\/{token}`. Requires global `all` scope for `chatbot.view` or `chatbot.manage`, validates the token shape, then confirms the cached export belongs to the authenticated user.\n\nThe token is generated only by successful chatbot answers with table data, is cached for 15 minutes, and is consumed by this endpoint through `AdminExportResponder`. Supported formats are `csv`, `xlsx`, `excel`, `pdf`, `docx`, and `word`; omitted format defaults to CSV."
                     },
@@ -24919,7 +26145,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"project_id\":17,\"context\":\"meeting_manage\"}"
+                            "raw": "{\"project_id\":17,\"context\":\"program\"}"
                         },
                         "description": "Returns active coordinator\/staff users that can be assigned to a program or meeting. Exposed under `\/panel\/calendar\/assignees` and `\/calendar\/assignees`. Permission depends on `context`: `calendar.assignments.manage` for program assignments, `calendar.meetings.create` for meeting creation, and `calendar.meetings.manage` for meeting management.\n\nIf `project_id` is provided, the caller must have that permission for the project. General meetings without a project require global scope for the selected meeting permission. Media-unit staff may be assignable across projects; other candidates must coordinate, participate in, or have calendar\/projects access to the project."
                     },
@@ -25011,7 +26237,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\"panel\":\"staff\"}"
+                            "raw": "{\"panel\":\"coordinator\"}"
                         },
                         "description": "Exposed under `\/panel\/calendar\/google\/connect` and `\/calendar\/google\/connect`. Requires global `all` scope for `calendar.google.connect`. Generates a short-lived OAuth state and returns the Google authorization URL. The callback is handled outside the API controller by the Google Calendar callback route."
                     },
@@ -27018,6 +28244,156 @@
                             "name": ""
                         }
                     ]
+                }
+            ]
+        },
+        {
+            "name": "Application Intake Management",
+            "description": "",
+            "item": [
+                {
+                    "name": "GET api\/admin\/projects\/{id}\/application-settings",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/projects\/:id\/application-settings",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/projects\/:id\/application-settings",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the project."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"period_id\":17}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "PATCH api\/admin\/projects\/{id}\/application-settings",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/admin\/projects\/:id\/application-settings",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/admin\/projects\/:id\/application-settings",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the project."
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"period_id\":17,\"is_open\":true,\"starts_at\":\"2026-08-21T04:14:30\",\"ends_at\":\"2107-09-19\",\"next_application_date\":\"2026-08-21T04:14:30\",\"has_interview\":true,\"quota\":45,\"change_note\":\"qeopfuudtdsufvyvddqam\"}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/panel\/projects\/{id}\/application-settings",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/projects\/:id\/application-settings",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/projects\/:id\/application-settings",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the project."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"period_id\":17}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "PATCH api\/panel\/projects\/{id}\/application-settings",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/panel\/projects\/:id\/application-settings",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/panel\/projects\/:id\/application-settings",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "consequatur",
+                                    "description": "The ID of the project."
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"period_id\":17,\"is_open\":true,\"starts_at\":\"2026-08-21T04:14:31\",\"ends_at\":\"2107-09-19\",\"next_application_date\":\"2026-08-21T04:14:31\",\"has_interview\":true,\"quota\":45,\"change_note\":\"qeopfuudtdsufvyvddqam\"}"
+                        },
+                        "description": ""
+                    },
+                    "response": []
                 }
             ]
         }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Feedback;
@@ -15,6 +16,8 @@ use Illuminate\Support\Str;
  */
 class AttendanceController extends Controller
 {
+    use ResolvesProjectPeriodContext;
+
     /**
      * Mark attendance with a QR token.
      *
@@ -52,6 +55,8 @@ class AttendanceController extends Controller
         if (! $program) {
             return response()->json(['message' => 'Gecersiz veya suresi dolmus QR kod.'], 400);
         }
+
+        $this->assertPeriodResolvable($request, $program->period_id);
 
         if ($program->qr_expires_at && now()->isAfter($program->qr_expires_at)) {
             return response()->json(['message' => 'Bu QR kodun suresi dolmus. Lutfen ekrandaki yeni kodu okutun.'], 400);

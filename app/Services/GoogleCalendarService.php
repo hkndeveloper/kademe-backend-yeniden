@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\CalendarEvent;
 use App\Models\Program;
 use App\Models\SystemSetting;
@@ -13,6 +14,10 @@ use Illuminate\Support\Str;
 
 class GoogleCalendarService
 {
+    public function __construct(private readonly PeriodWritePolicy $periodWritePolicy)
+    {
+    }
+
     private const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
     private const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
     private const API_BASE = 'https://www.googleapis.com/calendar/v3';
@@ -89,7 +94,7 @@ class GoogleCalendarService
             ->with(['project:id,name'])
             ->where(function ($query) {
                 $query->whereNull('period_id')
-                    ->orWhereHas('period', fn ($periodQuery) => $periodQuery->where('status', '!=', 'completed'));
+                    ->orWhereHas('period', fn ($periodQuery) => $periodQuery->whereIn('status', ['active', 'closing']));
             })
             ->get();
 
@@ -110,7 +115,14 @@ class GoogleCalendarService
 
     public function syncProgram(Program $program): CalendarEvent
     {
-        $program->loadMissing('project:id,name');
+        $program->loadMissing(['project:id,name', 'period']);
+        if ($program->period) {
+            $this->periodWritePolicy->assertAllowed(
+                null,
+                $program->period,
+                PeriodWriteAction::RESOLVE_OPERATION,
+            );
+        }
 
         $event = CalendarEvent::query()->updateOrCreate(
             ['program_id' => $program->id],

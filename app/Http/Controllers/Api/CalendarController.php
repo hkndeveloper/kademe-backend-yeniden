@@ -11,15 +11,15 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\SupportTicket;
 use App\Models\User;
-use App\Support\AdminExportResponder;
-use App\Support\IstanbulDateTime;
 use App\Services\GoogleCalendarService;
 use App\Services\PermissionResolver;
+use App\Support\AdminExportResponder;
+use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 /**
  * @group Calendar
@@ -31,8 +31,7 @@ class CalendarController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function canAssignProgram(User $user, Program $program): bool
     {
@@ -113,7 +112,7 @@ class CalendarController extends Controller
             ->map(function (User $user) {
                 return [
                     'id' => $user->id,
-                    'name' => trim($user->name . ' ' . $user->surname),
+                    'name' => trim($user->name.' '.$user->surname),
                     'role' => $user->role,
                     'unit' => $user->staffProfile?->unit,
                     'title' => $user->staffProfile?->title,
@@ -235,7 +234,10 @@ class CalendarController extends Controller
         }
 
         $projects = Project::query()
-            ->with(['periods' => fn ($query) => $query->orderByDesc('start_date')])
+            ->with([
+                'periods' => fn ($query) => $query->orderByDesc('start_date'),
+                'currentPeriod',
+            ])
             ->whereIn('id', $projectIds)
             ->orderBy('name')
             ->get();
@@ -387,12 +389,12 @@ class CalendarController extends Controller
         $openSupportCount = empty($supportProjectIds)
             ? 0
             : SupportTicket::query()
-            ->whereIn('project_id', $supportProjectIds)
+                ->whereIn('project_id', $supportProjectIds)
                 ->whereIn('status', ['open', 'in_progress'])
                 ->count();
 
         $syncedCount = $programs
-            ->filter(fn (array $program) => !empty($program['calendar_event']['google_event_id']))
+            ->filter(fn (array $program) => ! empty($program['calendar_event']['google_event_id']))
             ->count();
         $unassignedCount = $programs
             ->filter(fn (array $program) => empty($program['calendar_event']['assigned_count']))
@@ -400,7 +402,7 @@ class CalendarController extends Controller
 
         return response()->json([
             'projects' => $projects->map(function (Project $project) {
-                $activePeriod = $project->periods->firstWhere('status', 'active') ?? $project->periods->first();
+                $activePeriod = $project->currentPeriodOrLegacy() ?? $project->periods->first();
 
                 return [
                     'id' => $project->id,
@@ -535,6 +537,7 @@ class CalendarController extends Controller
      * Submitted users are filtered to active coordinator/staff users assignable to the program project; invalid-but-existing users are ignored rather than forced into the assignment list.
      *
      * @urlParam id integer required Program ID. Example: 44
+     *
      * @bodyParam assigned_user_ids integer[] Optional user IDs to assign. Example: [7,8]
      *
      * @response 200 {"message":"Gorev atamalari guncellendi.","program_id":44,"calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_users":[{"id":7,"name":"Ada Yilmaz","role":"staff","unit":"Medya","title":"Uzman"}],"assigned_count":1}}
@@ -707,6 +710,7 @@ class CalendarController extends Controller
      * Updates assigned users for a manual meeting. Exposed under `/panel/calendar/meetings/{id}/assignments` and `/calendar/meetings/{id}/assignments`. Requires `calendar.meetings.manage`; project-linked meetings require project access for that action, while projectless meetings require global scope. The meeting period must be writable.
      *
      * @urlParam id integer required Calendar event ID for a meeting. Example: 91
+     *
      * @bodyParam assigned_user_ids integer[] Optional user IDs to assign. Example: [7,8]
      *
      * @response 200 {"message":"Toplanti davetlileri guncellendi.","meeting_id":91,"calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_count":1}}
@@ -771,6 +775,7 @@ class CalendarController extends Controller
     public function googleStatus(Request $request, GoogleCalendarService $googleCalendar): JsonResponse
     {
         $this->abortUnlessAllowed($request, 'calendar.view');
+
         return response()->json($googleCalendar->getStatus());
     }
 
@@ -903,7 +908,8 @@ class CalendarController extends Controller
             $assignedNames = $assignedIds
                 ->map(function (int $userId) use ($assignedUsers) {
                     $user = $assignedUsers->get($userId);
-                    return $user ? trim($user->name . ' ' . $user->surname) : null;
+
+                    return $user ? trim($user->name.' '.$user->surname) : null;
                 })
                 ->filter()
                 ->values()
@@ -926,7 +932,7 @@ class CalendarController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'takvim_programlari_' . now()->format('Ymd_His'),
+            'takvim_programlari_'.now()->format('Ymd_His'),
             'Takvim Programlari',
             $headings,
             $rows,

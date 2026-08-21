@@ -1,190 +1,76 @@
-name: Chatbot
+name: 'Files & Exports'
 description: ''
 endpoints:
   -
     custom: []
     httpMethods:
       - POST
-    uri: api/admin/chatbot/query
+    uri: api/admin/media/upload
     metadata:
       custom: []
-      groupName: Chatbot
+      groupName: 'Files & Exports'
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Query the panel data assistant.'
+      title: 'Upload a media file.'
       description: |-
-        Panel/admin endpoint exposed under `/admin/chatbot/query` and `/panel/chatbot/query`. The caller must have global `all` scope for `chatbot.view` or `chatbot.manage`; having only the chatbot permission does not bypass data permissions. The service is rule-based, never executes raw SQL from user input, and each intent checks its own action+scope and project visibility before reading data.
+        Panel/admin endpoint exposed under `/admin/media/upload` and `/panel/media/upload`. Access is granted when the user has global scope for one of the content/settings permissions (`content.blog.create`, `content.blog.update`, `content.faq.create`, `content.faq.update`, `settings.update`, `content.site_settings.update`) or at least one scoped project/program media permission (`projects.content.update`, `projects.gallery.update`, `projects.internships.manage`, `projects.mentors.manage`, `projects.eurodesk.manage`, `projects.rewards.manage`, `programs.update`, `programs.media.upload`).
 
-        Supported examples include participant/application/program/financial/project comparison summaries, trainers, logs, users, staff, support tickets, workflow requests, announcements, periods, volunteer opportunities, digital bohca, assignments, certificates, project special modules, and system guidance about action+scope, project-specific modules, or CV/PDF behavior.
-
-        Responses may include `table.columns`, `table.rows`, `stats`, and an `export_token`. Export tokens are cached for the requesting user for 15 minutes and can be downloaded from the export endpoint as CSV, XLSX/Excel, PDF, DOCX/Word.
+        Send as `multipart/form-data`. The optional `folder` is slugged and files are stored under `kademe-media/{folder}` with a UUID filename. Returns both storage path and resolved URL.
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
+      Content-Type: multipart/form-data
       Accept: application/json
     urlParameters: []
     cleanUrlParameters: []
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters:
-      message:
+      file:
         custom: []
-        name: message
-        description: 'Natural-language command or question. Max 2000 characters.'
+        name: file
+        description: 'Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB.'
         required: true
-        example: 'Diplomasi360 katilimci listesi son 30 gun limit 50'
-        type: string
+        example: null
+        type: file
         enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      message: 'Diplomasi360 katilimci listesi son 30 gun limit 50'
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: |-
-          {
-            "reply": "Diplomasi360 katilimci listesi hazirlandi.",
-            "intent": "participant_list",
-            "table": {"columns": ["ID", "Ad Soyad"], "rows": [["42", "Ada Yilmaz"]]},
-            "stats": null,
-            "export_token": "V5T4uQ7nYp8bC1dE2fG3hI4jK5lM6nO7pQ8rS9tU0vW1xY2z",
-            "export_available": true
-          }
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 200
-        content: '{"reply":"Bu veri icin gerekli yetki bulunmuyor: projects.participants.view.","intent":"permission_denied","table":null,"stats":null,"export_token":null,"export_available":false}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Veri asistani icin tum sistem kapsami gerekir."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The message field is required.","errors":{"message":["The message field is required."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: 'api/admin/chatbot/export/{token}'
-    metadata:
-      custom: []
-      groupName: Chatbot
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Download a chatbot table export.'
-      description: |-
-        Panel/admin endpoint exposed under `/admin/chatbot/export/{token}` and `/panel/chatbot/export/{token}`. Requires global `all` scope for `chatbot.view` or `chatbot.manage`, validates the token shape, then confirms the cached export belongs to the authenticated user.
-
-        The token is generated only by successful chatbot answers with table data, is cached for 15 minutes, and is consumed by this endpoint through `AdminExportResponder`. Supported formats are `csv`, `xlsx`, `excel`, `pdf`, `docx`, and `word`; omitted format defaults to CSV.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      token:
-        custom: []
-        name: token
-        description: '40-64 character export token returned by the query endpoint.'
-        required: true
-        example: V5T4uQ7nYp8bC1dE2fG3hI4jK5lM6nO7pQ8rS9tU0vW1xY2z
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      token: V5T4uQ7nYp8bC1dE2fG3hI4jK5lM6nO7pQ8rS9tU0vW1xY2z
-    queryParameters:
-      format:
-        custom: []
-        name: format
-        description: 'Export format: csv, xlsx, excel, pdf, docx, or word.'
-        required: false
-        example: xlsx
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      format: xlsx
-    bodyParameters:
-      format:
-        custom: []
-        name: format
-        description: ''
-        required: false
-        example: docx
-        type: string
-        enumValues:
-          - csv
-          - xlsx
-          - excel
-          - pdf
-          - docx
-          - word
         exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      folder:
+        custom: []
+        name: folder
+        description: 'Optional logical folder name.'
+        required: false
+        example: homepage-hero
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
         nullable: true
         deprecated: false
     cleanBodyParameters:
-      format: docx
-    fileParameters: []
+      folder: homepage-hero
+    fileParameters:
+      file: null
     responses:
       -
         custom: []
         status: 200
-        content: '"ID,Ad Soyad\n42,Ada Yilmaz"'
-        headers: []
-        description: csv
-      -
-        custom: []
-        status: 400
-        content: '"Gecersiz disa aktarma istegi."'
+        content: '{"message":"Dosya yuklendi.","path":"kademe-media/homepage-hero/uuid.png","url":"https://storage.example.com/kademe-media/homepage-hero/uuid.png"}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '"Yetkisiz."'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 410
-        content: '"Disa aktarma suresi dolmus veya gecersiz."'
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
         headers: []
         description: ''
       -
         custom: []
         status: 422
-        content: '{"message":"The selected format is invalid.","errors":{"format":["The selected format is invalid."]}}'
+        content: '{"message":"The file field is required."}'
         headers: []
         description: ''
     responseFields: []
@@ -199,186 +85,72 @@ endpoints:
     custom: []
     httpMethods:
       - POST
-    uri: api/panel/chatbot/query
+    uri: api/panel/media/upload
     metadata:
       custom: []
-      groupName: Chatbot
+      groupName: 'Files & Exports'
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Query the panel data assistant.'
+      title: 'Upload a media file.'
       description: |-
-        Panel/admin endpoint exposed under `/admin/chatbot/query` and `/panel/chatbot/query`. The caller must have global `all` scope for `chatbot.view` or `chatbot.manage`; having only the chatbot permission does not bypass data permissions. The service is rule-based, never executes raw SQL from user input, and each intent checks its own action+scope and project visibility before reading data.
+        Panel/admin endpoint exposed under `/admin/media/upload` and `/panel/media/upload`. Access is granted when the user has global scope for one of the content/settings permissions (`content.blog.create`, `content.blog.update`, `content.faq.create`, `content.faq.update`, `settings.update`, `content.site_settings.update`) or at least one scoped project/program media permission (`projects.content.update`, `projects.gallery.update`, `projects.internships.manage`, `projects.mentors.manage`, `projects.eurodesk.manage`, `projects.rewards.manage`, `programs.update`, `programs.media.upload`).
 
-        Supported examples include participant/application/program/financial/project comparison summaries, trainers, logs, users, staff, support tickets, workflow requests, announcements, periods, volunteer opportunities, digital bohca, assignments, certificates, project special modules, and system guidance about action+scope, project-specific modules, or CV/PDF behavior.
-
-        Responses may include `table.columns`, `table.rows`, `stats`, and an `export_token`. Export tokens are cached for the requesting user for 15 minutes and can be downloaded from the export endpoint as CSV, XLSX/Excel, PDF, DOCX/Word.
+        Send as `multipart/form-data`. The optional `folder` is slugged and files are stored under `kademe-media/{folder}` with a UUID filename. Returns both storage path and resolved URL.
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
+      Content-Type: multipart/form-data
       Accept: application/json
     urlParameters: []
     cleanUrlParameters: []
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters:
-      message:
+      file:
         custom: []
-        name: message
-        description: 'Natural-language command or question. Max 2000 characters.'
+        name: file
+        description: 'Upload file; jpg, jpeg, png, webp, pdf, doc, docx, max 20MB.'
         required: true
-        example: 'Diplomasi360 katilimci listesi son 30 gun limit 50'
-        type: string
+        example: null
+        type: file
         enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      message: 'Diplomasi360 katilimci listesi son 30 gun limit 50'
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: |-
-          {
-            "reply": "Diplomasi360 katilimci listesi hazirlandi.",
-            "intent": "participant_list",
-            "table": {"columns": ["ID", "Ad Soyad"], "rows": [["42", "Ada Yilmaz"]]},
-            "stats": null,
-            "export_token": "V5T4uQ7nYp8bC1dE2fG3hI4jK5lM6nO7pQ8rS9tU0vW1xY2z",
-            "export_available": true
-          }
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 200
-        content: '{"reply":"Bu veri icin gerekli yetki bulunmuyor: projects.participants.view.","intent":"permission_denied","table":null,"stats":null,"export_token":null,"export_available":false}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Veri asistani icin tum sistem kapsami gerekir."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The message field is required.","errors":{"message":["The message field is required."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: 'api/panel/chatbot/export/{token}'
-    metadata:
-      custom: []
-      groupName: Chatbot
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Download a chatbot table export.'
-      description: |-
-        Panel/admin endpoint exposed under `/admin/chatbot/export/{token}` and `/panel/chatbot/export/{token}`. Requires global `all` scope for `chatbot.view` or `chatbot.manage`, validates the token shape, then confirms the cached export belongs to the authenticated user.
-
-        The token is generated only by successful chatbot answers with table data, is cached for 15 minutes, and is consumed by this endpoint through `AdminExportResponder`. Supported formats are `csv`, `xlsx`, `excel`, `pdf`, `docx`, and `word`; omitted format defaults to CSV.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      token:
-        custom: []
-        name: token
-        description: '40-64 character export token returned by the query endpoint.'
-        required: true
-        example: V5T4uQ7nYp8bC1dE2fG3hI4jK5lM6nO7pQ8rS9tU0vW1xY2z
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      token: V5T4uQ7nYp8bC1dE2fG3hI4jK5lM6nO7pQ8rS9tU0vW1xY2z
-    queryParameters:
-      format:
-        custom: []
-        name: format
-        description: 'Export format: csv, xlsx, excel, pdf, docx, or word.'
-        required: false
-        example: xlsx
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      format: xlsx
-    bodyParameters:
-      format:
-        custom: []
-        name: format
-        description: ''
-        required: false
-        example: pdf
-        type: string
-        enumValues:
-          - csv
-          - xlsx
-          - excel
-          - pdf
-          - docx
-          - word
         exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      folder:
+        custom: []
+        name: folder
+        description: 'Optional logical folder name.'
+        required: false
+        example: homepage-hero
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
         nullable: true
         deprecated: false
     cleanBodyParameters:
-      format: pdf
-    fileParameters: []
+      folder: homepage-hero
+    fileParameters:
+      file: null
     responses:
       -
         custom: []
         status: 200
-        content: '"ID,Ad Soyad\n42,Ada Yilmaz"'
-        headers: []
-        description: csv
-      -
-        custom: []
-        status: 400
-        content: '"Gecersiz disa aktarma istegi."'
+        content: '{"message":"Dosya yuklendi.","path":"kademe-media/homepage-hero/uuid.png","url":"https://storage.example.com/kademe-media/homepage-hero/uuid.png"}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '"Yetkisiz."'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 410
-        content: '"Disa aktarma suresi dolmus veya gecersiz."'
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
         headers: []
         description: ''
       -
         custom: []
         status: 422
-        content: '{"message":"The selected format is invalid.","errors":{"format":["The selected format is invalid."]}}'
+        content: '{"message":"The file field is required."}'
         headers: []
         description: ''
     responseFields: []

@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\Period;
 use App\Models\Project;
+use App\Services\PeriodWritePolicy;
 use App\Support\ProjectPeriodContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -15,6 +17,7 @@ trait ResolvesProjectPeriodContext
         Request $request,
         ?int $periodId,
         string $archivePermission = 'periods.archive.update',
+        PeriodWriteAction $action = PeriodWriteAction::CREATE_OPERATION,
     ): void {
         if ($periodId === null) {
             return;
@@ -24,22 +27,37 @@ trait ResolvesProjectPeriodContext
             ->select(['id', 'project_id', 'name', 'status'])
             ->findOrFail($periodId);
 
-        if ($period->status !== 'completed') {
-            return;
-        }
-
-        abort_unless(
-            $this->permissionResolver->hasPermission($request->user(), $archivePermission)
-            && $this->permissionResolver->canAccessProject($request->user(), $archivePermission, (int) $period->project_id),
-            423,
-            'Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir.'
+        $writeContext = app(PeriodWritePolicy::class)->assertAllowed(
+            $request->user(),
+            $period,
+            $action,
+            $archivePermission,
         );
 
-        $request->attributes->set('archive_write_override', [
-            'period_id' => (int) $period->id,
-            'project_id' => (int) $period->project_id,
-            'permission' => $archivePermission,
-        ]);
+        $request->attributes->set('period_write_context', $writeContext);
+        if ($writeContext['mode'] === PeriodWriteAction::ARCHIVE_CORRECTION->value) {
+            $request->attributes->set('archive_write_override', $writeContext);
+        }
+    }
+
+    protected function assertPeriodResolvable(Request $request, ?int $periodId): void
+    {
+        $this->assertPeriodWritable(
+            $request,
+            $periodId,
+            'periods.archive.update',
+            PeriodWriteAction::RESOLVE_OPERATION,
+        );
+    }
+
+    protected function assertPeriodConfigurable(Request $request, ?int $periodId): void
+    {
+        $this->assertPeriodWritable(
+            $request,
+            $periodId,
+            'periods.archive.update',
+            PeriodWriteAction::CONFIGURE_PERIOD,
+        );
     }
 
     protected function resolveProjectPeriodContext(

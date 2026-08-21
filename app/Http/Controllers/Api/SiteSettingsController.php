@@ -26,8 +26,7 @@ class SiteSettingsController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function canViewAdminSettings(Request $request): bool
     {
@@ -408,6 +407,7 @@ class SiteSettingsController extends Controller
      * Public endpoint used by web/mobile shells to render shared navigation, footer, contact, social, homepage/about/blog/FAQ labels, and computed counters. No bearer token is required. Sensitive Google Calendar/OAuth settings are explicitly removed from this response.
      *
      * @group Public Content
+     *
      * @unauthenticated
      *
      * @response 200 {"settings":{"general":{"site_name":"KADEME","site_tagline":"Gelecegin Liderlik Okulu"},"navigation":{"header_links":[]},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}
@@ -430,6 +430,7 @@ class SiteSettingsController extends Controller
      * Public endpoint used by the homepage. No bearer token is required. Returns normalized public settings, computed counters, active projects, published blogs, and public programs/activities. The backend caches the assembled payload briefly and removes sensitive Google Calendar/OAuth settings before returning it.
      *
      * @group Public Content
+     *
      * @unauthenticated
      *
      * @response 200 {"settings":{"homepage":{"hero_title_line_1":"YETENEGINI","stats_mode":"auto"}},"computed_homepage_stats":[],"projects":[],"blogs":[],"programs":[]}
@@ -442,7 +443,10 @@ class SiteSettingsController extends Controller
 
             $projects = Project::query()
                 ->where('status', 'active')
-                ->with(['periods' => fn ($query) => $query->where('status', 'active')])
+                ->with([
+                    'periods' => fn ($query) => $query->whereIn('status', ['active', 'closing']),
+                    'currentPeriod',
+                ])
                 ->orderBy('name')
                 ->take(12)
                 ->get();
@@ -483,6 +487,7 @@ class SiteSettingsController extends Controller
      * Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.view` or `content.site_settings.update`. Returns normalized settings with defaults merged, stored media URLs normalized through the media storage layer, and computed homepage counters for preview screens.
      *
      * @group Site Settings
+     *
      * @authenticated
      *
      * @response 200 {"settings":{"general":{"site_name":"KADEME"},"contact":{"contact_email":"info@kademe.org"},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}
@@ -506,6 +511,7 @@ class SiteSettingsController extends Controller
      * Supported top-level groups are `general`, `contact`, `social_media`, `navigation`, `homepage`, `about`, `blog_page`, and `faq_page`. Unknown nested keys inside accepted groups are stored as provided, so mobile/web clients should send the full intended group shape when replacing complex arrays such as navigation links or homepage blocks.
      *
      * @group Site Settings
+     *
      * @authenticated
      *
      * @bodyParam settings object required Grouped site settings payload.
@@ -517,6 +523,7 @@ class SiteSettingsController extends Controller
      * @bodyParam settings.about object Optional about page copy.
      * @bodyParam settings.blog_page object Optional blog page copy.
      * @bodyParam settings.faq_page object Optional FAQ page copy.
+     *
      * @response 200 {"message":"Site ayarlari guncellendi.","settings":{"general":{"site_name":"KADEME"}},"computed_homepage_stats":[]}
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"The settings field is required."}

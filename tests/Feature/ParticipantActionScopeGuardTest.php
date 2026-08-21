@@ -177,15 +177,31 @@ class ParticipantActionScopeGuardTest extends TestCase
             ->assertJsonPath('program.credit.net_amount', 0)
             ->assertJsonPath('program.feedback_submitted', false);
 
+        $otherPeriod = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => 'Kapsam Disi Donem',
+            'start_date' => now()->addYear()->startOfYear(),
+            'end_date' => now()->addYear()->endOfYear(),
+            'status' => 'planned',
+        ]);
         $unavailableProgram = Program::query()->create([
             'project_id' => $project->id,
-            'period_id' => null,
+            'period_id' => $otherPeriod->id,
             'title' => 'Kapsam Disi Program',
             'start_at' => now()->addDays(2),
             'end_at' => now()->addDays(2)->addHour(),
             'status' => 'scheduled',
             'target_audience' => ['student'],
         ]);
+
+        $this->getJson('/api/programs')
+            ->assertOk()
+            ->assertJsonCount(1, 'programs')
+            ->assertJsonPath('programs.0.id', $program->id)
+            ->assertJsonPath('programs.0.project.id', $project->id)
+            ->assertJsonPath('programs.0.period.id', $period->id)
+            ->assertJsonPath('programs.0.attendance_status', 'present')
+            ->assertJsonMissing(['id' => $unavailableProgram->id]);
 
         $this->getJson("/api/programs/{$unavailableProgram->id}")
             ->assertForbidden()

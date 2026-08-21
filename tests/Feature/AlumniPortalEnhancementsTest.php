@@ -105,6 +105,17 @@ class AlumniPortalEnhancementsTest extends TestCase
         $admin = $this->makeSuperAdmin('period-cert-admin@test.local');
         $student = $this->makeStudent('period-cert-student@test.local');
         [$project, $periodA] = $this->makeProjectWithPeriod('period-cert-proj');
+        $participantA = $this->makeParticipant($student, $project, $periodA);
+
+        Sanctum::actingAs($admin);
+
+        $this->patchJson("/api/panel/participants/{$participantA->id}/graduation", [
+            'graduation_status' => 'completed',
+        ])->assertOk();
+
+        // Sertifika ayrimini iki eszamanli aktif donemle degil, ard arda
+        // tamamlanan ve acilan donemlerle dogrula.
+        $periodA->forceFill(['status' => 'completed'])->save();
         $periodB = Period::query()->create([
             'project_id' => $project->id,
             'name' => 'Ikinci Donem',
@@ -114,15 +125,7 @@ class AlumniPortalEnhancementsTest extends TestCase
             'credit_threshold' => 75,
             'status' => 'active',
         ]);
-
-        $participantA = $this->makeParticipant($student, $project, $periodA);
         $participantB = $this->makeParticipant($student, $project, $periodB);
-
-        Sanctum::actingAs($admin);
-
-        $this->patchJson("/api/panel/participants/{$participantA->id}/graduation", [
-            'graduation_status' => 'completed',
-        ])->assertOk();
 
         $this->patchJson("/api/panel/participants/{$participantB->id}/graduation", [
             'graduation_status' => 'completed',

@@ -13,6 +13,7 @@ use App\Models\Program;
 use App\Models\ProgramPhoto;
 use App\Services\CreditService;
 use App\Services\PermissionResolver;
+use App\Services\PeriodLifecycleService;
 use App\Support\AdminExportResponder;
 use App\Support\FeedbackFormResolver;
 use App\Support\MediaStorage;
@@ -57,7 +58,7 @@ class AdminProgramController extends Controller
     {
         $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
         $ctx=$this->resolveProjectPeriodContext($request,'programs.view',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
-        $q=Program::query()->with(['project:id,name','period:id,name'])->withCount(['attendances','feedbacks'])->orderByDesc('start_at');
+        $q=Program::query()->with(['project:id,name','period:id,name,status'])->withCount(['attendances','feedbacks'])->orderByDesc('start_at');
         $this->applyProjectPeriodContext($q,$ctx);
         return response()->json(['programs'=>$q->get()->map(fn(Program $p)=>$this->programPayload($p))->values()]);
     }
@@ -77,12 +78,40 @@ class AdminProgramController extends Controller
     {
         $this->abortUnlessAllowed($request, 'programs.view');
         $program = Program::query()
-            ->with(['project:id,name', 'period:id,name'])
+            ->with(['project:id,name', 'period:id,name,status'])
             ->withCount(['attendances', 'feedbacks'])
             ->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'programs.view', (int) $program->project_id);
 
         return response()->json(['program' => $this->programPayload($program)]);
+    }
+
+    /**
+     * Return the minimum scoped context needed by the QR attendance screen.
+     */
+    public function qrContext(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'programs.qr.manage');
+        $program = Program::query()
+            ->with(['period:id,name,status'])
+            ->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request, 'programs.qr.manage', (int) $program->project_id);
+
+        return response()->json([
+            'program' => [
+                'id' => (int) $program->id,
+                'title' => $program->title,
+                'period' => $program->period ? [
+                    'id' => (int) $program->period->id,
+                    'name' => $program->period->name,
+                    'status' => $program->period->status,
+                    'lifecycle' => [
+                        'is_archive_mode' => PeriodLifecycleService::isArchiveStatus($program->period->status),
+                        'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($program->period->status),
+                    ],
+                ] : null,
+            ],
+        ]);
     }
 
     /**
@@ -102,7 +131,7 @@ class AdminProgramController extends Controller
         $this->abortUnlessAllowed($request,'programs.export');
         $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
         $ctx=$this->resolveProjectPeriodContext($request,'programs.export',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
-        $q=Program::query()->with(['project:id,name','period:id,name'])->orderByDesc('start_at');
+        $q=Program::query()->with(['project:id,name','period:id,name,status'])->orderByDesc('start_at');
         $this->applyProjectPeriodContext($q,$ctx);
         $rows=$q->get()->map(fn(Program $p)=>[$p->id,$p->project?->name??'-',$p->period?->name??'-',$p->title,$p->location??'-',IstanbulDateTime::format($p->start_at),IstanbulDateTime::format($p->end_at),$p->status,$p->credit_deduction??0])->all();
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','programlar_'.now()->format('Ymd_His'),'Programlar',['ID','Proje','Donem','Program','Yer','Baslangic','Bitis','Durum','Kredi Kesintisi'],$rows);
@@ -149,7 +178,7 @@ class AdminProgramController extends Controller
         $this->assertNoOverlap($v['start_at'],$v['end_at']??null,null,$v['status']??'scheduled');
         $program=Program::query()->create($v+['created_by'=>$request->user()->id]);
         $this->clearPublicHomepageCache();
-        return response()->json(['program'=>$this->programPayload($program->load(['project:id,name','period:id,name']))],201);
+        return response()->json(['program'=>$this->programPayload($program->load(['project:id,name','period:id,name,status']))],201);
     }
 
     /**
@@ -171,15 +200,19 @@ class AdminProgramController extends Controller
      */
     public function update(Request $request,int $id): JsonResponse
     {
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.update',(int)$program->project_id);
         $v=$this->validatedProgramData($request,false,$program);
         $periodId=array_key_exists('period_id',$v)?(int)$v['period_id']:(int)$program->period_id;
-        $this->assertPeriodWritable($request,$periodId);
+        if (isset($v['status']) && in_array($v['status'], ['completed', 'cancelled'], true)) {
+            $this->assertPeriodResolvable($request, $periodId);
+        } else {
+            $this->assertPeriodWritable($request, $periodId);
+        }
         $this->assertNoOverlap($v['start_at']??$program->start_at,$v['end_at']??$program->end_at,$program->id,$v['status']??$program->status);
         $program->update($v);
         $this->clearPublicHomepageCache();
-        return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
+        return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name,status']))]);
     }
 
     /**
@@ -198,9 +231,9 @@ class AdminProgramController extends Controller
     {
         $this->abortUnlessAllowed($request,'programs.qr.manage');
         $v=$request->validate(['rotation_seconds'=>['nullable','integer','min:15','max:300']]);
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.qr.manage',(int)$program->project_id);
-        $this->assertPeriodWritable($request,$program->period_id);
+        $this->assertPeriodResolvable($request,$program->period_id);
         if(!$program->isAttendanceWindowOpen()) throw ValidationException::withMessages(['start_at'=>['QR yoklama sadece program saat araliginda baslatilabilir.']])->status(422);
         $rotation=(int)($v['rotation_seconds']??$program->qr_rotation_seconds??30);
         $token='prg_'.$program->id.'_'.Str::random(48);
@@ -223,9 +256,9 @@ class AdminProgramController extends Controller
     public function complete(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.complete');
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.complete',(int)$program->project_id);
-        $this->assertPeriodWritable($request,$program->period_id);
+        $this->assertPeriodResolvable($request,$program->period_id);
         $participants=$this->programParticipantsQuery($program)->where('status','active')->get();
         $validUserIds=Attendance::query()->where('program_id',$program->id)->where('is_valid',true)->pluck('user_id')->map(fn($id)=>(int)$id)->all();
         $deducted=0;
@@ -241,7 +274,7 @@ class AdminProgramController extends Controller
         $request->attributes->set('audit.event', 'program.completed');
         $request->attributes->set('audit.description', 'program.completed');
         $request->attributes->set('audit.properties', ['operation'=>'program_complete','project_id'=>$program->project_id,'period_id'=>$program->period_id,'program_id'=>$program->id,'program_title'=>$program->title,'deducted_participant_count'=>$deducted]);
-        return response()->json(['message'=>'Program tamamlandi.','program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name'])),'deducted_participant_count'=>$deducted]);
+        return response()->json(['message'=>'Program tamamlandi.','program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name,status'])),'deducted_participant_count'=>$deducted]);
     }
     /**
      * List program attendance details.
@@ -256,7 +289,7 @@ class AdminProgramController extends Controller
     public function attendanceDetails(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.attendance.view');
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.attendance.view',(int)$program->project_id);
         $records=$this->attendanceRecords($program);
         $present=$records->filter(fn($r)=>(bool)$r['is_valid']&&$r['recorded_at'])->count();
@@ -287,9 +320,9 @@ class AdminProgramController extends Controller
     public function markManualAttendance(Request $request,int $id,int $participantId): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.attendance.manage');
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.attendance.manage',(int)$program->project_id);
-        $this->assertPeriodWritable($request,$program->period_id);
+        $this->assertPeriodResolvable($request,$program->period_id);
         $v=$request->validate(['is_valid'=>['required','boolean'],'manual_note'=>['nullable','string','max:1000']]);
         $participant=$this->programParticipantsQuery($program)->where('id',$participantId)->with('user:id,role')->firstOrFail();
         $attendance=DB::transaction(function()use($program,$participant,$v,$request){
@@ -320,7 +353,7 @@ class AdminProgramController extends Controller
     public function exportAttendanceDetails(Request $request,int $id)
     {
         $this->abortUnlessAllowed($request,'programs.attendance.export');
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.attendance.export',(int)$program->project_id);
         $rows=$this->attendanceRecords($program)->map(fn(array $r)=>[$r['id']??'-',$r['student'],$r['email']??'-',$r['attendance_status']??'-',$r['method']??'-',$r['feedback_submitted']?'evet':'hayir',$r['credit_deducted']?'evet':'hayir',$r['credit_restored']?'evet':'hayir',$r['recorded_at']??'-'])->all();
         return AdminExportResponder::download($request->string('format')->toString()?:'csv','program_'.$program->id.'_yoklama_'.now()->format('Ymd_His'),'Program Yoklama Detaylari',['Yoklama ID','Katilimci','E-posta','Durum','Yontem','Feedback','Kredi Kesildi','Kredi Iade','Kayit Zamani'],$rows);
@@ -376,7 +409,7 @@ class AdminProgramController extends Controller
     public function feedbackStats(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.view');
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.view',(int)$program->project_id);
         $feedbacks=Feedback::query()->where('program_id',$program->id)->orderByDesc('submitted_at')->get();
         $questions=FeedbackFormResolver::forProgram($program);
@@ -558,13 +591,13 @@ class AdminProgramController extends Controller
     public function updateVisibility(Request $request,int $id): JsonResponse
     {
         $this->abortUnlessAllowed($request,'programs.update');
-        $program=Program::query()->with(['project:id,name','period:id,name'])->findOrFail($id);
+        $program=Program::query()->with(['project:id,name','period:id,name,status'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request,'programs.update',(int)$program->project_id);
         $this->assertPeriodWritable($request,$program->period_id);
         $v=$request->validate(['is_public'=>['sometimes','boolean'],'is_featured'=>['sometimes','boolean']]);
         $program->update($v);
         $this->clearPublicHomepageCache();
-        return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name']))]);
+        return response()->json(['program'=>$this->programPayload($program->fresh(['project:id,name','period:id,name,status']))]);
     }
     private function validatedProgramData(Request $request,bool $creating,?Program $program=null): array
     {
@@ -580,12 +613,34 @@ class AdminProgramController extends Controller
 
     private function assertNoOverlap(mixed $startAt,mixed $endAt,?int $ignoreId,?string $status): void
     {
-        return;
+        if ($status === 'cancelled') {
+            return;
+        }
+
+        $start=IstanbulDateTime::toUtc($startAt);
+        $end=IstanbulDateTime::toUtc($endAt);
+
+        if ($start === null || $end === null) {
+            return;
+        }
+
+        $overlapExists=Program::query()
+            ->where('status','!=','cancelled')
+            ->when($ignoreId !== null,fn($query)=>$query->whereKeyNot($ignoreId))
+            ->where('start_at','<',$end)
+            ->where('end_at','>',$start)
+            ->exists();
+
+        if ($overlapExists) {
+            throw ValidationException::withMessages([
+                'start_at'=>['Bu saat araliginda baska bir program bulunuyor.'],
+            ])->status(422);
+        }
     }
 
     private function programPayload(Program $p): array
     {
-        return ['id'=>$p->id,'title'=>$p->title,'description'=>$p->description,'location'=>$p->location,'location_place_name'=>$p->location_place_name,'location_place_address'=>$p->location_place_address,'location_place_id'=>$p->location_place_id,'location_place_provider'=>$p->location_place_provider,'latitude'=>$p->latitude,'longitude'=>$p->longitude,'radius_meters'=>$p->radius_meters,'guest_info'=>$p->guest_info,'start_at'=>optional($p->start_at)?->toIso8601String(),'end_at'=>optional($p->end_at)?->toIso8601String(),'credit_deduction'=>$p->credit_deduction,'application_quota'=>$p->application_quota,'target_audience'=>$p->targetAudience(),'feedback_form_template_id'=>$p->feedback_form_template_id,'status'=>$p->status,'project_id'=>$p->project_id,'project'=>$p->project?['id'=>$p->project->id,'name'=>$p->project->name]:null,'period'=>$p->period?['id'=>$p->period->id,'name'=>$p->period->name]:null,'attendance_count'=>$p->attendances_count??null,'feedback_count'=>$p->feedbacks_count??null,'is_public'=>(bool)$p->is_public,'is_featured'=>(bool)$p->is_featured,'questions'=>FeedbackFormResolver::forProgram($p)];
+        return ['id'=>$p->id,'title'=>$p->title,'description'=>$p->description,'location'=>$p->location,'location_place_name'=>$p->location_place_name,'location_place_address'=>$p->location_place_address,'location_place_id'=>$p->location_place_id,'location_place_provider'=>$p->location_place_provider,'latitude'=>$p->latitude,'longitude'=>$p->longitude,'radius_meters'=>$p->radius_meters,'guest_info'=>$p->guest_info,'start_at'=>optional($p->start_at)?->toIso8601String(),'end_at'=>optional($p->end_at)?->toIso8601String(),'credit_deduction'=>$p->credit_deduction,'application_quota'=>$p->application_quota,'target_audience'=>$p->targetAudience(),'feedback_form_template_id'=>$p->feedback_form_template_id,'status'=>$p->status,'project_id'=>$p->project_id,'project'=>$p->project?['id'=>$p->project->id,'name'=>$p->project->name]:null,'period'=>$p->period?['id'=>$p->period->id,'name'=>$p->period->name,'status'=>$p->period->status,'lifecycle'=>['is_archive_mode'=>PeriodLifecycleService::isArchiveStatus($p->period->status),'write_capabilities'=>PeriodLifecycleService::writeCapabilitiesForStatus($p->period->status)]]:null,'attendance_count'=>$p->attendances_count??null,'feedback_count'=>$p->feedbacks_count??null,'is_public'=>(bool)$p->is_public,'is_featured'=>(bool)$p->is_featured,'questions'=>FeedbackFormResolver::forProgram($p)];
     }
 
     private function programParticipantsQuery(Program $program)
@@ -616,7 +671,7 @@ class AdminProgramController extends Controller
     {
         $v=$request->validate(['project_id'=>'nullable|integer|exists:projects,id','period_id'=>'nullable|integer|exists:periods,id']);
         $ctx=$this->resolveProjectPeriodContext($request,'programs.view',!empty($v['project_id'])?(int)$v['project_id']:null,!empty($v['period_id'])?(int)$v['period_id']:null);
-        $q=Program::query()->with(['project:id,name','period:id,name'])->whereHas('feedbacks')->orderByDesc('start_at');
+        $q=Program::query()->with(['project:id,name','period:id,name,status'])->whereHas('feedbacks')->orderByDesc('start_at');
         $this->applyProjectPeriodContext($q,$ctx);
         $programs=$q->get(); $byProgram=Feedback::query()->whereIn('program_id',$programs->pluck('id'))->orderByDesc('submitted_at')->get()->groupBy('program_id');
         $questionStats=[]; $programRows=[]; $recent=[]; $allRatings=collect(); $withComment=0;

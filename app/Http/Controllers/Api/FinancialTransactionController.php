@@ -380,7 +380,7 @@ class FinancialTransactionController extends Controller
             403,
             'Bu islem icin onay yetkiniz yok.'
         );
-        $this->assertPeriodWritable($request, $transaction->period_id);
+        $this->assertPeriodResolvable($request, $transaction->period_id);
 
         if ($transaction->status !== 'pending') {
             return response()->json(['message' => 'Bu işlem zaten işlenmiş.'], 422);
@@ -423,7 +423,7 @@ class FinancialTransactionController extends Controller
             403,
             'Bu islem icin red yetkiniz yok.'
         );
-        $this->assertPeriodWritable($request, $transaction->period_id);
+        $this->assertPeriodResolvable($request, $transaction->period_id);
 
         if ($transaction->status !== 'pending') {
             return response()->json(['message' => 'Bu işlem zaten işlenmiş.'], 422);
@@ -463,7 +463,7 @@ class FinancialTransactionController extends Controller
             403,
             'Bu islem icin odeme yetkiniz yok.'
         );
-        $this->assertPeriodWritable($request, $transaction->period_id);
+        $this->assertPeriodResolvable($request, $transaction->period_id);
 
         if ($transaction->status !== 'approved') {
             return response()->json(['message' => 'Sadece onaylanan işlemler ödenmiş olarak işaretlenebilir.'], 422);

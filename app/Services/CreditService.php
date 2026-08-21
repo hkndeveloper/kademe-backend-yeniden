@@ -2,17 +2,20 @@
 
 namespace App\Services;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\Participant;
 use App\Models\CreditLog;
 use App\Models\Program;
 use App\Models\SystemNotification;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CreditService
 {
     public function __construct(
-        private readonly NotificationService $notificationService
+        private readonly NotificationService $notificationService,
+        private readonly PeriodWritePolicy $periodWritePolicy,
     ) {
     }
 
@@ -164,6 +167,16 @@ class CreditService
 
     private function createLogAndApplyDelta(Participant $participant, int $delta, string $type, string $reason, ?int $programId = null, ?int $adminId = null): CreditLog
     {
+        $participant->loadMissing('period');
+        if ($participant->period) {
+            $actor = $adminId ? User::query()->find($adminId) : null;
+            $this->periodWritePolicy->assertAllowed(
+                $actor,
+                $participant->period,
+                PeriodWriteAction::RESOLVE_OPERATION,
+            );
+        }
+
         $log = CreditLog::create([
             'participant_id' => $participant->id,
             'user_id' => $participant->user_id,
@@ -189,8 +202,16 @@ class CreditService
      * Bir devamsizligi mazaretli olarak isaretle.
      * Admin panelinden cagrilir.
      */
-    public function markExcused(CreditLog $log, bool $excused = true): void
+    public function markExcused(CreditLog $log, bool $excused = true, ?User $actor = null): void
     {
+        $log->loadMissing('period');
+        if ($log->period) {
+            $this->periodWritePolicy->assertAllowed(
+                $actor,
+                $log->period,
+                PeriodWriteAction::RESOLVE_OPERATION,
+            );
+        }
         $log->update(['excused' => $excused]);
     }
 

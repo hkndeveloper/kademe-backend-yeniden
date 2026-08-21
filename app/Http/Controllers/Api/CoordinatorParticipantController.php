@@ -671,7 +671,7 @@ class CoordinatorParticipantController extends Controller
         $this->abortUnlessAllowed($request, 'projects.participants.manage');
         $participant = Participant::with(['user', 'project:id,name', 'period:id,name'])->findOrFail($id);
         $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
-        $this->assertPeriodWritable($request, $participant->period_id);
+        $this->assertPeriodResolvable($request, $participant->period_id);
         $before = [
             'status' => $participant->status,
             'graduation_status' => $participant->graduation_status,
@@ -759,7 +759,7 @@ class CoordinatorParticipantController extends Controller
         foreach ($ids as $participantId) {
             $participant = $participants->get($participantId);
             try {
-                $this->assertPeriodWritable($request, $participant->period_id);
+                $this->assertPeriodResolvable($request, $participant->period_id);
                 $payload = DB::transaction(function () use ($participant, $validated, $actor) {
                     return $this->applyGraduationTransition(
                         $participant,

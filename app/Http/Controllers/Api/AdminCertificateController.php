@@ -261,7 +261,7 @@ class AdminCertificateController extends Controller
                 422,
                 'Secilen donem bu projeye ait degil.'
             );
-            $this->assertPeriodWritable($request, (int) $validated['period_id']);
+            $this->assertPeriodResolvable($request, (int) $validated['period_id']);
         }
 
         $exists = Certificate::where('user_id', $validated['user_id'])

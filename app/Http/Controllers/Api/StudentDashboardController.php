@@ -187,6 +187,18 @@ class StudentDashboardController extends Controller
             ->orderByDesc('issued_at')
             ->get();
 
+        $badges = $user->badges()
+            ->with('project:id,name,slug')
+            ->orderByDesc('user_badges.awarded_at')
+            ->get();
+
+        $creditHistory = CreditLog::query()
+            ->where('user_id', $user->id)
+            ->with(['project:id,name,slug', 'program:id,title'])
+            ->orderByDesc('created_at')
+            ->take(25)
+            ->get();
+
         return response()->json([
             'profile' => [
                 'full_name' => trim(($user->name ?? '').' '.($user->surname ?? '')),
@@ -203,12 +215,39 @@ class StudentDashboardController extends Controller
             ],
             'saved_draft' => $user->profile?->digital_cv_data,
             'approved' => [
-                'title' => 'KADEME Dijital CV',
+                'title' => 'KADEME Onayli Dijital CV',
                 'generated_at' => now()->toIso8601String(),
+                'total_credit' => (int) $participations->sum('credit'),
+                'completed_project_count' => $participations
+                    ->filter(fn (Participant $participation) => in_array($participation->graduation_status, ['completed', 'graduated'], true) || $participation->graduated_at !== null)
+                    ->count(),
+                'badge_count' => $badges->count(),
                 'certificate_count' => $certificates->count(),
             ],
-            'projects' => [],
-            'badges' => [],
+            'projects' => $participations
+                ->filter(fn (Participant $participation) => $participation->project !== null)
+                ->map(fn (Participant $participation) => [
+                    'id' => $participation->project->id,
+                    'name' => $participation->project->name,
+                    'type' => $participation->project->type,
+                    'description' => $participation->project->short_description ?: $participation->project->description,
+                    'period' => $participation->period?->name,
+                    'status' => $participation->status,
+                    'graduation_status' => $participation->graduation_status,
+                    'credit' => (int) $participation->credit,
+                    'enrolled_at' => optional($participation->enrolled_at)?->toIso8601String(),
+                    'graduated_at' => optional($participation->graduated_at)?->toIso8601String(),
+                ])
+                ->values(),
+            'badges' => $badges->map(fn (Badge $badge) => [
+                'id' => $badge->id,
+                'name' => $badge->name,
+                'description' => $badge->description,
+                'tier' => $badge->tier,
+                'title_label' => $badge->title_label,
+                'project' => $badge->project?->name,
+                'awarded_at' => optional($badge->pivot?->awarded_at)?->toIso8601String(),
+            ])->values(),
             'certificates' => $certificates->map(fn (Certificate $certificate) => [
                 'id' => $certificate->id,
                 'type' => $certificate->type,
@@ -221,7 +260,14 @@ class StudentDashboardController extends Controller
                 'included_in_cv' => (bool) $certificate->included_in_cv,
                 'source' => $certificate->source,
             ])->values(),
-            'credit_history' => [],
+            'credit_history' => $creditHistory->map(fn (CreditLog $log) => [
+                'amount' => (int) $log->amount,
+                'type' => $log->type,
+                'reason' => $log->reason,
+                'project' => $log->project?->name,
+                'program' => $log->program?->title,
+                'created_at' => optional($log->created_at)?->toIso8601String(),
+            ])->values(),
         ]);
     }
 

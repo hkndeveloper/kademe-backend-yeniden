@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Models\ForumPost;
 use App\Models\Participant;
 use App\Models\Period;
@@ -18,6 +19,7 @@ use App\Services\PermissionResolver;
 class ForumController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -239,6 +241,7 @@ class ForumController extends Controller
             isset($validated['period_id']) ? (int) $validated['period_id'] : null,
             true
         );
+        $this->assertPeriodWritable($request, $period?->id);
 
         $post = ForumPost::query()->create([
             'project_id' => (int) $validated['project_id'],
@@ -278,12 +281,13 @@ class ForumController extends Controller
         $post = ForumPost::query()->with(['project:id', 'period:id,name,status'])->findOrFail($postId);
         $projectIds = $this->participantProjectIds((int) $request->user()->id);
         abort_unless(in_array((int) $post->project_id, $projectIds, true), 403, 'Bu proje forumuna erisiminiz yok.');
-        $this->resolveParticipantPeriod(
+        $period = $this->resolveParticipantPeriod(
             (int) $request->user()->id,
             (int) $post->project_id,
             $post->period_id ? (int) $post->period_id : null,
             true
         );
+        $this->assertPeriodWritable($request, $period?->id);
 
         $reply = $post->replies()->create([
             'user_id' => $request->user()->id,

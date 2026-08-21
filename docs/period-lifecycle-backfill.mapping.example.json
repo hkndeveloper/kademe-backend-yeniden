@@ -1,0 +1,21 @@
+{
+    "passive_periods": {
+        "12": {
+            "target_status": "completed",
+            "reason": "Koordinator ve veri sahibi tarafindan gecmis donem olarak onaylandi."
+        },
+        "13": {
+            "target_status": "cancelled",
+            "reason": "Baslamadan iptal edilen legacy donem olarak onaylandi."
+        },
+        "14": {
+            "target_status": "planned",
+            "reason": "Henuz baslamamis planli donem olarak onaylandi."
+        }
+    },
+    "legacy_archive_period_ids": [
+        12,
+        21
+    ],
+    "legacy_archive_reason": "Koordinator onayli legacy arsiv backfill islemi."
+}

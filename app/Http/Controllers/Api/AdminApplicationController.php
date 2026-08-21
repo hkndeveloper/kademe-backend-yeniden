@@ -89,7 +89,7 @@ class AdminApplicationController extends Controller
 
     private function allowedStatusesFor(Application $application): array
     {
-        $hasInterview = (bool) $application->project?->has_interview;
+        $hasInterview = $application->usesInterview();
 
         if (! $hasInterview) {
             return match ($application->status) {
@@ -118,7 +118,7 @@ class AdminApplicationController extends Controller
 
     private function assertProjectHasSeatFor(Application $application): void
     {
-        $quota = $application->program?->application_quota ?? $application->project?->quota;
+        $quota = $application->program?->application_quota ?? $application->projectQuota();
         if ($quota === null || (int) $quota <= 0) {
             return;
         }
@@ -203,7 +203,7 @@ class AdminApplicationController extends Controller
             'form_entries' => $this->formEntries($application),
             'available_statuses' => $this->allowedStatusesFor($application),
             'workflow' => [
-                'has_interview' => (bool) $application->project?->has_interview,
+                'has_interview' => $application->usesInterview(),
                 'next_step' => $this->nextWorkflowStep($application),
             ],
         ];
@@ -211,7 +211,7 @@ class AdminApplicationController extends Controller
 
     private function nextWorkflowStep(Application $application): ?string
     {
-        if (! $application->project?->has_interview) {
+        if (! $application->usesInterview()) {
             return $application->status === 'pending' ? 'final_decision' : null;
         }
 
@@ -253,7 +253,7 @@ class AdminApplicationController extends Controller
             ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
         );
 
-        $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
+        $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota']);
         $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status'])) {
@@ -327,7 +327,7 @@ class AdminApplicationController extends Controller
         );
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
+            ->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota']);
         $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status'])) {
@@ -380,7 +380,7 @@ class AdminApplicationController extends Controller
         );
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview']);
+            ->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota']);
         $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status'])) {
@@ -481,7 +481,7 @@ class AdminApplicationController extends Controller
         );
 
         $query = Application::query()
-            ->with(['user:id,name,surname,email,phone', 'period', 'program:id,title,start_at', 'project:id,name,has_interview', 'form:id,fields']);
+            ->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota', 'form:id,fields']);
         $this->applyProjectPeriodContext($query, $context);
 
         if (! empty($validated['status'])) {
@@ -590,11 +590,11 @@ class AdminApplicationController extends Controller
             'evaluation_note' => 'nullable|string',
         ]);
 
-        $application = Application::with(['period', 'program:id,title,application_quota', 'project:id,name,has_interview,quota'])->findOrFail($id);
+        $application = Application::with(['period', 'applicationWindow:id,has_interview,quota', 'program:id,title,application_quota', 'project:id,name,has_interview,quota'])->findOrFail($id);
 
         $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
-        $this->assertPeriodWritable($request, $application->period_id);
+        $this->assertPeriodResolvable($request, $application->period_id);
         $this->assertStatusAllowed($application, $validated['status']);
 
         if ($validated['status'] === 'interview_planned' && empty($validated['interview_at']) && empty($application->interview_at)) {
@@ -712,7 +712,7 @@ class AdminApplicationController extends Controller
             'interview_at' => 'required|date|after:now',
         ]);
 
-        $application = Application::with('project:id,name,has_interview')->findOrFail($id);
+        $application = Application::with(['project:id,name,has_interview', 'applicationWindow:id,has_interview'])->findOrFail($id);
 
         abort_unless(
             $this->permissionResolver->canAccessProject(
@@ -724,8 +724,8 @@ class AdminApplicationController extends Controller
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
 
-        abort_unless((bool) $application->project?->has_interview, 422, 'Bu proje mulakatli basvuru akisi kullanmiyor.');
-        $this->assertPeriodWritable($request, $application->period_id);
+        abort_unless($application->usesInterview(), 422, 'Bu basvuru mulakatli basvuru akisi kullanmiyor.');
+        $this->assertPeriodResolvable($request, $application->period_id);
         $this->assertStatusAllowed($application, 'interview_planned');
 
         $application->update([
@@ -763,7 +763,7 @@ class AdminApplicationController extends Controller
     {
         $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
 
-        $application = Application::with('project:id,name,has_interview')->findOrFail($id);
+        $application = Application::with(['project:id,name,has_interview', 'applicationWindow:id,has_interview'])->findOrFail($id);
 
         abort_unless(
             $this->permissionResolver->canAccessProject(
@@ -775,7 +775,7 @@ class AdminApplicationController extends Controller
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
 
-        $this->assertPeriodWritable($request, $application->period_id);
+        $this->assertPeriodResolvable($request, $application->period_id);
         $this->assertStatusAllowed($application, 'waitlisted');
 
         $application->update([
@@ -823,7 +823,7 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
-        $this->assertPeriodWritable($request, $application->period_id);
+        $this->assertPeriodResolvable($request, $application->period_id);
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular siralanabilir.');
 
         $application->update(['waitlist_order' => (int) $validated['waitlist_order']]);
@@ -862,7 +862,7 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
-        $this->assertPeriodWritable($request, $application->period_id);
+        $this->assertPeriodResolvable($request, $application->period_id);
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular davet edilebilir.');
 
         $expiresAt = $validated['expires_at'] ?? now()->addDays(3);
@@ -898,7 +898,7 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
-        $this->assertPeriodWritable($request, $application->period_id);
+        $this->assertPeriodResolvable($request, $application->period_id);
         abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular icin yenileme yapilabilir.');
 
         $expiredCount = $this->waitlistService->expireOverdueInvitations($application);

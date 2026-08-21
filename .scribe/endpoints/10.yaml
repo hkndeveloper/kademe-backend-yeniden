@@ -431,6 +431,114 @@ endpoints:
   -
     custom: []
     httpMethods:
+      - GET
+    uri: 'api/admin/programs/{id}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get one panel program.'
+      description: |-
+        Requires permission: `programs.view` for the program project. The project scope is
+        checked against the program itself so a guessed ID cannot bypass the action scope.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Haftalik Atolye","status":"scheduled"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/programs/{id}/qr-context'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Return the minimum scoped context needed by the QR attendance screen.'
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the program.'
+        required: true
+        example: '1562'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: '1562'
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
       - POST
     uri: api/admin/programs
     metadata:
@@ -502,6 +610,50 @@ endpoints:
         description: 'Optional location text.'
         required: false
         example: 'Kademe Salon 1'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_name:
+        custom: []
+        name: location_place_name
+        description: 'Optional selected map place name.'
+        required: false
+        example: 'Kademe Genel Merkez'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_address:
+        custom: []
+        name: location_place_address
+        description: 'Optional selected map place address.'
+        required: false
+        example: 'Bosna Hersek Mahallesi, Istanbul'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_id:
+        custom: []
+        name: location_place_id
+        description: 'Optional selected map provider place ID.'
+        required: false
+        example: 'osm:node:123'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_provider:
+        custom: []
+        name: location_place_provider
+        description: 'Optional selected map provider.'
+        required: false
+        example: osm
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -657,6 +809,10 @@ endpoints:
       title: 'Haftalik Atolye'
       description: 'Uygulama calismasi.'
       location: 'Kademe Salon 1'
+      location_place_name: 'Kademe Genel Merkez'
+      location_place_address: 'Bosna Hersek Mahallesi, Istanbul'
+      location_place_id: 'osm:node:123'
+      location_place_provider: osm
       latitude: 41.0082
       longitude: 28.9784
       radius_meters: 150
@@ -1704,6 +1860,114 @@ endpoints:
   -
     custom: []
     httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get one panel program.'
+      description: |-
+        Requires permission: `programs.view` for the program project. The project scope is
+        checked against the program itself so a guessed ID cannot bypass the action scope.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Program ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"program":{"id":8,"title":"Haftalik Atolye","status":"scheduled"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/programs/{id}/qr-context'
+    metadata:
+      custom: []
+      groupName: 'Programs & Attendance'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Return the minimum scoped context needed by the QR attendance screen.'
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the program.'
+        required: true
+        example: '1562'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: '1562'
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
       - POST
     uri: api/panel/programs
     metadata:
@@ -1775,6 +2039,50 @@ endpoints:
         description: 'Optional location text.'
         required: false
         example: 'Kademe Salon 1'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_name:
+        custom: []
+        name: location_place_name
+        description: 'Optional selected map place name.'
+        required: false
+        example: 'Kademe Genel Merkez'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_address:
+        custom: []
+        name: location_place_address
+        description: 'Optional selected map place address.'
+        required: false
+        example: 'Bosna Hersek Mahallesi, Istanbul'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_id:
+        custom: []
+        name: location_place_id
+        description: 'Optional selected map provider place ID.'
+        required: false
+        example: 'osm:node:123'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      location_place_provider:
+        custom: []
+        name: location_place_provider
+        description: 'Optional selected map provider.'
+        required: false
+        example: osm
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -1930,6 +2238,10 @@ endpoints:
       title: 'Haftalik Atolye'
       description: 'Uygulama calismasi.'
       location: 'Kademe Salon 1'
+      location_place_name: 'Kademe Genel Merkez'
+      location_place_address: 'Bosna Hersek Mahallesi, Istanbul'
+      location_place_id: 'osm:node:123'
+      location_place_provider: osm
       latitude: 41.0082
       longitude: 28.9784
       radius_meters: 150

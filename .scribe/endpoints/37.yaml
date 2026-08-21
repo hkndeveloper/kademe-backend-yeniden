@@ -1,19 +1,19 @@
-name: 'Admin Panel'
+name: 'Permissions Matrix'
 description: ''
 endpoints:
   -
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/modules
+    uri: api/admin/permissions-matrix
     metadata:
       custom: []
-      groupName: 'Admin Panel'
+      groupName: 'Permissions Matrix'
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: ''
-      description: ''
+      title: 'Get the permissions matrix workspace.'
+      description: 'Requires permission: `permissions.matrix.view` with global `all` scope. Ensures default roles/permissions exist, then returns legacy and granular permission catalogs, effective role permissions, supported scope options, default role scopes, role compatibility maps and stored role permission scopes.'
       authenticated: true
       deprecated: false
     headers:
@@ -27,7 +27,2266 @@ endpoints:
     bodyParameters: []
     cleanBodyParameters: []
     fileParameters: []
-    responses: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"roles":[{"id":1,"name":"coordinator","label":"Koordinator","user_count":4,"permissions":["projects.view"],"granular_effective":["projects.view"]}],"granular_matrix_groups":{"Projects":[{"name":"projects.view","label":"projects.view","group":"Projects"}]},"supported_scope_options":{"projects.view":["all","own_projects","assigned_projects","selected_projects","none"]},"role_scope_storage_ready":true}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/admin/permissions-matrix
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update the role permissions matrix.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. Accepts either `granular_matrix` or legacy `matrix`, never both. Granular updates validate role/permission compatibility, sync Spatie permissions, optionally sync role permission scopes and clear the permission cache. Super admin always receives all permissions.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      matrix:
+        custom: []
+        name: matrix
+        description: 'Optional legacy matrix rows. Do not send with `granular_matrix`.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      granular_matrix:
+        custom: []
+        name: granular_matrix
+        description: 'Optional granular matrix rows. Do not send with `matrix`.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      granular_scopes:
+        custom: []
+        name: granular_scopes
+        description: 'Optional role-level scope rows for granular permissions.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'matrix[].role':
+        custom: []
+        name: 'matrix[].role'
+        description: 'The <code>name</code> of an existing record in the roles table.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'matrix[].permissions':
+        custom: []
+        name: 'matrix[].permissions'
+        description: ''
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_matrix[].role':
+        custom: []
+        name: 'granular_matrix[].role'
+        description: 'The <code>name</code> of an existing record in the roles table.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_matrix[].permissions':
+        custom: []
+        name: 'granular_matrix[].permissions'
+        description: ''
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].role':
+        custom: []
+        name: 'granular_scopes[].role'
+        description: 'This field is required when <code>granular_scopes</code> is present. The <code>name</code> of an existing record in the roles table.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes':
+        custom: []
+        name: 'granular_scopes[].scopes'
+        description: ''
+        required: false
+        example: null
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes[].permission_name':
+        custom: []
+        name: 'granular_scopes[].scopes[].permission_name'
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes[].scope_type':
+        custom: []
+        name: 'granular_scopes[].scopes[].scope_type'
+        description: ''
+        required: true
+        example: own_projects
+        type: string
+        enumValues:
+          - all
+          - own_projects
+          - assigned_projects
+          - own_unit
+          - selected_projects
+          - self
+          - none
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes[].scope_payload':
+        custom: []
+        name: 'granular_scopes[].scopes[].scope_payload'
+        description: ''
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'granular_matrix.*.role':
+        custom: []
+        name: 'granular_matrix.*.role'
+        description: 'required_with:granular_matrix Role name.'
+        required: false
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_matrix.*.permissions':
+        custom: []
+        name: 'granular_matrix.*.permissions'
+        description: 'Permission names for the role.'
+        required: false
+        example:
+          - projects.view
+          - programs.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.role':
+        custom: []
+        name: 'granular_scopes.*.role'
+        description: 'required_with:granular_scopes Role name.'
+        required: false
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes':
+        custom: []
+        name: 'granular_scopes.*.scopes'
+        description: 'Scope definitions for permissions granted to the role.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes.*.permission_name':
+        custom: []
+        name: 'granular_scopes.*.scopes.*.permission_name'
+        description: 'Permission name.'
+        required: true
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes.*.scope_type':
+        custom: []
+        name: 'granular_scopes.*.scopes.*.scope_type'
+        description: 'Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none.'
+        required: true
+        example: own_projects
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes.*.scope_payload':
+        custom: []
+        name: 'granular_scopes.*.scopes.*.scope_payload'
+        description: 'Optional scope payload. `selected_projects` keeps `project_ids`; `own_unit` keeps `unit`; dynamic scopes store an empty payload.'
+        required: false
+        example:
+          project_ids:
+            - 1
+            - 2
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'matrix.*.role':
+        custom: []
+        name: 'matrix.*.role'
+        description: 'required_with:matrix Role name.'
+        required: false
+        example: staff
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'matrix.*.permissions':
+        custom: []
+        name: 'matrix.*.permissions'
+        description: 'Legacy permission names.'
+        required: false
+        example:
+          - users.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      matrix:
+        - consequatur
+      granular_matrix:
+        - consequatur
+      granular_scopes:
+        -
+          scopes:
+            -
+              permission_name: consequatur
+              scope_type: own_projects
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Granular yetki matrisi guncellendi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Yalnizca granular_matrix veya matrix (legacy) gonderin; ikisini birden gondermeyin."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/permissions-matrix/audit
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List permission matrix audit logs.'
+      description: 'Requires either `permissions.matrix.view` with global `all` scope or `logs.view` with global `all` scope. Reads the Spatie `activity_log` entries with `log_name=permissions` and returns the latest 50 changes. If the activity log table/package is unavailable, an empty list with a warning is returned.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"logs":[{"id":1,"description":"permission_granular_matrix.updated","created_at":"2026-06-30T12:00:00+00:00","causer":{"id":1,"name":"Admin","role":"super_admin"},"properties":{"roles":[{"role":"coordinator","granular_permission_count":12}]}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu global kayitlari goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/permissions-matrix/users
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List users for permission overrides.'
+      description: 'Requires permission: `permissions.user_override.view` with global `all` scope. Returns non-banned users with Spatie roles and staff unit/title metadata for the override panel.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional search across name, surname and email.'
+        required: false
+        example: ayse
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: ayse
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"users":[{"id":8,"name":"Ayse","surname":"Yilmaz","email":"ayse@example.com","role":"coordinator","roles":["coordinator"],"unit":"Program","title":"Koordinator"}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/permissions-matrix/users/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get user permission overrides.'
+      description: 'Requires permission: `permissions.user_override.view` with global `all` scope. Returns the selected user, stored allow/deny overrides, sanitized scope payloads and the resolver output showing the final effective permissions.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'User ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"user":{"id":8,"role":"coordinator","roles":["coordinator"]},"overrides":[{"permission_name":"projects.view","effect":"allow","scope_type":"selected_projects","scope_payload":{"project_ids":[1]}}],"resolved":{"permissions":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\User] 8"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/permissions-matrix/users/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update user permission overrides.'
+      description: 'Requires permission: `permissions.user_override.update` with global `all` scope. Replaces all overrides for the target user. Permission names must exist in the granular catalog or legacy map, must be compatible with the user role and scope types must be allowed for the role/permission pair. Clears the permission cache and logs `user_permission_overrides.updated`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'User ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      overrides:
+        custom: []
+        name: overrides
+        description: 'Complete replacement list. Send an empty array to clear overrides.'
+        required: true
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'overrides[].permission_name':
+        custom: []
+        name: 'overrides[].permission_name'
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'overrides[].effect':
+        custom: []
+        name: 'overrides[].effect'
+        description: ''
+        required: true
+        example: allow
+        type: string
+        enumValues:
+          - allow
+          - deny
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'overrides[].scope_type':
+        custom: []
+        name: 'overrides[].scope_type'
+        description: ''
+        required: false
+        example: own_unit
+        type: string
+        enumValues:
+          - all
+          - own_projects
+          - assigned_projects
+          - own_unit
+          - selected_projects
+          - self
+          - none
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'overrides[].scope_payload':
+        custom: []
+        name: 'overrides[].scope_payload'
+        description: ''
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'overrides.*.permission_name':
+        custom: []
+        name: 'overrides.*.permission_name'
+        description: 'Permission name.'
+        required: true
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'overrides.*.effect':
+        custom: []
+        name: 'overrides.*.effect'
+        description: 'Override effect. Allowed values: allow, deny.'
+        required: true
+        example: allow
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'overrides.*.scope_type':
+        custom: []
+        name: 'overrides.*.scope_type'
+        description: 'Optional scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none.'
+        required: false
+        example: selected_projects
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'overrides.*.scope_payload':
+        custom: []
+        name: 'overrides.*.scope_payload'
+        description: 'Optional payload.'
+        required: false
+        example:
+          project_ids:
+            - 1
+            - 2
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      overrides:
+        - consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Kullaniciya ozel yetkiler guncellendi.","resolved":{"permissions":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu kullanici tipi icin bu permission atanamaz."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/permissions-matrix/users/{id}/roles'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Assign roles to a user.'
+      description: 'Requires permission: `permissions.user_override.update` with global `all` scope. Syncs Spatie roles and optionally updates the primary `users.role` column. Student/alumni roles cannot be combined with authority roles. Clears the permission cache and logs `user_roles.updated`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'User ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      roles:
+        custom: []
+        name: roles
+        description: 'Role names to assign.'
+        required: true
+        example:
+          - coordinator
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      primary_role:
+        custom: []
+        name: primary_role
+        description: 'Optional primary role to store on the user record. Must be one of `roles`.'
+        required: false
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      'roles.*':
+        custom: []
+        name: 'roles.*'
+        description: 'Existing role name.'
+        required: true
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      roles:
+        - coordinator
+      primary_role: coordinator
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Kullanici rolleri guncellendi.","user":{"id":8,"role":"coordinator","roles":["coordinator"]},"resolved":{"permissions":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Ogrenci/mezun rolleri baska rollerle birlestirilemez."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/admin/permissions-matrix/roles
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get role catalog for the permission matrix.'
+      description: 'Requires permission: `permissions.matrix.view` with global `all` scope. Returns all Spatie roles, system-role markers, permission counts, assigned permissions, user counts and configured scope templates.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"roles":[{"id":1,"name":"coordinator","label":"Koordinator","is_system":true,"permission_count":12,"user_count":4}],"scope_templates":[]}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/admin/permissions-matrix/roles
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a custom role.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. The submitted name is normalized to a lowercase slug, system role names are reserved, and only valid granular permissions compatible with the role are assigned. Clears the permission cache and logs `role.custom.created`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Custom role name. It is normalized to lowercase slug format and must be unique.'
+        required: true
+        example: proje_denetcisi
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      permissions:
+        custom: []
+        name: permissions
+        description: 'Optional granular permission names.'
+        required: false
+        example:
+          - projects.view
+          - logs.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'permissions.*':
+        custom: []
+        name: 'permissions.*'
+        description: 'Permission name.'
+        required: false
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: proje_denetcisi
+      permissions:
+        - projects.view
+        - logs.view
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Ozel rol olusturuldu.","role":{"id":9,"name":"proje_denetcisi","permissions":[{"name":"projects.view"}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu isim sistem rolu olarak ayrildi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/permissions-matrix/roles/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a custom role.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be changed through this endpoint. Updates granular permissions and optional role scopes, validates scope compatibility, clears the permission cache and logs `role.custom.updated`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Custom role ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      permissions:
+        custom: []
+        name: permissions
+        description: 'Optional granular permission names.'
+        required: false
+        example:
+          - projects.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      scopes:
+        custom: []
+        name: scopes
+        description: 'Optional role scope rows.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'scopes[].permission_name':
+        custom: []
+        name: 'scopes[].permission_name'
+        description: 'This field is required when <code>scopes</code> is present.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'scopes[].scope_type':
+        custom: []
+        name: 'scopes[].scope_type'
+        description: 'This field is required when <code>scopes</code> is present.'
+        required: false
+        example: none
+        type: string
+        enumValues:
+          - all
+          - own_projects
+          - assigned_projects
+          - own_unit
+          - selected_projects
+          - self
+          - none
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'scopes[].scope_payload':
+        custom: []
+        name: 'scopes[].scope_payload'
+        description: ''
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'permissions.*':
+        custom: []
+        name: 'permissions.*'
+        description: 'Permission name.'
+        required: false
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'scopes.*.permission_name':
+        custom: []
+        name: 'scopes.*.permission_name'
+        description: 'required_with:scopes Permission name.'
+        required: false
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'scopes.*.scope_type':
+        custom: []
+        name: 'scopes.*.scope_type'
+        description: 'required_with:scopes Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none.'
+        required: false
+        example: selected_projects
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'scopes.*.scope_payload':
+        custom: []
+        name: 'scopes.*.scope_payload'
+        description: 'Optional scope payload.'
+        required: false
+        example:
+          project_ids:
+            - 1
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      permissions:
+        - projects.view
+      scopes:
+        - consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Rol yetkileri guncellendi.","role":{"id":9,"name":"proje_denetcisi"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Sistem rolleri buradan degistirilemez."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/permissions-matrix/roles/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a custom role.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be deleted and roles assigned to users must be unassigned first. Clears the permission cache and logs `role.custom.deleted`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Custom role ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Rol silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu role atanmis kullanicilar var. Once atamalari kaldirin."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/permissions-matrix
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get the permissions matrix workspace.'
+      description: 'Requires permission: `permissions.matrix.view` with global `all` scope. Ensures default roles/permissions exist, then returns legacy and granular permission catalogs, effective role permissions, supported scope options, default role scopes, role compatibility maps and stored role permission scopes.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"roles":[{"id":1,"name":"coordinator","label":"Koordinator","user_count":4,"permissions":["projects.view"],"granular_effective":["projects.view"]}],"granular_matrix_groups":{"Projects":[{"name":"projects.view","label":"projects.view","group":"Projects"}]},"supported_scope_options":{"projects.view":["all","own_projects","assigned_projects","selected_projects","none"]},"role_scope_storage_ready":true}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: api/panel/permissions-matrix
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update the role permissions matrix.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. Accepts either `granular_matrix` or legacy `matrix`, never both. Granular updates validate role/permission compatibility, sync Spatie permissions, optionally sync role permission scopes and clear the permission cache. Super admin always receives all permissions.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      matrix:
+        custom: []
+        name: matrix
+        description: 'Optional legacy matrix rows. Do not send with `granular_matrix`.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      granular_matrix:
+        custom: []
+        name: granular_matrix
+        description: 'Optional granular matrix rows. Do not send with `matrix`.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      granular_scopes:
+        custom: []
+        name: granular_scopes
+        description: 'Optional role-level scope rows for granular permissions.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'matrix[].role':
+        custom: []
+        name: 'matrix[].role'
+        description: 'The <code>name</code> of an existing record in the roles table.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'matrix[].permissions':
+        custom: []
+        name: 'matrix[].permissions'
+        description: ''
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_matrix[].role':
+        custom: []
+        name: 'granular_matrix[].role'
+        description: 'The <code>name</code> of an existing record in the roles table.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_matrix[].permissions':
+        custom: []
+        name: 'granular_matrix[].permissions'
+        description: ''
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].role':
+        custom: []
+        name: 'granular_scopes[].role'
+        description: 'This field is required when <code>granular_scopes</code> is present. The <code>name</code> of an existing record in the roles table.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes':
+        custom: []
+        name: 'granular_scopes[].scopes'
+        description: ''
+        required: false
+        example: null
+        type: 'object[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes[].permission_name':
+        custom: []
+        name: 'granular_scopes[].scopes[].permission_name'
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes[].scope_type':
+        custom: []
+        name: 'granular_scopes[].scopes[].scope_type'
+        description: ''
+        required: true
+        example: self
+        type: string
+        enumValues:
+          - all
+          - own_projects
+          - assigned_projects
+          - own_unit
+          - selected_projects
+          - self
+          - none
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes[].scopes[].scope_payload':
+        custom: []
+        name: 'granular_scopes[].scopes[].scope_payload'
+        description: ''
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'granular_matrix.*.role':
+        custom: []
+        name: 'granular_matrix.*.role'
+        description: 'required_with:granular_matrix Role name.'
+        required: false
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_matrix.*.permissions':
+        custom: []
+        name: 'granular_matrix.*.permissions'
+        description: 'Permission names for the role.'
+        required: false
+        example:
+          - projects.view
+          - programs.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.role':
+        custom: []
+        name: 'granular_scopes.*.role'
+        description: 'required_with:granular_scopes Role name.'
+        required: false
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes':
+        custom: []
+        name: 'granular_scopes.*.scopes'
+        description: 'Scope definitions for permissions granted to the role.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes.*.permission_name':
+        custom: []
+        name: 'granular_scopes.*.scopes.*.permission_name'
+        description: 'Permission name.'
+        required: true
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes.*.scope_type':
+        custom: []
+        name: 'granular_scopes.*.scopes.*.scope_type'
+        description: 'Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none.'
+        required: true
+        example: own_projects
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'granular_scopes.*.scopes.*.scope_payload':
+        custom: []
+        name: 'granular_scopes.*.scopes.*.scope_payload'
+        description: 'Optional scope payload. `selected_projects` keeps `project_ids`; `own_unit` keeps `unit`; dynamic scopes store an empty payload.'
+        required: false
+        example:
+          project_ids:
+            - 1
+            - 2
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'matrix.*.role':
+        custom: []
+        name: 'matrix.*.role'
+        description: 'required_with:matrix Role name.'
+        required: false
+        example: staff
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'matrix.*.permissions':
+        custom: []
+        name: 'matrix.*.permissions'
+        description: 'Legacy permission names.'
+        required: false
+        example:
+          - users.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      matrix:
+        - consequatur
+      granular_matrix:
+        - consequatur
+      granular_scopes:
+        -
+          scopes:
+            -
+              permission_name: consequatur
+              scope_type: self
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Granular yetki matrisi guncellendi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Yalnizca granular_matrix veya matrix (legacy) gonderin; ikisini birden gondermeyin."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/permissions-matrix/audit
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List permission matrix audit logs.'
+      description: 'Requires either `permissions.matrix.view` with global `all` scope or `logs.view` with global `all` scope. Reads the Spatie `activity_log` entries with `log_name=permissions` and returns the latest 50 changes. If the activity log table/package is unavailable, an empty list with a warning is returned.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"logs":[{"id":1,"description":"permission_granular_matrix.updated","created_at":"2026-06-30T12:00:00+00:00","causer":{"id":1,"name":"Admin","role":"super_admin"},"properties":{"roles":[{"role":"coordinator","granular_permission_count":12}]}}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu global kayitlari goruntuleme yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/permissions-matrix/users
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List users for permission overrides.'
+      description: 'Requires permission: `permissions.user_override.view` with global `all` scope. Returns non-banned users with Spatie roles and staff unit/title metadata for the override panel.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional search across name, surname and email.'
+        required: false
+        example: ayse
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: ayse
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"users":[{"id":8,"name":"Ayse","surname":"Yilmaz","email":"ayse@example.com","role":"coordinator","roles":["coordinator"],"unit":"Program","title":"Koordinator"}]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin tum sistem kapsami gerekir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/permissions-matrix/users/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get user permission overrides.'
+      description: 'Requires permission: `permissions.user_override.view` with global `all` scope. Returns the selected user, stored allow/deny overrides, sanitized scope payloads and the resolver output showing the final effective permissions.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'User ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"user":{"id":8,"role":"coordinator","roles":["coordinator"]},"overrides":[{"permission_name":"projects.view","effect":"allow","scope_type":"selected_projects","scope_payload":{"project_ids":[1]}}],"resolved":{"permissions":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\User] 8"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/permissions-matrix/users/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update user permission overrides.'
+      description: 'Requires permission: `permissions.user_override.update` with global `all` scope. Replaces all overrides for the target user. Permission names must exist in the granular catalog or legacy map, must be compatible with the user role and scope types must be allowed for the role/permission pair. Clears the permission cache and logs `user_permission_overrides.updated`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'User ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      overrides:
+        custom: []
+        name: overrides
+        description: 'Complete replacement list. Send an empty array to clear overrides.'
+        required: true
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'overrides[].permission_name':
+        custom: []
+        name: 'overrides[].permission_name'
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'overrides[].effect':
+        custom: []
+        name: 'overrides[].effect'
+        description: ''
+        required: true
+        example: deny
+        type: string
+        enumValues:
+          - allow
+          - deny
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'overrides[].scope_type':
+        custom: []
+        name: 'overrides[].scope_type'
+        description: ''
+        required: false
+        example: none
+        type: string
+        enumValues:
+          - all
+          - own_projects
+          - assigned_projects
+          - own_unit
+          - selected_projects
+          - self
+          - none
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'overrides[].scope_payload':
+        custom: []
+        name: 'overrides[].scope_payload'
+        description: ''
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'overrides.*.permission_name':
+        custom: []
+        name: 'overrides.*.permission_name'
+        description: 'Permission name.'
+        required: true
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'overrides.*.effect':
+        custom: []
+        name: 'overrides.*.effect'
+        description: 'Override effect. Allowed values: allow, deny.'
+        required: true
+        example: allow
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'overrides.*.scope_type':
+        custom: []
+        name: 'overrides.*.scope_type'
+        description: 'Optional scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none.'
+        required: false
+        example: selected_projects
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'overrides.*.scope_payload':
+        custom: []
+        name: 'overrides.*.scope_payload'
+        description: 'Optional payload.'
+        required: false
+        example:
+          project_ids:
+            - 1
+            - 2
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      overrides:
+        - consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Kullaniciya ozel yetkiler guncellendi.","resolved":{"permissions":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu kullanici tipi icin bu permission atanamaz."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/permissions-matrix/users/{id}/roles'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Assign roles to a user.'
+      description: 'Requires permission: `permissions.user_override.update` with global `all` scope. Syncs Spatie roles and optionally updates the primary `users.role` column. Student/alumni roles cannot be combined with authority roles. Clears the permission cache and logs `user_roles.updated`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'User ID.'
+        required: true
+        example: 8
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 8
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      roles:
+        custom: []
+        name: roles
+        description: 'Role names to assign.'
+        required: true
+        example:
+          - coordinator
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      primary_role:
+        custom: []
+        name: primary_role
+        description: 'Optional primary role to store on the user record. Must be one of `roles`.'
+        required: false
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      'roles.*':
+        custom: []
+        name: 'roles.*'
+        description: 'Existing role name.'
+        required: true
+        example: coordinator
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      roles:
+        - coordinator
+      primary_role: coordinator
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Kullanici rolleri guncellendi.","user":{"id":8,"role":"coordinator","roles":["coordinator"]},"resolved":{"permissions":[]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Ogrenci/mezun rolleri baska rollerle birlestirilemez."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/permissions-matrix/roles
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get role catalog for the permission matrix.'
+      description: 'Requires permission: `permissions.matrix.view` with global `all` scope. Returns all Spatie roles, system-role markers, permission counts, assigned permissions, user counts and configured scope templates.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"roles":[{"id":1,"name":"coordinator","label":"Koordinator","is_system":true,"permission_count":12,"user_count":4}],"scope_templates":[]}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/permissions-matrix/roles
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a custom role.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. The submitted name is normalized to a lowercase slug, system role names are reserved, and only valid granular permissions compatible with the role are assigned. Clears the permission cache and logs `role.custom.created`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Custom role name. It is normalized to lowercase slug format and must be unique.'
+        required: true
+        example: proje_denetcisi
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      permissions:
+        custom: []
+        name: permissions
+        description: 'Optional granular permission names.'
+        required: false
+        example:
+          - projects.view
+          - logs.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'permissions.*':
+        custom: []
+        name: 'permissions.*'
+        description: 'Permission name.'
+        required: false
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: proje_denetcisi
+      permissions:
+        - projects.view
+        - logs.view
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Ozel rol olusturuldu.","role":{"id":9,"name":"proje_denetcisi","permissions":[{"name":"projects.view"}]}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu isim sistem rolu olarak ayrildi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/permissions-matrix/roles/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a custom role.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be changed through this endpoint. Updates granular permissions and optional role scopes, validates scope compatibility, clears the permission cache and logs `role.custom.updated`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Custom role ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      permissions:
+        custom: []
+        name: permissions
+        description: 'Optional granular permission names.'
+        required: false
+        example:
+          - projects.view
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      scopes:
+        custom: []
+        name: scopes
+        description: 'Optional role scope rows.'
+        required: false
+        example:
+          - consequatur
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'scopes[].permission_name':
+        custom: []
+        name: 'scopes[].permission_name'
+        description: 'This field is required when <code>scopes</code> is present.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'scopes[].scope_type':
+        custom: []
+        name: 'scopes[].scope_type'
+        description: 'This field is required when <code>scopes</code> is present.'
+        required: false
+        example: all
+        type: string
+        enumValues:
+          - all
+          - own_projects
+          - assigned_projects
+          - own_unit
+          - selected_projects
+          - self
+          - none
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      'scopes[].scope_payload':
+        custom: []
+        name: 'scopes[].scope_payload'
+        description: ''
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      'permissions.*':
+        custom: []
+        name: 'permissions.*'
+        description: 'Permission name.'
+        required: false
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'scopes.*.permission_name':
+        custom: []
+        name: 'scopes.*.permission_name'
+        description: 'required_with:scopes Permission name.'
+        required: false
+        example: projects.view
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'scopes.*.scope_type':
+        custom: []
+        name: 'scopes.*.scope_type'
+        description: 'required_with:scopes Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none.'
+        required: false
+        example: selected_projects
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      'scopes.*.scope_payload':
+        custom: []
+        name: 'scopes.*.scope_payload'
+        description: 'Optional scope payload.'
+        required: false
+        example:
+          project_ids:
+            - 1
+        type: object
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      permissions:
+        - projects.view
+      scopes:
+        - consequatur
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Rol yetkileri guncellendi.","role":{"id":9,"name":"proje_denetcisi"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Sistem rolleri buradan degistirilemez."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/permissions-matrix/roles/{id}'
+    metadata:
+      custom: []
+      groupName: 'Permissions Matrix'
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a custom role.'
+      description: 'Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be deleted and roles assigned to users must be unassigned first. Clears the permission cache and logs `role.custom.deleted`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Custom role ID.'
+        required: true
+        example: 9
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 9
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Rol silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu role atanmis kullanicilar var. Once atamalari kaldirin."}'
+        headers: []
+        description: ''
     responseFields: []
     auth:
       - headers

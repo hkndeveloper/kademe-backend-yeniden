@@ -215,7 +215,7 @@ endpoints:
         name: from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:50'
+        example: '2026-08-21T04:15:37'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -226,7 +226,7 @@ endpoints:
         name: to
         description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -237,7 +237,7 @@ endpoints:
         name: type
         description: ''
         required: false
-        example: forum_post
+        example: opportunity
         type: string
         enumValues:
           - announcement
@@ -282,9 +282,9 @@ endpoints:
     cleanBodyParameters:
       project_id: 17
       category: mqeopfuudtdsufvyvddqa
-      from: '2026-07-02T10:54:50'
-      to: '2107-07-31'
-      type: forum_post
+      from: '2026-08-21T04:15:37'
+      to: '2107-09-19'
+      type: opportunity
       unread_only: true
       starred_only: false
       pinned_only: true
@@ -859,7 +859,7 @@ endpoints:
         name: date_from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:51'
+        example: '2026-08-21T04:15:38'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -870,7 +870,7 @@ endpoints:
         name: date_to
         description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -893,8 +893,8 @@ endpoints:
       project_id: 17
       sender_id: 17
       search: mqeopfuudtdsufvyvddqa
-      date_from: '2026-07-02T10:54:51'
-      date_to: '2107-07-31'
+      date_from: '2026-08-21T04:15:38'
+      date_to: '2107-09-19'
       per_page: 13
     fileParameters: []
     responses:
@@ -1094,7 +1094,7 @@ endpoints:
         name: date_from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:51'
+        example: '2026-08-21T04:15:38'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -1105,7 +1105,7 @@ endpoints:
         name: date_to
         description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -1117,8 +1117,8 @@ endpoints:
       project_id: 17
       sender_id: 17
       search: mqeopfuudtdsufvyvddqa
-      date_from: '2026-07-02T10:54:51'
-      date_to: '2107-07-31'
+      date_from: '2026-08-21T04:15:38'
+      date_to: '2107-09-19'
     fileParameters: []
     responses:
       -
@@ -2083,7 +2083,7 @@ endpoints:
         name: from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:51'
+        example: '2026-08-21T04:15:38'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -2094,7 +2094,7 @@ endpoints:
         name: to
         description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -2105,7 +2105,7 @@ endpoints:
         name: type
         description: ''
         required: false
-        example: opportunity
+        example: forum_post
         type: string
         enumValues:
           - announcement
@@ -2119,7 +2119,7 @@ endpoints:
         name: unread_only
         description: ''
         required: false
-        example: false
+        example: true
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -2150,10 +2150,10 @@ endpoints:
     cleanBodyParameters:
       project_id: 17
       category: mqeopfuudtdsufvyvddqa
-      from: '2026-07-02T10:54:51'
-      to: '2107-07-31'
-      type: opportunity
-      unread_only: false
+      from: '2026-08-21T04:15:38'
+      to: '2107-09-19'
+      type: forum_post
+      unread_only: true
       starred_only: true
       pinned_only: true
     fileParameters: []
@@ -2727,7 +2727,7 @@ endpoints:
         name: date_from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -2738,7 +2738,7 @@ endpoints:
         name: date_to
         description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -2761,8 +2761,8 @@ endpoints:
       project_id: 17
       sender_id: 17
       search: mqeopfuudtdsufvyvddqa
-      date_from: '2026-07-02T10:54:52'
-      date_to: '2107-07-31'
+      date_from: '2026-08-21T04:15:39'
+      date_to: '2107-09-19'
       per_page: 13
     fileParameters: []
     responses:
@@ -2905,7 +2905,7 @@ endpoints:
         name: type
         description: ''
         required: false
-        example: email
+        example: sms
         type: string
         enumValues:
           - email
@@ -2962,7 +2962,7 @@ endpoints:
         name: date_from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -2973,20 +2973,20 @@ endpoints:
         name: date_to
         description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
         nullable: true
         deprecated: false
     cleanBodyParameters:
-      type: email
+      type: sms
       status: vmqeopfuudtdsufvyvddq
       project_id: 17
       sender_id: 17
       search: mqeopfuudtdsufvyvddqa
-      date_from: '2026-07-02T10:54:52'
-      date_to: '2107-07-31'
+      date_from: '2026-08-21T04:15:39'
+      date_to: '2107-09-19'
     fileParameters: []
     responses:
       -
@@ -3951,7 +3951,7 @@ endpoints:
         name: from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -3962,7 +3962,7 @@ endpoints:
         name: to
         description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -3973,7 +3973,7 @@ endpoints:
         name: type
         description: ''
         required: false
-        example: opportunity
+        example: announcement
         type: string
         enumValues:
           - announcement
@@ -3998,7 +3998,7 @@ endpoints:
         name: starred_only
         description: ''
         required: false
-        example: true
+        example: false
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -4009,7 +4009,7 @@ endpoints:
         name: pinned_only
         description: ''
         required: false
-        example: false
+        example: true
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -4018,12 +4018,12 @@ endpoints:
     cleanBodyParameters:
       project_id: 17
       category: mqeopfuudtdsufvyvddqa
-      from: '2026-07-02T10:54:52'
-      to: '2107-07-31'
-      type: opportunity
+      from: '2026-08-21T04:15:39'
+      to: '2107-09-19'
+      type: announcement
       unread_only: false
-      starred_only: true
-      pinned_only: false
+      starred_only: false
+      pinned_only: true
     fileParameters: []
     responses:
       -

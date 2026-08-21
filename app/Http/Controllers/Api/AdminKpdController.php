@@ -420,7 +420,7 @@ class AdminKpdController extends Controller
 
         $this->abortUnlessUserInKpdScope($request, 'kpd.reports.create', (int) $validated['user_id']);
         $this->assertPeriodMatchesUser((int) $validated['user_id'], isset($validated['period_id']) ? (int) $validated['period_id'] : null);
-        $this->assertPeriodWritable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
+        $this->assertPeriodResolvable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
 
         $path = MediaStorage::putFile('kpd-reports', $request->file('file'));
 
@@ -598,7 +598,7 @@ class AdminKpdController extends Controller
                 $query->whereHas('counselee.participations', fn ($inner) => $inner->whereIn('project_id', $projectIds));
             })
             ->findOrFail($id);
-        $this->assertPeriodWritable($request, $appointment->period_id);
+        $this->assertPeriodResolvable($request, $appointment->period_id);
 
         $appointment->update(['status' => $validated['status']]);
         $appointment->refresh()->load(['counselor:id,name,surname,email', 'counselee:id,name,surname,email', 'room']);

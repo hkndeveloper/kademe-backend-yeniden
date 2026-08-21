@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Log;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -64,6 +65,42 @@ class Project extends Model
         return $this->hasMany(Period::class)->where('status', 'active');
     }
 
+    public function currentPeriod()
+    {
+        return $this->belongsTo(Period::class, 'current_period_id');
+    }
+
+    public function currentPeriodOrLegacy(): ?Period
+    {
+        if ($this->current_period_id !== null) {
+            if ($this->relationLoaded('currentPeriod')) {
+                return $this->currentPeriod;
+            }
+
+            return $this->currentPeriod()->first();
+        }
+
+        if (config('period_lifecycle.enforce_current_period_pointer', false)) {
+            return null;
+        }
+
+        if (config('period_lifecycle.log_legacy_pointer_fallback', true)) {
+            Log::warning('period_lifecycle.legacy_current_period_fallback_used', [
+                'project_id' => (int) $this->id,
+            ]);
+        }
+
+        if ($this->relationLoaded('periods')) {
+            return $this->periods
+                ->first(fn (Period $period) => in_array($period->status, ['active', 'closing'], true));
+        }
+
+        return $this->periods()
+            ->whereIn('status', ['active', 'closing'])
+            ->orderByDesc('start_date')
+            ->first();
+    }
+
     public function participants()
     {
         return $this->hasMany(Participant::class);
@@ -74,10 +111,16 @@ class Project extends Model
         return $this->hasMany(Program::class);
     }
 
+    public function applicationWindows()
+    {
+        return $this->hasMany(ApplicationWindow::class);
+    }
+
     public function kademeModules()
     {
         return $this->hasMany(ProjectModule::class)->orderBy('sort_order');
     }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -86,5 +129,3 @@ class Project extends Model
             ->dontLogEmptyChanges();
     }
 }
-
-

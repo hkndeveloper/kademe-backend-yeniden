@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Services\PeriodLifecycleService;
+
 final class ProjectPeriodContext
 {
     public function __construct(
@@ -15,7 +17,7 @@ final class ProjectPeriodContext
 
     public function isArchiveMode(): bool
     {
-        return $this->periodStatus !== null && $this->periodStatus !== 'active';
+        return PeriodLifecycleService::isArchiveStatus($this->periodStatus);
     }
 
     public function projectIdsForQuery(): array

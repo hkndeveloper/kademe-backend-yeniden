@@ -2,17 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationForm;
+use App\Models\ApplicationWindow;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\ApplicationIntakeService;
 use App\Services\NotificationService;
 use App\Services\WaitlistService;
 use App\Support\MediaStorage;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
@@ -26,9 +30,12 @@ use Illuminate\Validation\ValidationException;
  */
 class ApplicationController extends Controller
 {
+    use ResolvesProjectPeriodContext;
+
     public function __construct(
         private readonly NotificationService $notificationService,
-        private readonly WaitlistService $waitlistService
+        private readonly WaitlistService $waitlistService,
+        private readonly ApplicationIntakeService $intakeService,
     ) {}
 
     private function resolveApplicantUser(array $applicant): User
@@ -81,9 +88,26 @@ class ApplicationController extends Controller
         }
     }
 
-    private function projectPeriodHasAvailableSeat(Project $project, Period $period, ?Program $program = null): bool
+    private function ensureProjectAcceptsApplications(Project $project): void
     {
-        $quota = $program?->application_quota ?? $project->quota;
+        $period = $project->currentPeriodOrLegacy();
+
+        if (! $period || $period->status !== 'active') {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu proje icin aktif bir donem bulunamadi.'],
+            ]);
+        }
+
+        if (! $this->intakeService->isOpen($project, $period)) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu proje ve aktif donem icin basvurular su an kapali.'],
+            ]);
+        }
+    }
+
+    private function projectPeriodHasAvailableSeat(Project $project, Period $period, ?Program $program = null, ?ApplicationWindow $window = null): bool
+    {
+        $quota = $program?->application_quota ?? $this->intakeService->quota($project, $window);
         if ($quota === null || (int) $quota <= 0) {
             return true;
         }
@@ -164,8 +188,8 @@ class ApplicationController extends Controller
             ->first();
 
         if ($conflictingApplication) {
-            $startFormatted = optional(new \Carbon\Carbon($conflictingApplication->start_at))->format('d.m.Y H:i');
-            $endFormatted   = optional(new \Carbon\Carbon($conflictingApplication->end_at))->format('d.m.Y H:i');
+            $startFormatted = optional(new Carbon($conflictingApplication->start_at))->format('d.m.Y H:i');
+            $endFormatted = optional(new Carbon($conflictingApplication->end_at))->format('d.m.Y H:i');
 
             throw ValidationException::withMessages([
                 'program_id' => [
@@ -180,13 +204,18 @@ class ApplicationController extends Controller
         $this->ensureSingleProjectRule($user, $project);
         $this->ensureUserCanApply($user);
 
-        $currentPeriod = Period::where('project_id', $project->id)
-            ->where('status', 'active')
-            ->first();
+        $currentPeriod = $project->currentPeriodOrLegacy();
 
-        if (! $currentPeriod) {
+        if (! $currentPeriod || $currentPeriod->status !== 'active') {
             throw ValidationException::withMessages([
                 'project_id' => ['Bu proje icin aktif bir donem bulunamadi.'],
+            ]);
+        }
+
+        $applicationWindow = $this->intakeService->windowFor($project, $currentPeriod);
+        if (! $this->intakeService->isOpen($project, $currentPeriod, $applicationWindow)) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu proje ve aktif donem icin basvurular su an kapali.'],
             ]);
         }
 
@@ -232,7 +261,7 @@ class ApplicationController extends Controller
         $autoRejectReason = $this->autoRejectReason($form, $normalizedFormData, $user);
         $initialStatus = $autoRejectReason
             ? 'rejected'
-            : ($this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program) ? 'pending' : 'waitlisted');
+            : ($this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program, $applicationWindow) ? 'pending' : 'waitlisted');
         $waitlistOrder = $initialStatus === 'waitlisted'
             ? $this->nextWaitlistOrder($project, $currentPeriod, $program)
             : null;
@@ -241,6 +270,7 @@ class ApplicationController extends Controller
             'user_id' => $user->id,
             'project_id' => $project->id,
             'period_id' => $currentPeriod->id,
+            'application_window_id' => $applicationWindow?->id,
             'program_id' => $program?->id,
             'application_form_id' => $form?->id,
             'form_data' => $normalizedFormData,
@@ -417,6 +447,7 @@ class ApplicationController extends Controller
      * Requires KVKK consent. Returns the current user applications with project, period, program, waitlist, interview, rejection, and dynamic form entry summaries.
      *
      * @group Applications
+     *
      * @authenticated
      *
      * @response 200 {"applications":[{"id":1,"status":"pending","waitlist_invitation_active":false,"project":{"id":1,"name":"KADEME"},"form_entries":[{"id":"motivation","label":"Motivasyon","type":"text","value":"Katiliyorum","file":null}]}]}
@@ -593,6 +624,7 @@ class ApplicationController extends Controller
      * Requires KVKK consent. Dynamic application form fields are accepted in `form_data`; file fields must be uploaded as `multipart/form-data` under `form_files[field_id]`.
      *
      * @group Applications
+     *
      * @authenticated
      *
      * @bodyParam project_id integer required Project id. Example: 1
@@ -600,6 +632,7 @@ class ApplicationController extends Controller
      * @bodyParam form_data object Optional dynamic form answers keyed by field id. Example: {"motivation":"Projeye katilmak istiyorum"}
      * @bodyParam form_files object Optional dynamic form files keyed by field id.
      * @bodyParam consent_accepted boolean Optional consent flag. Example: true
+     *
      * @response 201 {"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending"}}
      * @response 422 {"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}
      */
@@ -615,12 +648,7 @@ class ApplicationController extends Controller
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
-
-        if (! $project->application_open) {
-            throw ValidationException::withMessages([
-                'project_id' => ['Bu proje icin basvurular su an kapali.'],
-            ]);
-        }
+        $this->ensureProjectAcceptsApplications($project);
 
         $application = $this->createApplicationForUser(
             $request->user(),
@@ -641,6 +669,7 @@ class ApplicationController extends Controller
      * Create a public project application as a guest applicant.
      *
      * @group Applications
+     *
      * @unauthenticated
      *
      * This endpoint accepts dynamic application form fields. File fields must be sent as `multipart/form-data` under `form_files[field_id]`. The applicant may be matched to an existing user by email or created as a student user.
@@ -654,6 +683,7 @@ class ApplicationController extends Controller
      * @bodyParam applicant.surname string required Applicant last name. Example: Kekec
      * @bodyParam applicant.email string required Applicant email. Example: hakan@example.com
      * @bodyParam applicant.phone string Optional applicant phone. Example: 05551234567
+     *
      * @response 201 {"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending","form_data":{"motivation":"Projeye katilmak istiyorum"}}}
      * @response 422 {"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}
      * @response 422 {"message":"The applicant.email field must be a valid email address.","errors":{"applicant.email":["The applicant.email field must be a valid email address."]}}
@@ -674,12 +704,7 @@ class ApplicationController extends Controller
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
-        if (! $project->application_open) {
-            throw ValidationException::withMessages([
-                'project_id' => ['Bu proje icin basvurular su an kapali.'],
-            ]);
-        }
-
+        $this->ensureProjectAcceptsApplications($project);
         $user = $this->resolveApplicantUser($validated['applicant']);
         $application = $this->createApplicationForUser(
             $user,
@@ -702,9 +727,11 @@ class ApplicationController extends Controller
      * Returns only applications owned by the current user. Requires KVKK consent.
      *
      * @group Applications
+     *
      * @authenticated
      *
      * @urlParam id integer required Application id. Example: 1
+     *
      * @response 200 {"application":{"id":1,"status":"pending","project":{"id":1,"name":"KADEME"},"form_entries":[]}}
      * @response 404 {"message":"No query results for model [App\\Models\\Application]."}
      */
@@ -726,10 +753,13 @@ class ApplicationController extends Controller
      * Allows the current applicant to accept or reject an active waitlist invitation. Accepting may create or activate the participant record when quota rules allow it.
      *
      * @group Applications
+     *
      * @authenticated
      *
      * @urlParam id integer required Application id. Example: 1
+     *
      * @bodyParam decision string required Must be `accept` or `reject`. Example: accept
+     *
      * @response 200 {"message":"Yedek liste daveti kabul edildi.","application":{"id":1,"status":"accepted","waitlist_invitation_active":false}}
      * @response 422 {"message":"Yedek liste davet suresi doldu.","errors":{"application":["Yedek liste davet suresi doldu."]}}
      */
@@ -740,16 +770,12 @@ class ApplicationController extends Controller
         ]);
 
         $application = Application::query()
-            ->with(['project:id,name', 'period:id,credit_start_amount,status', 'program:id,title,application_quota', 'user:id,email,role,status'])
+            ->with(['project:id,name,quota', 'period:id,credit_start_amount,status', 'applicationWindow:id,quota', 'program:id,title,application_quota', 'user:id,email,role,status'])
             ->where('id', $id)
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        if ($application->period?->status === 'completed') {
-            throw ValidationException::withMessages([
-                'application' => ['Bu basvurunun donemi kapandigi icin yedek liste daveti yanitlanamaz.'],
-            ]);
-        }
+        $this->assertPeriodResolvable($request, $application->period_id);
 
         $this->assertWaitlistInvitationOpen($application);
 
@@ -767,7 +793,7 @@ class ApplicationController extends Controller
                     ]);
                 }
 
-                $quota = $application->program?->application_quota ?? $application->project?->quota;
+                $quota = $application->program?->application_quota ?? $application->projectQuota();
                 if ($quota !== null && (int) $quota > 0) {
                     $acceptedCount = Application::query()
                         ->where('project_id', $application->project_id)

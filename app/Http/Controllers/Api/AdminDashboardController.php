@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
+use App\Models\Application;
 use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
-use App\Models\Application;
 use App\Models\CalendarEvent;
 use App\Models\Certificate;
 use App\Models\CommunicationLog;
@@ -21,6 +21,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Services\PeriodLifecycleService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
@@ -37,8 +38,7 @@ class AdminDashboardController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     /**
      * Dashboard Ã¶zetine eriÅŸim: en az bir operasyonel gÃ¶rÃ¼nÃ¼rlÃ¼k izni gerekir.
@@ -94,18 +94,34 @@ class AdminDashboardController extends Controller
                 ->all();
 
         return Project::query()
-            ->with(['periods' => fn ($query) => $query->orderByDesc('start_date')])
+            ->with([
+                'periods' => fn ($query) => $query->orderByDesc('start_date'),
+                'currentPeriod',
+            ])
             ->when(! $isGlobal, fn ($query) => $query->whereIn('id', $projectIds === [] ? [-1] : $projectIds))
             ->orderBy('name')
-            ->get(['id', 'name', 'slug', 'type'])
-            ->map(fn (Project $project) => [
-                'id' => $project->id,
-                'name' => $project->name,
-                'slug' => $project->slug,
-                'type' => $project->type,
-                'active_period' => optional($project->periods->firstWhere('status', 'active'))?->only(['id', 'name', 'status', 'start_date', 'end_date']),
-                'periods' => $project->periods->map->only(['id', 'name', 'status', 'start_date', 'end_date'])->values(),
-            ])
+            ->get(['id', 'current_period_id', 'name', 'slug', 'type'])
+            ->map(function (Project $project) {
+                $currentPeriod = $project->currentPeriodOrLegacy();
+                $periodPayload = fn (Period $period) => [
+                    ...$period->only(['id', 'name', 'status', 'start_date', 'end_date']),
+                    'lifecycle' => [
+                        'is_current' => (int) $project->current_period_id === (int) $period->id,
+                        'is_archive_mode' => PeriodLifecycleService::isArchiveStatus($period->status),
+                        'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($period->status),
+                    ],
+                ];
+
+                return [
+                    'id' => $project->id,
+                    'name' => $project->name,
+                    'slug' => $project->slug,
+                    'type' => $project->type,
+                    'active_period' => $currentPeriod ? $periodPayload($currentPeriod) : null,
+                    'current_period' => $currentPeriod ? $periodPayload($currentPeriod) : null,
+                    'periods' => $project->periods->map($periodPayload)->values(),
+                ];
+            })
             ->values()
             ->all();
     }
@@ -158,8 +174,10 @@ class AdminDashboardController extends Controller
      * Requires at least one dashboard/operational visibility permission: `dashboard.admin.view`, `dashboard.coordinator.view`, `dashboard.staff.view`, `programs.view`, `applications.view`, `financial.view`, `support.view` or `certificates.view`. Global scope returns all projects; scoped users only receive projects allowed by their action+scope permissions. Optional project/period filters are validated through PermissionResolver and completed periods are returned in archive mode.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. The user must be allowed to access this project for one of the dashboard permissions. Example: 1
      * @queryParam period_id integer Optional period filter. Must belong to the selected/allowed project. Example: 3
+     *
      * @response 200 {"students":{"active":42},"programs":{"monthly_total":8,"monthly_completed":3,"monthly_upcoming":5},"financials":{"monthly_expense":12500,"expense_change_percent":12.5,"pending_count":2},"pending":{"applications":4,"support":1,"financials":2},"stats_scope":"projects","dashboard_context":{"project_id":1,"period_id":3,"archive_mode":false,"projects":[]}}
      * @response 403 {"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}
      */
@@ -273,7 +291,7 @@ class AdminDashboardController extends Controller
             ->get()
             ->map(fn (Participant $participant) => [
                 'id' => $participant->id,
-                'student' => $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
+                'student' => $participant->user ? trim($participant->user->name.' '.$participant->user->surname) : 'Silinmis kullanici',
                 'email' => $participant->user?->email,
                 'project' => $participant->project ? [
                     'id' => $participant->project->id,
@@ -410,7 +428,7 @@ class AdminDashboardController extends Controller
             $pid = $row->project_id;
 
             return [
-                'name' => $pid ? (string) ($projectIdToName[$pid] ?? ('Proje #' . $pid)) : 'Tanimlanmamis proje',
+                'name' => $pid ? (string) ($projectIdToName[$pid] ?? ('Proje #'.$pid)) : 'Tanimlanmamis proje',
                 'value' => round((float) $row->total, 2),
             ];
         })->values();
@@ -483,13 +501,12 @@ class AdminDashboardController extends Controller
             'dashboard_context' => [
                 'project_id' => $selectedProjectId,
                 'period_id' => $selectedPeriodId,
-                'archive_mode' => $selectedPeriod?->status === 'completed',
+                'archive_mode' => PeriodLifecycleService::isArchiveStatus($selectedPeriod?->status),
                 'projects' => $this->dashboardProjectsPayload($request),
             ],
             'period_analytics' => $this->selectedPeriodAnalytics($selectedPeriod),
         ]);
     }
-
 
     /**
      * Export credit-risk participants.
@@ -497,9 +514,11 @@ class AdminDashboardController extends Controller
      * Requires dashboard visibility for the selected project/period context. Global users export all visible risk rows; scoped users export only participants in projects allowed by their dashboard/project permissions. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter validated against the user dashboard scope. Example: 1
      * @queryParam period_id integer Optional period filter validated against the selected/allowed project. Example: 3
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     *
      * @response 200 binary Credit-risk export file.
      * @response 403 {"message":"Dashboard verilerini goruntuleme yetkiniz bulunmuyor."}
      */
@@ -556,7 +575,7 @@ class AdminDashboardController extends Controller
             $credit = (int) $participant->credit;
 
             return [
-                $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
+                $participant->user ? trim($participant->user->name.' '.$participant->user->surname) : 'Silinmis kullanici',
                 $participant->user?->email ?? '-',
                 $participant->project?->name ?? '-',
                 $participant->period?->name ?? '-',
@@ -568,18 +587,20 @@ class AdminDashboardController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'kritik_kredi_riski_' . now()->format('Ymd_His'),
+            'kritik_kredi_riski_'.now()->format('Ymd_His'),
             'Kritik Kredi Riski',
             $headings,
             $rows,
         );
     }
+
     /**
      * List panel activity logs.
      *
      * Requires permission: `logs.view`. Users with global scope can see all activity logs; scoped users see their own logs plus permission matrix logs. The endpoint returns paginated logs, summary counters and filter options for the log screen.
      *
      * @authenticated
+     *
      * @queryParam log_name string Optional log source filter. Example: audit
      * @queryParam event string Optional event/action filter. Example: updated
      * @queryParam outcome string Optional outcome filter: `success` or `denied_or_failed`. Example: success
@@ -588,6 +609,7 @@ class AdminDashboardController extends Controller
      * @queryParam date_from date Optional start date. Example: 2026-06-01
      * @queryParam date_to date Optional end date. Example: 2026-06-30
      * @queryParam per_page integer Optional page size between 5 and 100. Example: 25
+     *
      * @response 200 {"logs":{"data":[]},"summary":{"total":0,"success":0,"failed":0,"sources":[],"events":[]},"filters":{"log_names":[],"events":[]}}
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
@@ -610,6 +632,7 @@ class AdminDashboardController extends Controller
             ]);
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json(['logs' => ['data' => []], 'warning' => 'Activity log paketi etkin degil.']);
         }
     }
@@ -620,6 +643,7 @@ class AdminDashboardController extends Controller
      * Requires permission: `logs.export`. Global scope exports all matching logs; scoped users are limited to their own activity plus permission matrix logs. Export is capped to the latest 1000 filtered rows and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
      *
      * @authenticated
+     *
      * @queryParam log_name string Optional log source filter. Example: audit
      * @queryParam event string Optional event/action filter. Example: updated
      * @queryParam outcome string Optional outcome filter: `success` or `denied_or_failed`. Example: success
@@ -628,6 +652,7 @@ class AdminDashboardController extends Controller
      * @queryParam date_from date Optional start date. Example: 2026-06-01
      * @queryParam date_to date Optional end date. Example: 2026-06-30
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: pdf
+     *
      * @response 200 binary Activity-log export file.
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
@@ -649,7 +674,7 @@ class AdminDashboardController extends Controller
                     $log->id,
                     optional($log->created_at)?->format('d.m.Y H:i:s') ?? '-',
                     $log->log_name ?? '-',
-                    $log->causer ? trim($log->causer->name . ' ' . $log->causer->surname) : 'Sistem',
+                    $log->causer ? trim($log->causer->name.' '.$log->causer->surname) : 'Sistem',
                     $log->causer->role ?? '-',
                     $log->event ?? ($log->description ?? '-'),
                     data_get($properties, 'outcome', '-'),
@@ -664,13 +689,14 @@ class AdminDashboardController extends Controller
 
             return AdminExportResponder::download(
                 $request->string('format')->toString() ?: 'csv',
-                'islem_loglari_' . now()->format('Ymd_His'),
+                'islem_loglari_'.now()->format('Ymd_His'),
                 'Islem Loglari',
                 $headings,
                 $rows
             );
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json(['message' => 'Log export olusturulamadi.'], 500);
         }
     }

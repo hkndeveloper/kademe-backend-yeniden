@@ -316,7 +316,7 @@ class StudentKpdController extends Controller
             ->where('counselee_id', $request->user()->id)
             ->when($participation->period_id, fn ($query) => $query->where(fn ($inner) => $inner->whereNull('period_id')->orWhere('period_id', $participation->period_id)))
             ->findOrFail($id);
-        $this->assertPeriodWritable($request, $appointment->period_id);
+        $this->assertPeriodResolvable($request, $appointment->period_id);
 
         if ($appointment->status !== 'scheduled') {
             return response()->json([

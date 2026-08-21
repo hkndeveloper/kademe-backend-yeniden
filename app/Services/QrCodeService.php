@@ -2,16 +2,30 @@
 
 namespace App\Services;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\Program;
 use Illuminate\Support\Str;
 
 class QrCodeService
 {
+    public function __construct(private readonly PeriodWritePolicy $periodWritePolicy)
+    {
+    }
+
     /**
      * Etkinlik için yeni bir QR kod üretir ve veritabanına işler
      */
     public function generateForProgram(Program $program, ?int $rotationSeconds = null): array
     {
+        $program->loadMissing('period');
+        if ($program->period) {
+            $this->periodWritePolicy->assertAllowed(
+                null,
+                $program->period,
+                PeriodWriteAction::RESOLVE_OPERATION,
+            );
+        }
+
         $qrToken = 'prg_' . $program->id . '_' . Str::random(40);
 
         $rotationSeconds = $this->normalizeRotationSeconds($rotationSeconds ?? $program->qr_rotation_seconds);

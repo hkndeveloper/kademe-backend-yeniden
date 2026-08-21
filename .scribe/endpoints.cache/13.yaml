@@ -178,12 +178,13 @@ endpoints:
         name: kind
         description: ''
         required: true
-        example: network
+        example: internship
         type: string
         enumValues:
           - internship
           - network
           - event
+          - job
           - other
         exampleWasSpecified: false
         nullable: false
@@ -237,7 +238,7 @@ endpoints:
         name: starts_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -248,7 +249,7 @@ endpoints:
         name: ends_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -259,7 +260,7 @@ endpoints:
         name: published_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -270,7 +271,7 @@ endpoints:
         name: expires_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -292,14 +293,14 @@ endpoints:
         deprecated: false
     cleanBodyParameters:
       title: vmqeopfuudtdsufvyvddq
-      kind: network
+      kind: internship
       summary: amniihfqcoynlazghdtqt
       body: qxbajwbpilpmufinllwlo
       link_url: 'http://www.schmitt.org/'
-      starts_at: '2026-07-02T10:54:52'
-      ends_at: '2026-07-02T10:54:52'
-      published_at: '2026-07-02T10:54:52'
-      expires_at: '2026-07-02T10:54:52'
+      starts_at: '2026-08-21T04:15:39'
+      ends_at: '2026-08-21T04:15:39'
+      published_at: '2026-08-21T04:15:39'
+      expires_at: '2026-08-21T04:15:39'
       target_audience:
         - alumni
     fileParameters: []
@@ -364,12 +365,13 @@ endpoints:
         name: kind
         description: ''
         required: false
-        example: internship
+        example: other
         type: string
         enumValues:
           - internship
           - network
           - event
+          - job
           - other
         exampleWasSpecified: false
         nullable: false
@@ -423,7 +425,7 @@ endpoints:
         name: starts_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -434,7 +436,7 @@ endpoints:
         name: ends_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -445,7 +447,7 @@ endpoints:
         name: published_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -456,7 +458,7 @@ endpoints:
         name: expires_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:39'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -478,14 +480,14 @@ endpoints:
         deprecated: false
     cleanBodyParameters:
       title: vmqeopfuudtdsufvyvddq
-      kind: internship
+      kind: other
       summary: amniihfqcoynlazghdtqt
       body: qxbajwbpilpmufinllwlo
       link_url: 'http://www.schmitt.org/'
-      starts_at: '2026-07-02T10:54:52'
-      ends_at: '2026-07-02T10:54:52'
-      published_at: '2026-07-02T10:54:52'
-      expires_at: '2026-07-02T10:54:52'
+      starts_at: '2026-08-21T04:15:39'
+      ends_at: '2026-08-21T04:15:39'
+      published_at: '2026-08-21T04:15:39'
+      expires_at: '2026-08-21T04:15:39'
       target_audience:
         - student
     fileParameters: []

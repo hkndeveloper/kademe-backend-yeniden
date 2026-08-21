@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-08-21 07:18:02 +03:00",
+  "source": "backend/storage/app/private/scribe",
+  "note": "Scribe outputs exported and delivery base URL normalized to production.",
+  "files": [
+    {
+      "name": "openapi.yaml",
+      "bytes": 1667817,
+      "sha256": "D278E6BD9D5AA76ED679BB654D96DB0617D2013C7E069FC04B3FC076448AF2BC"
+    },
+    {
+      "name": "collection.json",
+      "bytes": 1432657,
+      "sha256": "F4F68CC4BED58B1CC36B781CC4504AE1141501233BE990A7F832D54892E87BD4"
+    }
+  ]
+}

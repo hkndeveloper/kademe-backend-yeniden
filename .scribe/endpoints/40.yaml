@@ -1,22 +1,19 @@
-name: Calendar
+name: Trainers
 description: ''
 endpoints:
   -
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/calendar/overview
+    uri: api/panel/trainers/export
     metadata:
       custom: []
-      groupName: Calendar
+      groupName: Trainers
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Get the calendar overview.'
-      description: |-
-        Returns the panel calendar timeline for programs and manual meetings. Exposed under `/panel/calendar/overview` and `/calendar/overview`. Requires `calendar.view`; project/period filters are resolved through the shared project-period context. Non-global users are limited by their calendar scope, assigned meeting records, or records they created. The system may allow coordinator/staff cross-project calendar visibility for conflict checks via `permission_catalog.calendar_cross_project_view_for_staff_coordinator`.
-
-        The response includes available projects with active period, merged program/meeting items, upcoming tasks, attention items for unassigned or unsynced events, support counters, and Google Calendar connection status.
+      title: 'Export trainers.'
+      description: 'Requires permission: `trainers.export` with a usable scope. Applies the same search/status filters as the list endpoint and returns an exported file through the shared admin export responder. Supported formats include CSV, Excel/XLSX, PDF and Word/DOCX.'
       authenticated: true
       deprecated: false
     headers:
@@ -26,416 +23,24 @@ endpoints:
     urlParameters: []
     cleanUrlParameters: []
     queryParameters:
-      project_id:
+      search:
         custom: []
-        name: project_id
-        description: 'Optional project filter. Must be visible through `calendar.view`.'
+        name: search
+        description: 'Optional search filter.'
         required: false
-        example: 3
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'Optional period filter. Must belong to the selected/visible project context.'
-        required: false
-        example: 12
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      project_id: 3
-      period_id: 12
-    bodyParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'The <code>id</code> of an existing record in the projects table.'
-        required: false
-        example: null
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'The <code>id</code> of an existing record in the periods table.'
-        required: false
-        example: null
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"projects":[{"id":3,"name":"Diplomasi360","active_period":{"id":12,"name":"2026 Bahar"}}],"programs":[{"id":44,"event_type":"program","title":"Acilis Programi","start_at":"2026-07-10T10:00:00+03:00","calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_count":1}}],"summary":{"total_programs":1,"total_meetings":0,"total_events":1,"today_programs":0,"upcoming_this_week":1,"upcoming_this_month":1,"open_support_count":0,"google_synced_count":0,"google_pending_count":1,"unassigned_count":0},"upcoming_tasks":[],"attention_items":[],"google_calendar":{"configured":true,"connected":false,"calendar_id":"primary"}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The selected project id is invalid.","errors":{"project_id":["The selected project id is invalid."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/calendar/assignees
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List calendar assignees.'
-      description: |-
-        Returns active coordinator/staff users that can be assigned to a program or meeting. Exposed under `/panel/calendar/assignees` and `/calendar/assignees`. Permission depends on `context`: `calendar.assignments.manage` for program assignments, `calendar.meetings.create` for meeting creation, and `calendar.meetings.manage` for meeting management.
-
-        If `project_id` is provided, the caller must have that permission for the project. General meetings without a project require global scope for the selected meeting permission. Media-unit staff may be assignable across projects; other candidates must coordinate, participate in, or have calendar/projects access to the project.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'Optional project context.'
-        required: false
-        example: 3
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      context:
-        custom: []
-        name: context
-        description: 'Optional context: program, meeting_create, or meeting_manage. Defaults to program.'
-        required: false
-        example: meeting_create
+        example: liderlik
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-    cleanQueryParameters:
-      project_id: 3
-      context: meeting_create
-    bodyParameters:
-      project_id:
+      status:
         custom: []
-        name: project_id
-        description: 'The <code>id</code> of an existing record in the projects table.'
+        name: status
+        description: 'Optional status filter. Allowed values: active, passive, candidate.'
         required: false
-        example: 17
-        type: integer
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      context:
-        custom: []
-        name: context
-        description: ''
-        required: false
-        example: meeting_create
+        example: active
         type: string
-        enumValues:
-          - program
-          - meeting_create
-          - meeting_manage
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      project_id: 17
-      context: meeting_create
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"users":[{"id":7,"name":"Ada Yilmaz","role":"staff","unit":"Medya","title":"Uzman"}]}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu proje icin atama yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The selected context is invalid.","errors":{"context":["The selected context is invalid."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/calendar/google/status
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get Google Calendar connection status.'
-      description: 'Exposed under `/panel/calendar/google/status` and `/calendar/google/status`. Requires `calendar.view`. Returns whether Google credentials are configured, whether a refresh token is stored, the configured calendar ID, and last sync/error timestamps.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"configured":true,"connected":false,"calendar_id":"primary","last_synced_at":null,"last_error":null,"last_error_at":null}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/calendar/google/connect
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Create a Google Calendar OAuth URL.'
-      description: 'Exposed under `/panel/calendar/google/connect` and `/calendar/google/connect`. Requires global `all` scope for `calendar.google.connect`. Generates a short-lived OAuth state and returns the Google authorization URL. The callback is handled outside the API controller by the Google Calendar callback route.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      panel:
-        custom: []
-        name: panel
-        description: 'Redirect panel after OAuth: admin, coordinator, or staff.'
-        required: true
-        example: admin
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      panel: admin
-    bodyParameters:
-      panel:
-        custom: []
-        name: panel
-        description: ''
-        required: true
-        example: admin
-        type: string
-        enumValues:
-          - admin
-          - coordinator
-          - staff
-        exampleWasSpecified: false
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      panel: admin
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?client_id=..."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The panel field is required.","errors":{"panel":["The panel field is required."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - POST
-    uri: api/panel/calendar/google/sync
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Sync programs to Google Calendar.'
-      description: |-
-        Exposed under `/panel/calendar/google/sync` and `/calendar/google/sync`. Requires global `all` scope for `calendar.google.sync`. Synchronizes all non-completed-period programs into local `CalendarEvent` rows and, when Google is configured and connected, creates or updates events in the configured Google calendar.
-
-        Google API/token failures are recorded into system settings as the last sync error and returned as validation/API errors by the service.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Google Calendar senkronizasyonu tamamlandi.","result":{"count":12,"last_synced_at":"2026-06-30T12:00:00+03:00","last_error":null,"last_error_at":null},"google_calendar":{"configured":true,"connected":true,"calendar_id":"primary"}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Google Calendar baglantisi bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/calendar/export
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Export calendar programs.'
-      description: |-
-        Exposed under `/panel/calendar/export`. Requires `calendar.export`. Global scope exports all projects; project-scoped users are limited to projects returned by `calendar.export`. Optional project and period filters narrow the exported program rows. Manual meetings are not included in this export; the file contains program calendar rows with Google sync and assignment columns.
-
-        Supported file formats are handled by `AdminExportResponder` through the `format` query parameter and default to CSV.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'Optional project filter.'
-        required: false
-        example: 3
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'Optional period filter.'
-        required: false
-        example: 12
-        type: integer
         enumValues: []
         exampleWasSpecified: true
         nullable: false
@@ -443,7 +48,7 @@ endpoints:
       format:
         custom: []
         name: format
-        description: 'Export format: csv, xlsx, excel, pdf, docx, or word.'
+        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
         required: false
         example: xlsx
         type: string
@@ -452,51 +57,190 @@ endpoints:
         nullable: false
         deprecated: false
     cleanQueryParameters:
-      project_id: 3
-      period_id: 12
+      search: liderlik
+      status: active
       format: xlsx
     bodyParameters:
-      project_id:
+      search:
         custom: []
-        name: project_id
-        description: 'The <code>id</code> of an existing record in the projects table.'
+        name: search
+        description: 'Must not be greater than 120 characters.'
         required: false
-        example: null
+        example: vmqeopfuudtdsufvyvddq
         type: string
         enumValues: []
         exampleWasSpecified: false
         nullable: true
         deprecated: false
-      period_id:
+      status:
         custom: []
-        name: period_id
-        description: 'The <code>id</code> of an existing record in the periods table.'
+        name: status
+        description: ''
         required: false
-        example: null
+        example: active
         type: string
-        enumValues: []
+        enumValues:
+          - active
+          - passive
+          - candidate
         exampleWasSpecified: false
         nullable: true
         deprecated: false
-    cleanBodyParameters: []
+      format:
+        custom: []
+        name: format
+        description: ''
+        required: false
+        example: excel
+        type: string
+        enumValues:
+          - xlsx
+          - excel
+          - pdf
+          - docx
+          - word
+          - csv
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+      status: active
+      format: excel
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '"ID,Proje,Donem,Baslik,Konum,Baslangic,Bitis,Durum,Google,Atanan Kisi Sayisi,Atanan Kisiler\n44,Diplomasi360,2026 Bahar,Acilis Programi,KADEME Merkez,10.07.2026 10:00,10.07.2026 12:00,scheduled,bekliyor,1,Ada Yilmaz"'
-        headers: []
-        description: csv
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu proje icin takvim export yetkiniz yok."}'
+        content: '{"download":"Trainer export file stream"}'
         headers: []
         description: ''
       -
         custom: []
-        status: 422
-        content: '{"message":"The selected project id is invalid.","errors":{"project_id":["The selected project id is invalid."]}}'
+        status: 403
+        content: '{"message":"Bu islem icin kapsam verilmemis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/trainers
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List trainers.'
+      description: 'Requires permission: `trainers.view` with a usable non-empty scope. Trainers are project-independent records, so no project ownership filter is applied; the scope check only decides whether the action is usable in the panel. Returns paginated trainers, summary stats and allowed status values.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Optional search across name, email, phone, title, organization and expertise.'
+        required: false
+        example: liderlik
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter. Allowed values: active, passive, candidate.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Optional page size between 5 and 100. Defaults to 20.'
+        required: false
+        example: 20
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      search: liderlik
+      status: active
+      per_page: 20
+    bodyParameters:
+      search:
+        custom: []
+        name: search
+        description: 'Must not be greater than 120 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: ''
+        required: false
+        example: passive
+        type: string
+        enumValues:
+          - active
+          - passive
+          - candidate
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      per_page:
+        custom: []
+        name: per_page
+        description: 'Must be at least 5. Must not be greater than 100.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      search: vmqeopfuudtdsufvyvddq
+      status: passive
+      per_page: 1
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"trainers":{"data":[{"id":1,"first_name":"Ayse","last_name":"Yilmaz","full_name":"Ayse Yilmaz","email":"ayse@example.com","status":"active","kademe_comment":"Guclu atolye yonetimi"}],"current_page":1},"stats":{"total":12,"active":8,"candidate":2,"with_email":10},"statuses":["active","passive","candidate"]}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin kapsam verilmemis."}'
         headers: []
         description: ''
     responseFields: []
@@ -511,18 +255,15 @@ endpoints:
     custom: []
     httpMethods:
       - POST
-    uri: api/panel/calendar/meetings
+    uri: api/panel/trainers
     metadata:
       custom: []
-      groupName: Calendar
+      groupName: Trainers
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Create a calendar meeting.'
-      description: |-
-        Creates a manual calendar meeting separate from programs. Exposed under `/panel/calendar/meetings` and `/calendar/meetings`. Requires `calendar.meetings.create`. Project-linked meetings require project access for that action; projectless general meetings require global scope. If `period_id` is supplied, it must belong to the selected project and the period must be writable.
-
-        Assigned users are filtered to active coordinator/staff users that are valid for the meeting project, or any active coordinator/staff user for a general meeting.
+      title: 'Create a trainer.'
+      description: 'Requires permission: `trainers.create` with a usable scope. Creates a project-independent trainer profile, stores creator/updater metadata and prepares audit attributes for the activity log.'
       authenticated: true
       deprecated: false
     headers:
@@ -534,125 +275,151 @@ endpoints:
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters:
-      project_id:
+      first_name:
         custom: []
-        name: project_id
-        description: 'Optional project ID. Required only for project-scoped meetings.'
-        required: false
-        example: 3
-        type: integer
+        name: first_name
+        description: 'Trainer first name. Max 120 characters.'
+        required: true
+        example: Ayse
+        type: string
         enumValues: []
         exampleWasSpecified: true
-        nullable: true
+        nullable: false
         deprecated: false
-      period_id:
+      last_name:
         custom: []
-        name: period_id
-        description: 'Optional period ID.'
+        name: last_name
+        description: 'Optional trainer last name. Max 120 characters.'
         required: false
-        example: 12
-        type: integer
+        example: Yilmaz
+        type: string
         enumValues: []
         exampleWasSpecified: true
-        nullable: true
+        nullable: false
+        deprecated: false
+      email:
+        custom: []
+        name: email
+        description: 'Optional trainer email.'
+        required: false
+        example: ayse@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      phone:
+        custom: []
+        name: phone
+        description: 'Optional phone number.'
+        required: false
+        example: '05550000000'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
         deprecated: false
       title:
         custom: []
         name: title
-        description: 'Meeting title. Max 255 characters.'
-        required: true
-        example: 'Haftalik koordinasyon'
+        description: 'Optional title.'
+        required: false
+        example: Egitmen
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      description:
+      organization:
         custom: []
-        name: description
-        description: 'Optional meeting notes.'
+        name: organization
+        description: 'Optional organization.'
         required: false
-        example: 'Program hazirlik toplantisi'
+        example: Kademe
         type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      location:
-        custom: []
-        name: location
-        description: 'Optional meeting location. Max 255 characters.'
-        required: false
-        example: 'KADEME Merkez'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      start_at:
-        custom: []
-        name: start_at
-        description: 'Start date/time.'
-        required: true
-        example: '2026-07-10T10:00:00+03:00'
-        type: datetime
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      end_at:
+      expertise:
         custom: []
-        name: end_at
-        description: 'Optional end date/time after `start_at`.'
+        name: expertise
+        description: 'Optional expertise summary.'
         required: false
-        example: '2026-07-10T11:00:00+03:00'
-        type: datetime
+        example: 'Liderlik, iletisim'
+        type: string
         enumValues: []
         exampleWasSpecified: true
-        nullable: true
+        nullable: false
         deprecated: false
-      assigned_user_ids:
+      status:
         custom: []
-        name: assigned_user_ids
-        description: 'Optional invited/assigned user IDs.'
+        name: status
+        description: 'Optional status. Allowed values: active, passive, candidate. Defaults to active.'
         required: false
-        example:
-          - 7
-          - 8
-        type: 'integer[]'
+        example: candidate
+        type: string
         enumValues: []
         exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      last_worked_at:
+        custom: []
+        name: last_worked_at
+        description: 'Optional last worked date.'
+        required: false
+        example: '2026-06-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional biography. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      notes:
+        custom: []
+        name: notes
+        description: 'Optional internal notes. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
         nullable: false
         deprecated: false
     cleanBodyParameters:
-      project_id: 3
-      period_id: 12
-      title: 'Haftalik koordinasyon'
-      description: 'Program hazirlik toplantisi'
-      location: 'KADEME Merkez'
-      start_at: '2026-07-10T10:00:00+03:00'
-      end_at: '2026-07-10T11:00:00+03:00'
-      assigned_user_ids:
-        - 7
-        - 8
+      first_name: Ayse
+      last_name: Yilmaz
+      email: ayse@example.com
+      phone: '05550000000'
+      title: Egitmen
+      organization: Kademe
+      expertise: 'Liderlik, iletisim'
+      status: candidate
+      last_worked_at: '2026-06-01'
+      bio: consequatur
+      notes: consequatur
     fileParameters: []
     responses:
       -
         custom: []
         status: 201
-        content: '{"message":"Toplanti olusturuldu.","meeting":{"id":91,"event_type":"meeting","title":"Haftalik koordinasyon","project_id":3,"calendar_event":{"assigned_user_ids":[7],"assigned_count":1}}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu kapsamda toplanti olusturma yetkiniz yok."}'
+        content: '{"message":"Egitmen kaydi olusturuldu.","trainer":{"id":1,"full_name":"Ayse Yilmaz","status":"candidate"}}'
         headers: []
         description: ''
       -
         custom: []
         status: 422
-        content: '{"message":"Secilen donem bu projeye ait degil.","errors":{"period_id":["Secilen donem bu projeye ait degil."]}}'
+        content: '{"message":"The first name field is required."}'
         headers: []
         description: ''
     responseFields: []
@@ -666,16 +433,16 @@ endpoints:
   -
     custom: []
     httpMethods:
-      - PUT
-    uri: 'api/panel/calendar/meetings/{id}/assignments'
+      - GET
+    uri: 'api/panel/trainers/{id}'
     metadata:
       custom: []
-      groupName: Calendar
+      groupName: Trainers
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Update meeting assignees.'
-      description: 'Updates assigned users for a manual meeting. Exposed under `/panel/calendar/meetings/{id}/assignments` and `/calendar/meetings/{id}/assignments`. Requires `calendar.meetings.manage`; project-linked meetings require project access for that action, while projectless meetings require global scope. The meeting period must be writable.'
+      title: 'Get trainer details.'
+      description: 'Requires permission: `trainers.view` with a usable scope. Includes creator, updater and Kademe comment updater metadata when available.'
       authenticated: true
       deprecated: false
     headers:
@@ -686,384 +453,16 @@ endpoints:
       id:
         custom: []
         name: id
-        description: 'Calendar event ID for a meeting.'
+        description: 'Trainer ID.'
         required: true
-        example: 91
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
     cleanUrlParameters:
-      id: 91
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      assigned_user_ids:
-        custom: []
-        name: assigned_user_ids
-        description: 'Optional user IDs to assign.'
-        required: false
-        example:
-          - 7
-          - 8
-        type: 'integer[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      assigned_user_ids:
-        - 7
-        - 8
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Toplanti davetlileri guncellendi.","meeting_id":91,"calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_count":1}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu toplantinin davetlilerini yonetme yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 404
-        content: '{"message":"No query results for model [App\\Models\\CalendarEvent] 91"}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/panel/calendar/programs/{id}/assignments'
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Update program calendar assignments.'
-      description: |-
-        Creates or updates the `CalendarEvent` shadow record for a program and stores allowed assigned users. Exposed under `/panel/calendar/programs/{id}/assignments` and `/calendar/programs/{id}/assignments`. Requires `calendar.assignments.manage` for the program project and a writable period.
-
-        Submitted users are filtered to active coordinator/staff users assignable to the program project; invalid-but-existing users are ignored rather than forced into the assignment list.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Program ID.'
-        required: true
-        example: 44
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 44
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      assigned_user_ids:
-        custom: []
-        name: assigned_user_ids
-        description: 'Optional user IDs to assign.'
-        required: false
-        example:
-          - 7
-          - 8
-        type: 'integer[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      assigned_user_ids:
-        - 7
-        - 8
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Gorev atamalari guncellendi.","program_id":44,"calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_users":[{"id":7,"name":"Ada Yilmaz","role":"staff","unit":"Medya","title":"Uzman"}],"assigned_count":1}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu programa gorev atama yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 404
-        content: '{"message":"No query results for model [App\\Models\\Program] 44"}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The assigned user ids.0 field must be an integer.","errors":{"assigned_user_ids.0":["The assigned user ids.0 field must be an integer."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/calendar/overview
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get the calendar overview.'
-      description: |-
-        Returns the panel calendar timeline for programs and manual meetings. Exposed under `/panel/calendar/overview` and `/calendar/overview`. Requires `calendar.view`; project/period filters are resolved through the shared project-period context. Non-global users are limited by their calendar scope, assigned meeting records, or records they created. The system may allow coordinator/staff cross-project calendar visibility for conflict checks via `permission_catalog.calendar_cross_project_view_for_staff_coordinator`.
-
-        The response includes available projects with active period, merged program/meeting items, upcoming tasks, attention items for unassigned or unsynced events, support counters, and Google Calendar connection status.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'Optional project filter. Must be visible through `calendar.view`.'
-        required: false
-        example: 3
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'Optional period filter. Must belong to the selected/visible project context.'
-        required: false
-        example: 12
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      project_id: 3
-      period_id: 12
-    bodyParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'The <code>id</code> of an existing record in the projects table.'
-        required: false
-        example: null
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'The <code>id</code> of an existing record in the periods table.'
-        required: false
-        example: null
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"projects":[{"id":3,"name":"Diplomasi360","active_period":{"id":12,"name":"2026 Bahar"}}],"programs":[{"id":44,"event_type":"program","title":"Acilis Programi","start_at":"2026-07-10T10:00:00+03:00","calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_count":1}}],"summary":{"total_programs":1,"total_meetings":0,"total_events":1,"today_programs":0,"upcoming_this_week":1,"upcoming_this_month":1,"open_support_count":0,"google_synced_count":0,"google_pending_count":1,"unassigned_count":0},"upcoming_tasks":[],"attention_items":[],"google_calendar":{"configured":true,"connected":false,"calendar_id":"primary"}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The selected project id is invalid.","errors":{"project_id":["The selected project id is invalid."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/calendar/assignees
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List calendar assignees.'
-      description: |-
-        Returns active coordinator/staff users that can be assigned to a program or meeting. Exposed under `/panel/calendar/assignees` and `/calendar/assignees`. Permission depends on `context`: `calendar.assignments.manage` for program assignments, `calendar.meetings.create` for meeting creation, and `calendar.meetings.manage` for meeting management.
-
-        If `project_id` is provided, the caller must have that permission for the project. General meetings without a project require global scope for the selected meeting permission. Media-unit staff may be assignable across projects; other candidates must coordinate, participate in, or have calendar/projects access to the project.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'Optional project context.'
-        required: false
-        example: 3
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      context:
-        custom: []
-        name: context
-        description: 'Optional context: program, meeting_create, or meeting_manage. Defaults to program.'
-        required: false
-        example: meeting_create
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      project_id: 3
-      context: meeting_create
-    bodyParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'The <code>id</code> of an existing record in the projects table.'
-        required: false
-        example: 17
-        type: integer
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      context:
-        custom: []
-        name: context
-        description: ''
-        required: false
-        example: program
-        type: string
-        enumValues:
-          - program
-          - meeting_create
-          - meeting_manage
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      project_id: 17
-      context: program
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"users":[{"id":7,"name":"Ada Yilmaz","role":"staff","unit":"Medya","title":"Uzman"}]}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu proje icin atama yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The selected context is invalid.","errors":{"context":["The selected context is invalid."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/calendar/google/status
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get Google Calendar connection status.'
-      description: 'Exposed under `/panel/calendar/google/status` and `/calendar/google/status`. Requires `calendar.view`. Returns whether Google credentials are configured, whether a refresh token is stored, the configured calendar ID, and last sync/error timestamps.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
+      id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -1073,13 +472,13 @@ endpoints:
       -
         custom: []
         status: 200
-        content: '{"configured":true,"connected":false,"calendar_id":"primary","last_synced_at":null,"last_error":null,"last_error_at":null}'
+        content: '{"trainer":{"id":1,"first_name":"Ayse","last_name":"Yilmaz","full_name":"Ayse Yilmaz","email":"ayse@example.com","phone":"05550000000","title":"Egitmen","organization":"Kademe","expertise":"Liderlik","status":"active","kademe_comment":"Guclu iletisim"}}'
         headers: []
         description: ''
       -
         custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
+        status: 404
+        content: '{"message":"No query results for model [App\\Models\\Trainer] 1"}'
         headers: []
         description: ''
     responseFields: []
@@ -1093,73 +492,249 @@ endpoints:
   -
     custom: []
     httpMethods:
-      - GET
-    uri: api/calendar/google/connect
+      - PUT
+    uri: 'api/panel/trainers/{id}'
     metadata:
       custom: []
-      groupName: Calendar
+      groupName: Trainers
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Create a Google Calendar OAuth URL.'
-      description: 'Exposed under `/panel/calendar/google/connect` and `/calendar/google/connect`. Requires global `all` scope for `calendar.google.connect`. Generates a short-lived OAuth state and returns the Google authorization URL. The callback is handled outside the API controller by the Google Calendar callback route.'
+      title: 'Update a trainer.'
+      description: 'Requires permission: `trainers.update` with a usable scope. All profile fields are optional on update; updater metadata and trainer audit attributes are refreshed.'
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
       Content-Type: application/json
       Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      panel:
+    urlParameters:
+      id:
         custom: []
-        name: panel
-        description: 'Redirect panel after OAuth: admin, coordinator, or staff.'
+        name: id
+        description: 'Trainer ID.'
         required: true
-        example: admin
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      first_name:
+        custom: []
+        name: first_name
+        description: 'Optional trainer first name. Max 120 characters.'
+        required: false
+        example: Ayse
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-    cleanQueryParameters:
-      panel: admin
-    bodyParameters:
-      panel:
+      last_name:
         custom: []
-        name: panel
-        description: ''
-        required: true
-        example: coordinator
+        name: last_name
+        description: 'Optional trainer last name. Max 120 characters.'
+        required: false
+        example: Yilmaz
         type: string
-        enumValues:
-          - admin
-          - coordinator
-          - staff
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      email:
+        custom: []
+        name: email
+        description: 'Optional trainer email.'
+        required: false
+        example: ayse@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      phone:
+        custom: []
+        name: phone
+        description: 'Optional phone number.'
+        required: false
+        example: '05550000000'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Optional title.'
+        required: false
+        example: 'Bas Egitmen'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      organization:
+        custom: []
+        name: organization
+        description: 'Optional organization.'
+        required: false
+        example: Kademe
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      expertise:
+        custom: []
+        name: expertise
+        description: 'Optional expertise summary.'
+        required: false
+        example: 'Kariyer planlama'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status. Allowed values: active, passive, candidate.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      last_worked_at:
+        custom: []
+        name: last_worked_at
+        description: 'Optional last worked date.'
+        required: false
+        example: '2026-06-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      bio:
+        custom: []
+        name: bio
+        description: 'Optional biography. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      notes:
+        custom: []
+        name: notes
+        description: 'Optional internal notes. Max 5000 characters.'
+        required: false
+        example: consequatur
+        type: string
+        enumValues: []
         exampleWasSpecified: false
         nullable: false
         deprecated: false
     cleanBodyParameters:
-      panel: coordinator
+      first_name: Ayse
+      last_name: Yilmaz
+      email: ayse@example.com
+      phone: '05550000000'
+      title: 'Bas Egitmen'
+      organization: Kademe
+      expertise: 'Kariyer planlama'
+      status: active
+      last_worked_at: '2026-06-01'
+      bio: consequatur
+      notes: consequatur
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '{"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?client_id=..."}'
+        content: '{"message":"Egitmen kaydi guncellendi.","trainer":{"id":1,"full_name":"Ayse Yilmaz","status":"active"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PATCH
+    uri: 'api/panel/trainers/{id}/comment'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update the Kademe comment for a trainer.'
+      description: 'Requires permission: `trainers.comment` with a usable scope. This stores the single editable Kademe impression/comment for the trainer, comment updater metadata and an audit event.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      kademe_comment:
+        custom: []
+        name: kademe_comment
+        description: 'Optional Kademe comment. Null or empty clears the comment. Max 5000 characters.'
+        required: false
+        example: 'Atolye sonrasi geri bildirimleri olumlu.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      kademe_comment: 'Atolye sonrasi geri bildirimleri olumlu.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Kademe yorumu guncellendi.","trainer":{"id":1,"kademe_comment":"Atolye sonrasi geri bildirimleri olumlu."}}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The panel field is required.","errors":{"panel":["The panel field is required."]}}'
+        content: '{"message":"Bu islem icin kapsam verilmemis."}'
         headers: []
         description: ''
     responseFields: []
@@ -1174,26 +749,118 @@ endpoints:
     custom: []
     httpMethods:
       - POST
-    uri: api/calendar/google/sync
+    uri: 'api/panel/trainers/{id}/email'
     metadata:
       custom: []
-      groupName: Calendar
+      groupName: Trainers
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Sync programs to Google Calendar.'
-      description: |-
-        Exposed under `/panel/calendar/google/sync` and `/calendar/google/sync`. Requires global `all` scope for `calendar.google.sync`. Synchronizes all non-completed-period programs into local `CalendarEvent` rows and, when Google is configured and connected, creates or updates events in the configured Google calendar.
-
-        Google API/token failures are recorded into system settings as the last sync error and returned as validation/API errors by the service.
+      title: 'Send an email to a trainer.'
+      description: 'Requires permission: `trainers.email` with a usable scope. The trainer must have an email address. Sends through the existing notification/email service and stores trainer email audit attributes.'
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
       Content-Type: application/json
       Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      subject:
+        custom: []
+        name: subject
+        description: 'Email subject. Max 180 characters.'
+        required: true
+        example: 'Program Daveti'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      body:
+        custom: []
+        name: body
+        description: 'Email body. Max 10000 characters.'
+        required: true
+        example: 'Merhaba, sizi yeni programa davet etmek isteriz.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      subject: 'Program Daveti'
+      body: 'Merhaba, sizi yeni programa davet etmek isteriz.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"E-posta gonderildi.","sent_count":1}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu egitmen icin e-posta adresi bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/trainers/{id}'
+    metadata:
+      custom: []
+      groupName: Trainers
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a trainer.'
+      description: 'Requires permission: `trainers.delete` with a usable scope. Trainers use soft deletes, so the row is marked deleted after audit attributes are prepared.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Trainer ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -1203,346 +870,7 @@ endpoints:
       -
         custom: []
         status: 200
-        content: '{"message":"Google Calendar senkronizasyonu tamamlandi.","result":{"count":12,"last_synced_at":"2026-06-30T12:00:00+03:00","last_error":null,"last_error_at":null},"google_calendar":{"configured":true,"connected":true,"calendar_id":"primary"}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"This action is unauthorized."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Google Calendar baglantisi bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - POST
-    uri: api/calendar/meetings
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Create a calendar meeting.'
-      description: |-
-        Creates a manual calendar meeting separate from programs. Exposed under `/panel/calendar/meetings` and `/calendar/meetings`. Requires `calendar.meetings.create`. Project-linked meetings require project access for that action; projectless general meetings require global scope. If `period_id` is supplied, it must belong to the selected project and the period must be writable.
-
-        Assigned users are filtered to active coordinator/staff users that are valid for the meeting project, or any active coordinator/staff user for a general meeting.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'Optional project ID. Required only for project-scoped meetings.'
-        required: false
-        example: 3
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'Optional period ID.'
-        required: false
-        example: 12
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      title:
-        custom: []
-        name: title
-        description: 'Meeting title. Max 255 characters.'
-        required: true
-        example: 'Haftalik koordinasyon'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      description:
-        custom: []
-        name: description
-        description: 'Optional meeting notes.'
-        required: false
-        example: 'Program hazirlik toplantisi'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      location:
-        custom: []
-        name: location
-        description: 'Optional meeting location. Max 255 characters.'
-        required: false
-        example: 'KADEME Merkez'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      start_at:
-        custom: []
-        name: start_at
-        description: 'Start date/time.'
-        required: true
-        example: '2026-07-10T10:00:00+03:00'
-        type: datetime
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      end_at:
-        custom: []
-        name: end_at
-        description: 'Optional end date/time after `start_at`.'
-        required: false
-        example: '2026-07-10T11:00:00+03:00'
-        type: datetime
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      assigned_user_ids:
-        custom: []
-        name: assigned_user_ids
-        description: 'Optional invited/assigned user IDs.'
-        required: false
-        example:
-          - 7
-          - 8
-        type: 'integer[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      project_id: 3
-      period_id: 12
-      title: 'Haftalik koordinasyon'
-      description: 'Program hazirlik toplantisi'
-      location: 'KADEME Merkez'
-      start_at: '2026-07-10T10:00:00+03:00'
-      end_at: '2026-07-10T11:00:00+03:00'
-      assigned_user_ids:
-        - 7
-        - 8
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 201
-        content: '{"message":"Toplanti olusturuldu.","meeting":{"id":91,"event_type":"meeting","title":"Haftalik koordinasyon","project_id":3,"calendar_event":{"assigned_user_ids":[7],"assigned_count":1}}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu kapsamda toplanti olusturma yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Secilen donem bu projeye ait degil.","errors":{"period_id":["Secilen donem bu projeye ait degil."]}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/calendar/meetings/{id}/assignments'
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Update meeting assignees.'
-      description: 'Updates assigned users for a manual meeting. Exposed under `/panel/calendar/meetings/{id}/assignments` and `/calendar/meetings/{id}/assignments`. Requires `calendar.meetings.manage`; project-linked meetings require project access for that action, while projectless meetings require global scope. The meeting period must be writable.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Calendar event ID for a meeting.'
-        required: true
-        example: 91
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 91
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      assigned_user_ids:
-        custom: []
-        name: assigned_user_ids
-        description: 'Optional user IDs to assign.'
-        required: false
-        example:
-          - 7
-          - 8
-        type: 'integer[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      assigned_user_ids:
-        - 7
-        - 8
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Toplanti davetlileri guncellendi.","meeting_id":91,"calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_count":1}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu toplantinin davetlilerini yonetme yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 404
-        content: '{"message":"No query results for model [App\\Models\\CalendarEvent] 91"}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/calendar/programs/{id}/assignments'
-    metadata:
-      custom: []
-      groupName: Calendar
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Update program calendar assignments.'
-      description: |-
-        Creates or updates the `CalendarEvent` shadow record for a program and stores allowed assigned users. Exposed under `/panel/calendar/programs/{id}/assignments` and `/calendar/programs/{id}/assignments`. Requires `calendar.assignments.manage` for the program project and a writable period.
-
-        Submitted users are filtered to active coordinator/staff users assignable to the program project; invalid-but-existing users are ignored rather than forced into the assignment list.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Program ID.'
-        required: true
-        example: 44
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 44
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      assigned_user_ids:
-        custom: []
-        name: assigned_user_ids
-        description: 'Optional user IDs to assign.'
-        required: false
-        example:
-          - 7
-          - 8
-        type: 'integer[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      assigned_user_ids:
-        - 7
-        - 8
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Gorev atamalari guncellendi.","program_id":44,"calendar_event":{"google_event_id":null,"assigned_user_ids":[7],"assigned_users":[{"id":7,"name":"Ada Yilmaz","role":"staff","unit":"Medya","title":"Uzman"}],"assigned_count":1}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu programa gorev atama yetkiniz yok."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 404
-        content: '{"message":"No query results for model [App\\Models\\Program] 44"}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The assigned user ids.0 field must be an integer.","errors":{"assigned_user_ids.0":["The assigned user ids.0 field must be an integer."]}}'
+        content: '{"message":"Egitmen kaydi silindi."}'
         headers: []
         description: ''
     responseFields: []

@@ -12,6 +12,7 @@ use App\Models\Mentor;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\RewardTier;
+use App\Services\ApplicationIntakeService;
 use App\Support\MediaStorage;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\Request;
@@ -21,16 +22,20 @@ use Illuminate\Http\Request;
  */
 class ProjectController extends Controller
 {
+    public function __construct(private readonly ApplicationIntakeService $intakeService) {}
+
     /**
      * List public active projects.
      *
      * @group Projects
+     *
      * @unauthenticated
      *
      * Lists only active projects. Public clients can use this endpoint before login.
      *
      * @queryParam search string Optional project search term. Example: diplomasi
      * @queryParam type string Optional project type filter. Example: fellowship
+     *
      * @response 200 {"projects":[{"id":1,"name":"Diplomasi360","slug":"diplomasi360","status":"active","application_open":true,"periods":[]}]}
      */
     public function index(Request $request)
@@ -41,9 +46,13 @@ class ProjectController extends Controller
         ]);
 
         $projects = Project::where('status', 'active')
-            ->with(['periods' => function ($query) {
-                $query->where('status', 'active');
-            }])
+            ->with([
+                'periods' => function ($query) {
+                    $query->whereIn('status', ['active', 'closing']);
+                },
+                'currentPeriod',
+                'applicationWindows',
+            ])
             ->when(! empty($validated['search']), function ($query) use ($validated) {
                 $search = $validated['search'];
                 $query->where(function ($builder) use ($search) {
@@ -67,11 +76,13 @@ class ProjectController extends Controller
      * Get public project detail and active application form.
      *
      * @group Projects
+     *
      * @unauthenticated
      *
      * Returns project details, active period, public programs, application form, and public project-specific module summaries.
      *
      * @urlParam slug string required Project slug. Example: diplomasi360
+     *
      * @response 200 {"project":{"id":1,"name":"Diplomasi360","slug":"diplomasi360"},"current_period":{"id":1,"name":"2026"},"application_form":{"id":1,"fields":[]},"programs":{"summary":{"total":0,"upcoming":0,"completed":0}},"project_specials":{"module_keys":["mentors"]}}
      * @response 404 {"message":"No query results for model [App\\Models\\Project]."}
      */
@@ -81,13 +92,16 @@ class ProjectController extends Controller
             ->where('status', 'active')
             ->with([
                 'periods',
+                'currentPeriod',
                 'participants.period:id,name,status,start_date,end_date',
                 'participants.user',
+                'applicationWindows',
             ])
             ->firstOrFail();
 
-        $currentPeriod = $project->periods->where('status', 'active')->first();
-        $applicationForm = $project->application_open
+        $currentPeriod = $project->currentPeriodOrLegacy();
+        $applicationWindow = $this->intakeService->windowFor($project, $currentPeriod);
+        $applicationForm = $this->intakeService->isOpen($project, $currentPeriod, $applicationWindow)
             ? $this->activeApplicationForm($project, $currentPeriod)
             : null;
 
@@ -190,9 +204,6 @@ class ProjectController extends Controller
             'location_place_address' => $program->location_place_address,
             'location_place_id' => $program->location_place_id,
             'location_place_provider' => $program->location_place_provider,
-            'latitude' => $program->latitude,
-            'longitude' => $program->longitude,
-            'radius_meters' => $program->radius_meters,
             'guest_info' => $program->guest_info,
             'status' => $program->status,
             'start_at' => optional($program->start_at)->toIso8601String(),
@@ -252,7 +263,7 @@ class ProjectController extends Controller
         }
 
         if (in_array('eurodesk_projects', $keys, true)) {
-            $currentPeriod = $project->periods->firstWhere('status', 'active');
+            $currentPeriod = $project->currentPeriodOrLegacy();
             $payload['eurodesk_projects'] = EurodeskProject::query()
                 ->where('project_id', $project->id)
                 ->when($currentPeriod, fn ($query) => $query->where(function ($builder) use ($currentPeriod) {

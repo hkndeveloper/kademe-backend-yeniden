@@ -62,6 +62,44 @@ class PanelProgramDetailScopeTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_qr_context_uses_qr_manage_permission_without_granting_program_detail_access(): void
+    {
+        $allowedProject = $this->project('allowed-qr-project');
+        $outsideProject = $this->project('outside-qr-project');
+        $allowedProgram = $this->program($allowedProject, 'QR Kapsam Programi');
+        $outsideProgram = $this->program($outsideProject, 'QR Kapsam Disi');
+
+        $role = Role::findOrCreate('selected_program_qr_manager', 'web');
+        Permission::findOrCreate('programs.qr.manage', 'web');
+        $role->givePermissionTo('programs.qr.manage');
+        RolePermissionScope::query()->create([
+            'role_name' => $role->name,
+            'permission_name' => 'programs.qr.manage',
+            'scope_type' => 'selected_projects',
+            'scope_payload' => ['project_ids' => [$allowedProject->id]],
+        ]);
+
+        $actor = User::factory()->create([
+            'name' => 'QR',
+            'surname' => 'Manager',
+            'role' => 'coordinator',
+        ]);
+        $actor->assignRole($role);
+        Sanctum::actingAs($actor);
+
+        $this->getJson("/api/panel/programs/{$allowedProgram->id}")
+            ->assertForbidden();
+
+        $this->getJson("/api/panel/programs/{$allowedProgram->id}/qr-context")
+            ->assertOk()
+            ->assertJsonPath('program.id', $allowedProgram->id)
+            ->assertJsonPath('program.period.status', 'active')
+            ->assertJsonPath('program.period.lifecycle.write_capabilities.resolve_operations', true);
+
+        $this->getJson("/api/panel/programs/{$outsideProgram->id}/qr-context")
+            ->assertForbidden();
+    }
+
     private function project(string $slug): Project
     {
         return Project::query()->create([

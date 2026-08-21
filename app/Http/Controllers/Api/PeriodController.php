@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\PeriodResource;
 use App\Models\Application;
 use App\Models\Assignment;
 use App\Models\Certificate;
@@ -13,14 +14,20 @@ use App\Models\KpdAppointment;
 use App\Models\KpdReport;
 use App\Models\Period;
 use App\Models\PeriodArchive;
+use App\Models\PeriodLifecycleEvent;
 use App\Models\Program;
 use App\Models\ProjectModule;
 use App\Models\VolunteerOpportunity;
+use App\Services\PeriodArchiveService;
+use App\Services\PeriodClosureReadinessService;
+use App\Services\PeriodLifecycleService;
+use App\Services\PeriodLifecycleMonitor;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * @group Periods
@@ -30,9 +37,12 @@ class PeriodController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+        private readonly PermissionResolver $permissionResolver,
+        private readonly PeriodLifecycleService $lifecycleService,
+        private readonly PeriodClosureReadinessService $readinessService,
+        private readonly PeriodArchiveService $archiveService,
+        private readonly PeriodLifecycleMonitor $monitor,
+    ) {}
 
     private function scopeManageablePeriods(Request $request, $query, string $permission)
     {
@@ -55,11 +65,18 @@ class PeriodController extends Controller
     {
         $this->abortUnlessAllowed($request, $permission);
 
-        $period = Period::with('project:id,name')->findOrFail($id);
+        $period = Period::with(['project:id,name,current_period_id', 'latestArchive'])->findOrFail($id);
 
         $this->abortUnlessProjectAllowed($request, $permission, (int) $period->project_id);
 
         return $period;
+    }
+
+    private function periodPayload(Request $request, Period $period): array
+    {
+        $period->loadMissing(['project:id,name,current_period_id', 'latestArchive']);
+
+        return (new PeriodResource($period))->toArray($request);
     }
 
     private function buildClosurePayload(Period $period): array
@@ -88,7 +105,7 @@ class PeriodController extends Controller
             return [
                 'participant_id' => $participant->id,
                 'user_id' => $participant->user_id,
-                'student' => $participant->user ? trim($participant->user->name . ' ' . $participant->user->surname) : 'Silinmis kullanici',
+                'student' => $participant->user ? trim($participant->user->name.' '.$participant->user->surname) : 'Silinmis kullanici',
                 'email' => $participant->user?->email,
                 'status' => $participant->status,
                 'graduation_status' => $participant->graduation_status,
@@ -186,30 +203,39 @@ class PeriodController extends Controller
         ];
     }
 
-    private function integrityHash(array $payload): string
-    {
-        return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION));
-    }
-
-    private function formatArchive(?PeriodArchive $archive): ?array
+    private function formatArchive(?PeriodArchive $archive, bool $includeSnapshot = false): ?array
     {
         if (! $archive) {
             return null;
         }
 
-        return [
+        $payload = [
             'id' => $archive->id,
             'period_id' => $archive->period_id,
             'project_id' => $archive->project_id,
             'closed_by' => $archive->closed_by,
             'closed_at' => optional($archive->closed_at)?->toIso8601String(),
             'archive_version' => $archive->archive_version,
+            'schema_version' => $archive->schema_version,
+            'previous_archive_id' => $archive->previous_archive_id,
+            'previous_hash' => $archive->previous_hash,
             'summary' => $archive->summary_json,
             'warnings' => $archive->warnings_json,
             'counts' => $archive->counts_json,
+            'readiness' => $archive->readiness_json,
             'integrity_hash' => $archive->integrity_hash,
+            'verification_status' => $archive->verification_status,
+            'verified_at' => optional($archive->verified_at)?->toIso8601String(),
+            'correction_reason' => $archive->correction_reason,
             'notes' => $archive->notes,
         ];
+
+        if ($includeSnapshot) {
+            $payload['snapshot'] = $archive->snapshot_json;
+            $payload['manifest'] = $archive->manifest_json;
+        }
+
+        return $payload;
     }
 
     /**
@@ -218,8 +244,10 @@ class PeriodController extends Controller
      * Requires permission: `periods.view`. Global scope lists all periods; scoped users only see periods in projects allowed by `periods.view`. Exposed under `/api/admin/periods` and `/api/panel/periods` aliases.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. Must be inside the user scope. Example: 1
-     * @queryParam status string Optional status filter: `active`, `passive` or `completed`. Example: active
+     * @queryParam status string Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`. Example: active
+     *
      * @response 200 {"periods":[{"id":3,"name":"2026 Bahar","status":"active","project":{"id":1,"name":"Diplomasi360"}}]}
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
@@ -227,7 +255,7 @@ class PeriodController extends Controller
     {
         $this->abortUnlessAllowed($request, 'periods.view');
 
-        $query = Period::with('project:id,name')->orderByDesc('created_at');
+        $query = Period::with(['project:id,name,current_period_id', 'latestArchive'])->orderByDesc('created_at');
         $query = $this->scopeManageablePeriods($request, $query, 'periods.view');
 
         if ($request->filled('project_id')) {
@@ -239,7 +267,26 @@ class PeriodController extends Controller
         }
 
         return response()->json([
-            'periods' => $query->get(),
+            'periods' => PeriodResource::collection($query->get())->resolve($request),
+        ]);
+    }
+
+    /**
+     * Show a single period workspace payload.
+     *
+     * Requires `periods.view` in the period project. Includes the immutable
+     * lifecycle timeline needed by the panel detail workspace.
+     */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.view')
+            ->load([
+                'lifecycleEvents.actor:id,name,surname',
+                'latestArchive',
+            ]);
+
+        return response()->json([
+            'period' => $this->periodPayload($request, $period),
         ]);
     }
 
@@ -249,9 +296,11 @@ class PeriodController extends Controller
      * Requires permission: `periods.export`. Global scope exports all periods; scoped users export only periods in permitted projects. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. Example: 1
-     * @queryParam status string Optional status filter: `active`, `passive` or `completed`. Example: completed
+     * @queryParam status string Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`. Example: completed
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: pdf
+     *
      * @response 200 binary Periods export file.
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
@@ -285,7 +334,7 @@ class PeriodController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'donemler_' . now()->format('Ymd_His'),
+            'donemler_'.now()->format('Ymd_His'),
             'Donemler',
             $headings,
             $rows,
@@ -295,16 +344,18 @@ class PeriodController extends Controller
     /**
      * Create a project period.
      *
-     * Requires permission: `periods.create` for the selected project. If the new period is active, other active periods in the same project are switched to passive.
+     * Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period.
      *
      * @authenticated
+     *
      * @bodyParam project_id integer required Project ID. Example: 1
      * @bodyParam name string required Period name. Example: 2026 Bahar
      * @bodyParam start_date date required Start date. Example: 2026-03-01
      * @bodyParam end_date date required End date, after or equal to start date. Example: 2026-06-30
      * @bodyParam credit_start_amount integer required Starting credit amount. Example: 100
      * @bodyParam credit_threshold integer required Critical credit threshold. Example: 75
-     * @bodyParam status string required Period status: `active`, `passive` or `completed`. Example: active
+     * @bodyParam status string Optional compatibility value: `planned`, `passive` or `active`. Defaults to planned. Example: planned
+     *
      * @response 201 {"message":"Donem olusturuldu.","period":{"id":3,"name":"2026 Bahar","status":"active"}}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"The given data was invalid."}
@@ -320,38 +371,56 @@ class PeriodController extends Controller
             'end_date' => 'required|date|after_or_equal:start_date',
             'credit_start_amount' => 'required|integer|min:0',
             'credit_threshold' => 'required|integer|min:0',
-            'status' => 'required|in:active,passive,completed',
+            'status' => 'sometimes|in:planned,passive,active',
         ]);
 
         $this->abortUnlessProjectAllowed($request, 'periods.create', (int) $validated['project_id']);
+        $requestedStatus = $validated['status'] ?? PeriodLifecycleService::PLANNED;
 
-        if ($validated['status'] === 'active') {
-            Period::where('project_id', $validated['project_id'])
-                ->where('status', 'active')
-                ->update(['status' => 'passive']);
+        if ($requestedStatus === PeriodLifecycleService::ACTIVE) {
+            $this->abortUnlessAllowed($request, 'periods.activate');
+            $this->abortUnlessProjectAllowed($request, 'periods.activate', (int) $validated['project_id']);
         }
 
-        $period = Period::create($validated)->load('project');
+        unset($validated['status']);
+        $period = DB::transaction(function () use ($validated, $request, $requestedStatus) {
+            $period = $this->lifecycleService->createPlanned($validated, $request->user());
+
+            // Gecis doneminde eski panelin acikca `active` gondermesini destekler;
+            // yeni kaydin varsayilani her zaman planned'dir ve aktivasyon servis uzerinden yapilir.
+            if ($requestedStatus === PeriodLifecycleService::ACTIVE) {
+                return $this->lifecycleService->activate(
+                    $period->id,
+                    $request->user(),
+                    'Donem olusturma akisi aktivasyon istedi.',
+                );
+            }
+
+            return $period;
+        });
 
         return response()->json([
             'message' => 'Donem olusturuldu.',
-            'period' => $period,
+            'period' => $this->periodPayload($request, $period),
         ], 201);
     }
 
     /**
      * Update a project period.
      *
-     * Requires permission: `periods.update` for the period project. If the period is set to active, other active periods in the same project are switched to passive.
+     * Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint.
      *
      * @authenticated
+     *
      * @urlParam id integer required Period ID. Example: 3
+     *
      * @bodyParam name string required Period name. Example: 2026 Bahar
      * @bodyParam start_date date required Start date. Example: 2026-03-01
      * @bodyParam end_date date required End date. Example: 2026-06-30
      * @bodyParam credit_start_amount integer required Starting credit amount. Example: 100
      * @bodyParam credit_threshold integer required Critical credit threshold. Example: 75
-     * @bodyParam status string required Period status: `active`, `passive` or `completed`. Example: passive
+     * @bodyParam status string Optional current status for compatibility. A different value is rejected. Example: planned
+     *
      * @response 200 {"message":"Donem guncellendi.","period":{"id":3,"status":"passive"}}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      */
@@ -369,21 +438,144 @@ class PeriodController extends Controller
             'end_date' => 'required|date|after_or_equal:start_date',
             'credit_start_amount' => 'required|integer|min:0',
             'credit_threshold' => 'required|integer|min:0',
-            'status' => 'required|in:active,passive,completed',
+            'status' => 'sometimes|in:planned,active,closing,completed,cancelled,passive',
         ]);
 
-        if ($validated['status'] === 'active') {
-            Period::where('project_id', $period->project_id)
-                ->where('id', '!=', $period->id)
-                ->where('status', 'active')
-                ->update(['status' => 'passive']);
+        if (isset($validated['status']) && $validated['status'] !== $period->status) {
+            abort(422, 'Donem durumu genel duzenleme formundan degistirilemez. Uygun yasam dongusu islemini kullanin.');
         }
 
-        $period->update($validated);
+        unset($validated['status']);
+        $period = $this->lifecycleService->updateDetails($period->id, $validated, $request->user());
 
         return response()->json([
             'message' => 'Donem guncellendi.',
-            'period' => $period->fresh('project'),
+            'period' => $this->periodPayload($request, $period),
+        ]);
+    }
+
+    /**
+     * Activate a planned period.
+     *
+     * Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active/closing period exists.
+     *
+     * @authenticated
+     *
+     * @urlParam id integer required Period ID. Example: 3
+     *
+     * @bodyParam reason string Optional activation reason. Example: Yeni donem baslangici.
+     *
+     * @response 200 {"message":"Donem aktif edildi.","period":{"id":3,"status":"active","lifecycle":{"is_current":true}}}
+     * @response 409 {"message":"Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin."}
+     */
+    public function activate(Request $request, int $id): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.activate');
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:2000',
+        ]);
+
+        $period = $this->lifecycleService->activate(
+            $period->id,
+            $request->user(),
+            $validated['reason'] ?? null,
+        );
+
+        return response()->json([
+            'message' => 'Donem aktif edildi.',
+            'period' => $this->periodPayload($request, $period),
+        ]);
+    }
+
+    /**
+     * Start period closing preparation.
+     *
+     * Requires `periods.closing.start` in the period project.
+     *
+     * @authenticated
+     *
+     * @urlParam id integer required Period ID. Example: 3
+     *
+     * @bodyParam reason string Optional closing preparation note. Example: Donem sonu kontrolleri baslatildi.
+     *
+     * @response 200 {"message":"Donem kapanis hazirligina alindi.","period":{"id":3,"status":"closing"}}
+     */
+    public function startClosing(Request $request, int $id): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.closing.start');
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:2000',
+        ]);
+
+        $period = $this->lifecycleService->startClosing(
+            $period->id,
+            $request->user(),
+            $validated['reason'] ?? null,
+        );
+
+        return response()->json([
+            'message' => 'Donem kapanis hazirligina alindi.',
+            'period' => $this->periodPayload($request, $period),
+        ]);
+    }
+
+    /**
+     * Cancel closing preparation and return the period to active.
+     *
+     * Requires `periods.closing.cancel` in the period project.
+     *
+     * @authenticated
+     *
+     * @urlParam id integer required Period ID. Example: 3
+     *
+     * @bodyParam reason string required Cancellation reason. Example: Eksik basvuru kararlari tamamlanacak.
+     *
+     * @response 200 {"message":"Donem kapanis hazirligindan cikarilip yeniden aktif edildi.","period":{"id":3,"status":"active"}}
+     */
+    public function cancelClosing(Request $request, int $id): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.closing.cancel');
+        $validated = $request->validate([
+            'reason' => 'required|string|min:3|max:2000',
+        ]);
+
+        $period = $this->lifecycleService->cancelClosing(
+            $period->id,
+            $request->user(),
+            $validated['reason'],
+        );
+
+        return response()->json([
+            'message' => 'Donem kapanis hazirligindan cikarilip yeniden aktif edildi.',
+            'period' => $this->periodPayload($request, $period),
+        ]);
+    }
+
+    /**
+     * Cancel a planned period.
+     *
+     * Requires `periods.cancel` in the period project.
+     *
+     * @authenticated
+     *
+     * @urlParam id integer required Period ID. Example: 3
+     *
+     * @bodyParam reason string required Cancellation reason. Example: Proje takvimi degisti.
+     *
+     * @response 200 {"message":"Planlanan donem iptal edildi.","period":{"id":3,"status":"cancelled"}}
+     */
+    public function cancel(Request $request, int $id): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.cancel');
+        $validated = $request->validate([
+            'reason' => 'required|string|min:3|max:2000',
+        ]);
+
+        $period = $this->lifecycleService->cancel($period->id, $request->user(), $validated['reason']);
+
+        return response()->json([
+            'message' => 'Planlanan donem iptal edildi.',
+            'period' => $this->periodPayload($request, $period),
         ]);
     }
 
@@ -393,7 +585,9 @@ class PeriodController extends Controller
      * Requires permission: `periods.view` for the period project. Returns the computed closure payload, warnings and the latest archive snapshot without changing period status.
      *
      * @authenticated
+     *
      * @urlParam id integer required Period ID. Example: 3
+     *
      * @response 200 {"period":{"id":3,"status":"active"},"summary":{"participants":{"total":50},"credit_snapshot":{"below_threshold_count":4}},"warnings":{"open_programs":1},"latest_archive":null}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      */
@@ -401,11 +595,13 @@ class PeriodController extends Controller
     {
         $period = $this->resolvePeriodForAction($request, $id, 'periods.view')->load('latestArchive');
         $payload = $this->buildClosurePayload($period);
+        $readiness = $this->readinessService->evaluate($period);
 
         return response()->json([
-            'period' => $period,
+            'period' => $this->periodPayload($request, $period),
             'summary' => $payload['summary'],
             'warnings' => $payload['warnings'],
+            'readiness' => $readiness,
             'latest_archive' => $this->formatArchive($period->latestArchive),
         ]);
     }
@@ -413,97 +609,139 @@ class PeriodController extends Controller
     /**
      * Complete and archive a period.
      *
-     * Requires permission: `periods.update` for the period project. Creates an immutable period archive snapshot with summary, warnings, counts and integrity hash, then marks the period as completed.
+     * Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction.
      *
      * @authenticated
+     *
      * @urlParam id integer required Period ID. Example: 3
+     *
      * @bodyParam notes string Optional archive notes. Example: Donem kapanisi tamamlandi.
+     *
      * @response 200 {"message":"Donem tamamlandi ve gecmis donem olarak arsivlendi.","period":{"id":3,"status":"completed"},"archive":{"archive_version":1,"integrity_hash":"hash"}}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      */
     public function complete(Request $request, int $id): JsonResponse
     {
-        $period = $this->resolvePeriodForAction($request, $id, 'periods.update');
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.complete');
         $validated = $request->validate([
             'notes' => 'nullable|string|max:5000',
         ]);
 
-        $archive = DB::transaction(function () use ($period, $request, $validated) {
-            $payload = $this->buildClosurePayload($period);
-            $closedAt = now();
-            $archiveVersion = ((int) PeriodArchive::query()
-                ->where('period_id', $period->id)
-                ->max('archive_version')) + 1;
-            $hashPayload = [
-                'period_id' => $period->id,
-                'project_id' => $period->project_id,
-                'closed_at' => $closedAt->toIso8601String(),
-                'archive_version' => $archiveVersion,
-                'summary' => $payload['summary'],
-                'warnings' => $payload['warnings'],
-                'counts' => $payload['counts'],
-            ];
+        $result = $this->lifecycleService->complete(
+            $period->id,
+            $request->user(),
+            $validated['notes'] ?? null,
+            function (Period $lockedPeriod) use ($request, $validated) {
+                $payload = $this->buildClosurePayload($lockedPeriod);
+                $readiness = $this->readinessService->evaluate($lockedPeriod);
+                if (! $readiness['ready']) {
+                    $this->monitor->closureBlocked($lockedPeriod, $request->user(), $readiness);
+                    throw ValidationException::withMessages([
+                        'period' => ['Donem tamamlanamadi. Kapanis engellerini sonuclandirin.'],
+                        'blockers' => collect($readiness['blockers'])
+                            ->map(fn (array $item) => $item['message'].' ('.$item['count'].')')
+                            ->all(),
+                    ])->status(422);
+                }
+                $previousArchiveExists = PeriodArchive::query()->where('period_id', $lockedPeriod->id)->exists();
+                $correctionReason = $previousArchiveExists
+                    ? PeriodLifecycleEvent::query()
+                        ->where('period_id', $lockedPeriod->id)
+                        ->where('event_type', 'reopened')
+                        ->latest('id')
+                        ->value('reason')
+                    : null;
 
-            $archive = PeriodArchive::query()->create([
-                'period_id' => $period->id,
-                'project_id' => $period->project_id,
-                'closed_by' => $request->user()?->id,
-                'closed_at' => $closedAt,
-                'archive_version' => $archiveVersion,
-                'summary_json' => $payload['summary'],
-                'warnings_json' => $payload['warnings'],
-                'counts_json' => $payload['counts'],
-                'integrity_hash' => $this->integrityHash($hashPayload),
-                'notes' => $validated['notes'] ?? null,
-            ]);
-
-            $period->update(['status' => 'completed']);
-
-            return $archive;
-        });
+                return $this->archiveService->createVersion(
+                    $lockedPeriod,
+                    $payload,
+                    $readiness,
+                    $request->user(),
+                    $validated['notes'] ?? null,
+                    $correctionReason,
+                );
+            },
+        );
 
         return response()->json([
             'message' => 'Donem tamamlandi ve gecmis donem olarak arsivlendi.',
-            'period' => $period->fresh('project'),
-            'archive' => $this->formatArchive($archive),
+            'period' => $this->periodPayload($request, $result['period']),
+            'archive' => $this->formatArchive($result['archive']),
+        ]);
+    }
+
+    public function archives(Request $request, int $id): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.view');
+        $archives = PeriodArchive::query()
+            ->where('period_id', $period->id)
+            ->orderByDesc('archive_version')
+            ->get()
+            ->map(fn (PeriodArchive $archive) => $this->formatArchive($archive));
+
+        return response()->json(['period' => $this->periodPayload($request, $period), 'archives' => $archives]);
+    }
+
+    public function archive(Request $request, int $id, int $archiveId): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.view');
+        $archive = PeriodArchive::query()->where('period_id', $period->id)->findOrFail($archiveId);
+
+        return response()->json(['archive' => $this->formatArchive($archive, true)]);
+    }
+
+    public function verifyArchive(Request $request, int $id, int $archiveId): JsonResponse
+    {
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.archive.verify');
+        $archive = PeriodArchive::query()
+            ->with('previousArchive')
+            ->where('period_id', $period->id)
+            ->findOrFail($archiveId);
+
+        return response()->json([
+            'message' => 'Arsiv butunluk dogrulamasi tamamlandi.',
+            'verification' => $this->archiveService->verify($archive, $request->user()),
         ]);
     }
 
     /**
-     * Reopen a completed/passive period.
+     * Reopen a completed period.
      *
-     * Requires permission: `periods.update` for the period project. Reopens the period as passive by default, or active when requested; when reactivated, other active periods in the same project are switched to passive.
+     * Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail.
      *
      * @authenticated
+     *
      * @urlParam id integer required Period ID. Example: 3
-     * @bodyParam status string Optional next status: `active` or `passive`. Defaults to passive. Example: active
+     *
+     * @bodyParam target_status string Optional next status: `planned` or `active`. Defaults to planned. Example: planned
+     * @bodyParam reason string required Reopen reason. Example: Arsivdeki ogrenci sonucu duzeltilecek.
+     *
      * @response 200 {"message":"Donem yeniden aktif edildi.","period":{"id":3,"status":"active"}}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      */
     public function reopen(Request $request, int $id): JsonResponse
     {
-        $period = $this->resolvePeriodForAction($request, $id, 'periods.update');
+        $period = $this->resolvePeriodForAction($request, $id, 'periods.reopen');
 
         $validated = $request->validate([
+            'target_status' => 'nullable|in:planned,active',
             'status' => 'nullable|in:active,passive',
+            'reason' => 'required|string|min:10|max:5000',
         ]);
 
-        $nextStatus = $validated['status'] ?? 'passive';
+        $nextStatus = $validated['target_status']
+            ?? (($validated['status'] ?? null) === 'active' ? 'active' : 'planned');
 
-        DB::transaction(function () use ($period, $nextStatus) {
-            if ($nextStatus === 'active') {
-                Period::where('project_id', $period->project_id)
-                    ->where('id', '!=', $period->id)
-                    ->where('status', 'active')
-                    ->update(['status' => 'passive']);
-            }
-
-            $period->update(['status' => $nextStatus]);
-        });
+        $period = $this->lifecycleService->reopen(
+            $period->id,
+            $nextStatus,
+            $request->user(),
+            $validated['reason'],
+        );
 
         return response()->json([
-            'message' => $nextStatus === 'active' ? 'Donem yeniden aktif edildi.' : 'Donem yeniden pasife alindi.',
-            'period' => $period->fresh('project'),
+            'message' => $nextStatus === 'active' ? 'Donem yeniden aktif edildi.' : 'Donem planlanan duruma yeniden acildi.',
+            'period' => $this->periodPayload($request, $period),
         ]);
     }
 }

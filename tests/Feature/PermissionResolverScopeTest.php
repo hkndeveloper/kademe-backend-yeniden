@@ -217,7 +217,7 @@ class PermissionResolverScopeTest extends TestCase
         $this->assertTrue($resolver->canAccessProject($coordinator, 'calendar.view', $otherProject->id));
     }
 
-    public function test_global_content_permissions_do_not_default_to_project_scope(): void
+    public function test_coordinator_content_permission_defaults_to_own_projects_scope(): void
     {
         Permission::findOrCreate('content.view', 'web');
 
@@ -234,7 +234,7 @@ class PermissionResolverScopeTest extends TestCase
         $coordinator->refresh();
         $resolver = $this->resolver();
 
-        $this->assertSame('none', $resolver->scopeFor($coordinator, 'content.view')['scope_type']);
+        $this->assertSame('own_projects', $resolver->scopeFor($coordinator, 'content.view')['scope_type']);
         $this->assertFalse($resolver->hasGlobalScope($coordinator, 'content.view'));
     }
 

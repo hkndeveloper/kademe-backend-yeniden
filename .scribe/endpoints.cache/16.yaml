@@ -329,10 +329,22 @@ endpoints:
       file:
         custom: []
         name: file
-        description: 'Must be a file. Must not be greater than 20480 kilobytes.'
-        required: true
+        description: 'This field is required when <code>files</code> is not present. Must be a file. Must not be greater than 20480 kilobytes.'
+        required: false
         example: null
         type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      files:
+        custom: []
+        name: files
+        description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+        required: false
+        example:
+          - null
+        type: 'file[]'
         enumValues: []
         exampleWasSpecified: false
         nullable: false
@@ -342,7 +354,7 @@ endpoints:
         name: visible_to_student
         description: ''
         required: false
-        example: true
+        example: false
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -362,10 +374,12 @@ endpoints:
     cleanBodyParameters:
       title: vmqeopfuudtdsufvyvddq
       description: 'Dolores molestias ipsam sit.'
-      visible_to_student: true
+      visible_to_student: false
       category: consequatur
     fileParameters:
       file: null
+      files:
+        - null
     responses: []
     responseFields: []
     auth:

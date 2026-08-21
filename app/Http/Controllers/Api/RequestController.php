@@ -75,7 +75,12 @@ class RequestController extends Controller
         return $this->permissionResolver->canAccessProject($user, $permission, $projectId);
     }
 
-    private function resolveWorkflowRequestPeriod(Request $request, array &$validated, string $permission): ?int
+    private function resolveWorkflowRequestPeriod(
+        Request $request,
+        array &$validated,
+        string $permission,
+        bool $forWrite = false,
+    ): ?int
     {
         if (empty($validated['period_id'])) {
             return null;
@@ -90,6 +95,9 @@ class RequestController extends Controller
 
         $validated['project_id'] = (int) $period->project_id;
         $this->resolveProjectPeriodContext($request, $permission, (int) $period->project_id, (int) $period->id);
+        if ($forWrite) {
+            $this->assertPeriodWritable($request, (int) $period->id);
+        }
 
         return (int) $period->id;
     }
@@ -263,12 +271,14 @@ class RequestController extends Controller
      * The response also returns form metadata for the UI: active projects/periods inside view/create scope, eligible target users, request types, status options, and target units.
      *
      * @group Requests
+     *
      * @authenticated
      *
      * @queryParam status string Optional status filter: pending, in_progress, completed, rejected. Example: pending
      * @queryParam type string Optional request type filter. Example: official_doc
      * @queryParam project_id integer Optional project filter; scoped by `requests.view`. Example: 1
      * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
+     *
      * @response 200 {"requests":[{"id":1,"type":"official_doc","status":"pending","description":"Belge talebi"}],"projects":[{"id":1,"name":"KADEME","periods":[]}],"target_users":[{"id":2,"name":"Ayse","role":"staff"}],"request_types":["vehicle","food","official_doc"],"status_options":["pending","in_progress","completed","rejected"],"target_units":["media","operations","official_affairs"]}
      * @response 403 {"message":"This action is unauthorized."}
      */
@@ -322,7 +332,10 @@ class RequestController extends Controller
             ...$this->permissionResolver->projectIdsForPermission($user, 'requests.create'),
         ])->map(fn ($id) => (int) $id)->unique()->values()->all();
         $projects = Project::query()
-            ->with(['periods' => fn ($query) => $query->orderByDesc('start_date')])
+            ->with([
+                'periods' => fn ($query) => $query->orderByDesc('start_date'),
+                'currentPeriod',
+            ])
             ->where('status', 'active')
             ->when(
                 ! $this->permissionResolver->hasGlobalScope($user, 'requests.view')
@@ -330,13 +343,13 @@ class RequestController extends Controller
                 fn ($q) => $q->whereIn('id', $projectScopeIds === [] ? [-1] : $projectScopeIds)
             )
             ->orderBy('name')
-            ->get(['id', 'name', 'slug', 'type'])
+            ->get(['id', 'current_period_id', 'name', 'slug', 'type'])
             ->map(fn (Project $project) => [
                 'id' => $project->id,
                 'name' => $project->name,
                 'slug' => $project->slug,
                 'type' => $project->type,
-                'active_period' => optional($project->periods->firstWhere('status', 'active'))?->only(['id', 'name', 'status', 'start_date', 'end_date']),
+                'active_period' => optional($project->currentPeriodOrLegacy())?->only(['id', 'name', 'status', 'start_date', 'end_date']),
                 'periods' => $project->periods->map->only(['id', 'name', 'status', 'start_date', 'end_date'])->values(),
             ])
             ->values();
@@ -384,6 +397,7 @@ class RequestController extends Controller
      * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.export`. Non-global users are filtered to requester, target user, manageable project ids, or allowed target units. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
      *
      * @group Requests
+     *
      * @authenticated
      *
      * @queryParam status string Optional status filter: pending, in_progress, completed, rejected. Example: completed
@@ -391,6 +405,7 @@ class RequestController extends Controller
      * @queryParam project_id integer Optional project filter; scoped by `requests.export`. Example: 1
      * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
      * @queryParam format string Optional export format. Example: csv
+     *
      * @response 200 {"download":"Export file stream"}
      * @response 403 {"message":"This action is unauthorized."}
      */
@@ -470,6 +485,7 @@ class RequestController extends Controller
      * When the actor does not have global create scope, direct `target_user_id` routing is limited to super admins or staff in the same unit. Creating a request notifies eligible target users who can view that unit/request.
      *
      * @group Requests
+     *
      * @authenticated
      *
      * @bodyParam type string required One of vehicle, food, accommodation, ticket, official_doc, media_design, other. Example: official_doc
@@ -478,6 +494,7 @@ class RequestController extends Controller
      * @bodyParam description string required Request description, min 10 and max 3000 characters. Example: Resmi belge talep ediyorum.
      * @bodyParam project_id integer Optional project id. Required for vehicle, accommodation, and ticket. Example: 1
      * @bodyParam period_id integer Optional period id. Example: 1
+     *
      * @response 201 {"message":"Talep basariyla olusturuldu.","request_item":{"id":1,"type":"official_doc","status":"pending"}}
      * @response 403 {"message":"Bu proje icin talep olusturma yetkiniz bulunmuyor."}
      * @response 422 {"message":"Talep icin hedef birim veya hedef kisi secmelisin."}
@@ -493,7 +510,7 @@ class RequestController extends Controller
             'project_id' => 'nullable|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
         ]);
-        $periodId = $this->resolveWorkflowRequestPeriod($request, $validated, 'requests.create');
+        $periodId = $this->resolveWorkflowRequestPeriod($request, $validated, 'requests.create', true);
 
         if (empty($validated['target_unit']) && empty($validated['target_user_id'])) {
             return response()->json([
@@ -560,10 +577,13 @@ class RequestController extends Controller
      * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.update_status`. The target request must be manageable through global scope, target user ownership, target unit scope, or project scope. Status changes are audit logged.
      *
      * @group Requests
+     *
      * @authenticated
      *
      * @urlParam id integer required Request id. Example: 1
+     *
      * @bodyParam status string required One of pending, in_progress, completed, rejected. Example: completed
+     *
      * @response 200 {"message":"Talep durumu guncellendi.","request_item":{"id":1,"status":"completed"}}
      * @response 403 {"message":"Bu talebin durumunu guncelleme yetkin yok."}
      * @response 422 {"message":"The selected status is invalid."}
@@ -589,6 +609,7 @@ class RequestController extends Controller
                 'message' => 'Bu talebin durumunu guncelleme yetkin yok.',
             ], 403);
         }
+        $this->assertPeriodResolvable($request, $workflowRequest->period_id);
 
         $before = [
             'status' => $workflowRequest->status,
@@ -623,10 +644,13 @@ class RequestController extends Controller
      * Participant/mobile routes use the route-level `participant.support.manage` gate; panel/admin routes require `requests.upload_response`. The target request must be manageable through global scope, target user ownership, target unit scope, or project scope. Send as `multipart/form-data`; uploading a new file marks the request as completed and removes the previous response file when replaced.
      *
      * @group Requests
+     *
      * @authenticated
      *
      * @urlParam id integer required Request id. Example: 1
+     *
      * @bodyParam response_file file required Response attachment, max 10MB.
+     *
      * @response 200 {"message":"Dosya basariyla yuklendi ve talep tamamlandi.","request_item":{"id":1,"status":"completed"}}
      * @response 403 {"message":"Bu talebe dosya yukleme yetkin yok."}
      * @response 422 {"message":"The response file field is required.","errors":{"response_file":["The response file field is required."]}}
@@ -652,6 +676,7 @@ class RequestController extends Controller
                 'message' => 'Bu talebe dosya yukleme yetkin yok.',
             ], 403);
         }
+        $this->assertPeriodResolvable($request, $workflowRequest->period_id);
 
         $oldPath = $workflowRequest->response_file_path;
         $oldStatus = $workflowRequest->status;
@@ -696,9 +721,11 @@ class RequestController extends Controller
      * The requester can download their response file. Panel users can download when they can manage the request through `requests.view`, `requests.upload_response`, or `requests.update_status`. Returns a storage direct URL when configured; otherwise streams the binary file. Downloads are audit logged.
      *
      * @group Requests
+     *
      * @authenticated
      *
      * @urlParam id integer required Request id. Example: 1
+     *
      * @response 200 {"download_url":"https://storage.example.com/requests/responses/file.pdf"}
      * @response 200 {"download":"Binary response file stream"}
      * @response 403 {"message":"Bu talep dosyasini indirme yetkiniz yok."}

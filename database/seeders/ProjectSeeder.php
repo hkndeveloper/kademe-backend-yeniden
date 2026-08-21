@@ -2,15 +2,19 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\Project;
+use App\Models\ApplicationWindow;
 use App\Models\Period;
+use App\Models\Project;
+use App\Models\User;
+use App\Services\PeriodLifecycleService;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
 class ProjectSeeder extends Seeder
 {
-    public function run(): void
+    public function run(PeriodLifecycleService $lifecycleService): void
     {
+        $actor = User::query()->where('role', 'super_admin')->orderBy('id')->first();
         $projects = [
             [
                 'name' => 'Diplomasi360',
@@ -55,16 +59,60 @@ class ProjectSeeder extends Seeder
                 'application_open' => true,
             ]);
 
-            // Her projeye bir aktif dönem ekleyelim
-            Period::firstOrCreate([
+            $period = Period::query()
+                ->where('project_id', $project->id)
+                ->where('name', '2024-2025 Güz Dönemi')
+                ->first();
+
+            if (! $period) {
+                $period = $lifecycleService->createPlanned([
+                    'project_id' => $project->id,
+                    'name' => '2024-2025 Güz Dönemi',
+                    'start_date' => now()->startOfMonth()->toDateString(),
+                    'end_date' => now()->addMonths(4)->endOfMonth()->toDateString(),
+                    'credit_start_amount' => 100,
+                    'credit_threshold' => 75,
+                ], $actor);
+                $period = $lifecycleService->activate(
+                    $period->id,
+                    $actor,
+                    'Proje seeder aktif donem kurulumu.',
+                );
+            } elseif (in_array($period->status, [
+                PeriodLifecycleService::PLANNED,
+                PeriodLifecycleService::LEGACY_PASSIVE,
+            ], true) && $project->current_period_id === null) {
+                $period = $lifecycleService->activate(
+                    $period->id,
+                    $actor,
+                    'Proje seeder mevcut donem aktivasyonu.',
+                );
+            } elseif (in_array($period->status, [
+                PeriodLifecycleService::ACTIVE,
+                PeriodLifecycleService::CLOSING,
+            ], true) && $project->current_period_id === null) {
+                $project->forceFill(['current_period_id' => $period->id])->save();
+            }
+
+            $project = $project->fresh();
+            $isOpen = $period->status === PeriodLifecycleService::ACTIVE
+                && (bool) $project->application_open;
+
+            ApplicationWindow::query()->firstOrCreate([
                 'project_id' => $project->id,
-                'name' => '2024-2025 Güz Dönemi',
+                'period_id' => $period->id,
             ], [
-                'start_date' => now()->startOfMonth(),
-                'end_date' => now()->addMonths(4)->endOfMonth(),
-                'credit_start_amount' => 100,
-                'credit_threshold' => 75,
-                'status' => 'active',
+                'is_open' => $isOpen,
+                'starts_at' => $project->application_start_at,
+                'ends_at' => $project->application_end_at,
+                'next_application_date' => $project->next_application_date,
+                'has_interview' => (bool) $project->has_interview,
+                'quota' => $project->quota,
+                'change_note' => 'Proje seeder tarafindan donem baglaminda olusturuldu.',
+                'opened_by' => $isOpen ? $actor?->id : null,
+                'opened_at' => $isOpen ? now() : null,
+                'updated_by' => $actor?->id,
+                'status_changed_at' => now(),
             ]);
         }
     }

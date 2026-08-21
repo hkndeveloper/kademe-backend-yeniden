@@ -1,19 +1,19 @@
-name: 'Site Settings'
+name: Periods
 description: ''
 endpoints:
   -
     custom: []
     httpMethods:
       - GET
-    uri: api/admin/site-settings
+    uri: api/admin/periods
     metadata:
       custom: []
-      groupName: 'Site Settings'
+      groupName: Periods
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Get panel site settings.'
-      description: 'Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.view` or `content.site_settings.update`. Returns normalized settings with defaults merged, stored media URLs normalized through the media storage layer, and computed homepage counters for preview screens.'
+      title: 'List panel periods.'
+      description: 'Requires permission: `periods.view`. Global scope lists all periods; scoped users only see periods in projects allowed by `periods.view`. Exposed under `/api/admin/periods` and `/api/panel/periods` aliases.'
       authenticated: true
       deprecated: false
     headers:
@@ -22,8 +22,32 @@ endpoints:
       Accept: application/json
     urlParameters: []
     cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. Must be inside the user scope.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      status: active
     bodyParameters: []
     cleanBodyParameters: []
     fileParameters: []
@@ -31,201 +55,13 @@ endpoints:
       -
         custom: []
         status: 200
-        content: '{"settings":{"general":{"site_name":"KADEME"},"contact":{"contact_email":"info@kademe.org"},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}'
+        content: '{"periods":[{"id":3,"name":"2026 Bahar","status":"active","project":{"id":1,"name":"Diplomasi360"}}]}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
         content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: api/admin/site-settings
-    metadata:
-      custom: []
-      groupName: 'Site Settings'
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Update panel site settings.'
-      description: |-
-        Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.update` or `content.site_settings.update`. Accepts grouped settings for public site configuration, stores scalar values as strings and arrays as JSON, normalizes the response with defaults, and clears the short-lived public homepage cache.
-
-        Supported top-level groups are `general`, `contact`, `social_media`, `navigation`, `homepage`, `about`, `blog_page`, and `faq_page`. Unknown nested keys inside accepted groups are stored as provided, so mobile/web clients should send the full intended group shape when replacing complex arrays such as navigation links or homepage blocks.
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      settings:
-        custom: []
-        name: settings
-        description: 'Grouped site settings payload.'
-        required: true
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        deprecated: false
-      settings.general:
-        custom: []
-        name: settings.general
-        description: 'Optional general labels.'
-        required: false
-        example:
-          site_name: KADEME
-          site_tagline: 'Gelecegin Liderlik Okulu'
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.contact:
-        custom: []
-        name: settings.contact
-        description: 'Optional contact settings.'
-        required: false
-        example:
-          contact_email: info@kademe.org
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.social_media:
-        custom: []
-        name: settings.social_media
-        description: 'Optional social/media/webhook settings.'
-        required: false
-        example:
-          instagram_url: 'https://instagram.com/kademe'
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.navigation:
-        custom: []
-        name: settings.navigation
-        description: 'Optional header/footer navigation arrays.'
-        required: false
-        example:
-          header_links:
-            -
-              label: 'Ana Sayfa'
-              href: /
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.homepage:
-        custom: []
-        name: settings.homepage
-        description: 'Optional homepage configuration.'
-        required: false
-        example:
-          stats_mode: auto
-          block_order:
-            - hero
-            - projects
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.about:
-        custom: []
-        name: settings.about
-        description: 'Optional about page copy.'
-        required: false
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      settings.blog_page:
-        custom: []
-        name: settings.blog_page
-        description: 'Optional blog page copy.'
-        required: false
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      settings.faq_page:
-        custom: []
-        name: settings.faq_page
-        description: 'Optional FAQ page copy.'
-        required: false
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      settings:
-        general:
-          site_name: KADEME
-          site_tagline: 'Gelecegin Liderlik Okulu'
-        contact:
-          contact_email: info@kademe.org
-        social_media:
-          instagram_url: 'https://instagram.com/kademe'
-        navigation:
-          header_links:
-            -
-              label: 'Ana Sayfa'
-              href: /
-        homepage:
-          stats_mode: auto
-          block_order:
-            - hero
-            - projects
-        about: []
-        blog_page: []
-        faq_page: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Site ayarlari guncellendi.","settings":{"general":{"site_name":"KADEME"}},"computed_homepage_stats":[]}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The settings field is required."}'
         headers: []
         description: ''
     responseFields: []
@@ -240,15 +76,15 @@ endpoints:
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/site-settings
+    uri: api/admin/periods/export
     metadata:
       custom: []
-      groupName: 'Site Settings'
+      groupName: Periods
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Get panel site settings.'
-      description: 'Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.view` or `content.site_settings.update`. Returns normalized settings with defaults merged, stored media URLs normalized through the media storage layer, and computed homepage counters for preview screens.'
+      title: 'Export panel periods.'
+      description: 'Requires permission: `periods.export`. Global scope exports all periods; scoped users export only periods in permitted projects. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
       authenticated: true
       deprecated: false
     headers:
@@ -257,8 +93,44 @@ endpoints:
       Accept: application/json
     urlParameters: []
     cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
+        required: false
+        example: completed
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      status: completed
+      format: pdf
     bodyParameters: []
     cleanBodyParameters: []
     fileParameters: []
@@ -266,7 +138,7 @@ endpoints:
       -
         custom: []
         status: 200
-        content: '{"settings":{"general":{"site_name":"KADEME"},"contact":{"contact_email":"info@kademe.org"},"homepage":{"block_order":["hero","projects"]}},"computed_homepage_stats":[{"label":"Aktif Ogrenci","value":"0","icon":"users"}]}'
+        content: 'binary Periods export file.'
         headers: []
         description: ''
       -
@@ -286,19 +158,16 @@ endpoints:
   -
     custom: []
     httpMethods:
-      - PUT
-    uri: api/panel/site-settings
+      - POST
+    uri: api/admin/periods
     metadata:
       custom: []
-      groupName: 'Site Settings'
+      groupName: Periods
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Update panel site settings.'
-      description: |-
-        Panel/admin endpoint exposed under `/admin/site-settings` and `/panel/site-settings`. Requires global scope for either `settings.update` or `content.site_settings.update`. Accepts grouped settings for public site configuration, stores scalar values as strings and arrays as JSON, normalizes the response with defaults, and clears the short-lived public homepage cache.
-
-        Supported top-level groups are `general`, `contact`, `social_media`, `navigation`, `homepage`, `about`, `blog_page`, and `faq_page`. Unknown nested keys inside accepted groups are stored as provided, so mobile/web clients should send the full intended group shape when replacing complex arrays such as navigation links or homepage blocks.
+      title: 'Create a project period.'
+      description: 'Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period.'
       authenticated: true
       deprecated: false
     headers:
@@ -310,145 +179,1012 @@ endpoints:
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters:
-      settings:
+      project_id:
         custom: []
-        name: settings
-        description: 'Grouped site settings payload.'
+        name: project_id
+        description: 'Project ID.'
         required: true
-        example: []
-        type: object
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      name:
+        custom: []
+        name: name
+        description: 'Period name.'
+        required: true
+        example: '2026 Bahar'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-03-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'End date, after or equal to start date.'
+        required: true
+        example: '2026-06-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_start_amount:
+        custom: []
+        name: credit_start_amount
+        description: 'Starting credit amount.'
+        required: true
+        example: 100
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_threshold:
+        custom: []
+        name: credit_threshold
+        description: 'Critical credit threshold.'
+        required: true
+        example: 75
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional compatibility value: `planned`, `passive` or `active`. Defaults to planned.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      name: '2026 Bahar'
+      start_date: '2026-03-01'
+      end_date: '2026-06-30'
+      credit_start_amount: 100
+      credit_threshold: 75
+      status: planned
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Donem olusturuldu.","period":{"id":3,"name":"2026 Bahar","status":"active"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/periods/{id}'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Show a single period workspace payload.'
+      description: |-
+        Requires `periods.view` in the period project. Includes the immutable
+        lifecycle timeline needed by the panel detail workspace.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         deprecated: false
-      settings.general:
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/periods/{id}/closure-summary'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get period closure summary.'
+      description: 'Requires permission: `periods.view` for the period project. Returns the computed closure payload, warnings and the latest archive snapshot without changing period status.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
         custom: []
-        name: settings.general
-        description: 'Optional general labels.'
-        required: false
-        example:
-          site_name: KADEME
-          site_tagline: 'Gelecegin Liderlik Okulu'
-        type: object
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
         enumValues: []
         exampleWasSpecified: true
-        nullable: true
+        nullable: false
         deprecated: false
-      settings.contact:
-        custom: []
-        name: settings.contact
-        description: 'Optional contact settings.'
-        required: false
-        example:
-          contact_email: info@kademe.org
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.social_media:
-        custom: []
-        name: settings.social_media
-        description: 'Optional social/media/webhook settings.'
-        required: false
-        example:
-          instagram_url: 'https://instagram.com/kademe'
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.navigation:
-        custom: []
-        name: settings.navigation
-        description: 'Optional header/footer navigation arrays.'
-        required: false
-        example:
-          header_links:
-            -
-              label: 'Ana Sayfa'
-              href: /
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.homepage:
-        custom: []
-        name: settings.homepage
-        description: 'Optional homepage configuration.'
-        required: false
-        example:
-          stats_mode: auto
-          block_order:
-            - hero
-            - projects
-        type: object
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      settings.about:
-        custom: []
-        name: settings.about
-        description: 'Optional about page copy.'
-        required: false
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      settings.blog_page:
-        custom: []
-        name: settings.blog_page
-        description: 'Optional blog page copy.'
-        required: false
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      settings.faq_page:
-        custom: []
-        name: settings.faq_page
-        description: 'Optional FAQ page copy.'
-        required: false
-        example: []
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      settings:
-        general:
-          site_name: KADEME
-          site_tagline: 'Gelecegin Liderlik Okulu'
-        contact:
-          contact_email: info@kademe.org
-        social_media:
-          instagram_url: 'https://instagram.com/kademe'
-        navigation:
-          header_links:
-            -
-              label: 'Ana Sayfa'
-              href: /
-        homepage:
-          stats_mode: auto
-          block_order:
-            - hero
-            - projects
-        about: []
-        blog_page: []
-        faq_page: []
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '{"message":"Site ayarlari guncellendi.","settings":{"general":{"site_name":"KADEME"}},"computed_homepage_stats":[]}'
+        content: '{"period":{"id":3,"status":"active"},"summary":{"participants":{"total":50},"credit_snapshot":{"below_threshold_count":4}},"warnings":{"open_programs":1},"latest_archive":null}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/periods/{id}/archives'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/periods/{id}/archives/{archiveId}'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      archiveId:
+        custom: []
+        name: archiveId
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+      archiveId: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/archives/{archiveId}/verify'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      archiveId:
+        custom: []
+        name: archiveId
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+      archiveId: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/activate'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Activate a planned period.'
+      description: 'Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active/closing period exists.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Optional activation reason.'
+        required: false
+        example: 'Yeni donem baslangici.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Yeni donem baslangici.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem aktif edildi.","period":{"id":3,"status":"active","lifecycle":{"is_current":true}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 409
+        content: '{"message":"Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/closing/start'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Start period closing preparation.'
+      description: 'Requires `periods.closing.start` in the period project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Optional closing preparation note.'
+        required: false
+        example: 'Donem sonu kontrolleri baslatildi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Donem sonu kontrolleri baslatildi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem kapanis hazirligina alindi.","period":{"id":3,"status":"closing"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/closing/cancel'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Cancel closing preparation and return the period to active.'
+      description: 'Requires `periods.closing.cancel` in the period project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Cancellation reason.'
+        required: true
+        example: 'Eksik basvuru kararlari tamamlanacak.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Eksik basvuru kararlari tamamlanacak.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem kapanis hazirligindan cikarilip yeniden aktif edildi.","period":{"id":3,"status":"active"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/complete'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Complete and archive a period.'
+      description: 'Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      notes:
+        custom: []
+        name: notes
+        description: 'Optional archive notes.'
+        required: false
+        example: 'Donem kapanisi tamamlandi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      notes: 'Donem kapanisi tamamlandi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem tamamlandi ve gecmis donem olarak arsivlendi.","period":{"id":3,"status":"completed"},"archive":{"archive_version":1,"integrity_hash":"hash"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/reopen'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Reopen a completed period.'
+      description: 'Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      target_status:
+        custom: []
+        name: target_status
+        description: 'Optional next status: `planned` or `active`. Defaults to planned.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: ''
+        required: false
+        example: active
+        type: string
+        enumValues:
+          - active
+          - passive
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      reason:
+        custom: []
+        name: reason
+        description: 'Reopen reason.'
+        required: true
+        example: 'Arsivdeki ogrenci sonucu duzeltilecek.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      target_status: planned
+      status: active
+      reason: 'Arsivdeki ogrenci sonucu duzeltilecek.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem yeniden aktif edildi.","period":{"id":3,"status":"active"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/admin/periods/{id}/cancel'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Cancel a planned period.'
+      description: 'Requires `periods.cancel` in the period project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Cancellation reason.'
+        required: true
+        example: 'Proje takvimi degisti.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Proje takvimi degisti.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Planlanan donem iptal edildi.","period":{"id":3,"status":"cancelled"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/periods/{id}'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a project period.'
+      description: 'Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Period name.'
+        required: true
+        example: '2026 Bahar'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-03-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'End date.'
+        required: true
+        example: '2026-06-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_start_amount:
+        custom: []
+        name: credit_start_amount
+        description: 'Starting credit amount.'
+        required: true
+        example: 100
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_threshold:
+        custom: []
+        name: credit_threshold
+        description: 'Critical credit threshold.'
+        required: true
+        example: 75
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional current status for compatibility. A different value is rejected.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: '2026 Bahar'
+      start_date: '2026-03-01'
+      end_date: '2026-06-30'
+      credit_start_amount: 100
+      credit_threshold: 75
+      status: planned
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem guncellendi.","period":{"id":3,"status":"passive"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/periods
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List panel periods.'
+      description: 'Requires permission: `periods.view`. Global scope lists all periods; scoped users only see periods in projects allowed by `periods.view`. Exposed under `/api/admin/periods` and `/api/panel/periods` aliases.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter. Must be inside the user scope.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
+        required: false
+        example: active
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      status: active
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"periods":[{"id":3,"name":"2026 Bahar","status":"active","project":{"id":1,"name":"Diplomasi360"}}]}'
         headers: []
         description: ''
       -
@@ -457,10 +1193,1062 @@ endpoints:
         content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
         headers: []
         description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/periods/export
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export panel periods.'
+      description: 'Requires permission: `periods.export`. Global scope exports all periods; scoped users export only periods in permitted projects. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
+        required: false
+        example: completed
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv.'
+        required: false
+        example: pdf
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      project_id: 1
+      status: completed
+      format: pdf
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: 'binary Periods export file.'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/panel/periods
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Create a project period.'
+      description: 'Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Project ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      name:
+        custom: []
+        name: name
+        description: 'Period name.'
+        required: true
+        example: '2026 Bahar'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-03-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'End date, after or equal to start date.'
+        required: true
+        example: '2026-06-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_start_amount:
+        custom: []
+        name: credit_start_amount
+        description: 'Starting credit amount.'
+        required: true
+        example: 100
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_threshold:
+        custom: []
+        name: credit_threshold
+        description: 'Critical credit threshold.'
+        required: true
+        example: 75
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional compatibility value: `planned`, `passive` or `active`. Defaults to planned.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      project_id: 1
+      name: '2026 Bahar'
+      start_date: '2026-03-01'
+      end_date: '2026-06-30'
+      credit_start_amount: 100
+      credit_threshold: 75
+      status: planned
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 201
+        content: '{"message":"Donem olusturuldu.","period":{"id":3,"name":"2026 Bahar","status":"active"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
       -
         custom: []
         status: 422
-        content: '{"message":"The settings field is required."}'
+        content: '{"message":"The given data was invalid."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/periods/{id}'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Show a single period workspace payload.'
+      description: |-
+        Requires `periods.view` in the period project. Includes the immutable
+        lifecycle timeline needed by the panel detail workspace.
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/periods/{id}/closure-summary'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Get period closure summary.'
+      description: 'Requires permission: `periods.view` for the period project. Returns the computed closure payload, warnings and the latest archive snapshot without changing period status.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"period":{"id":3,"status":"active"},"summary":{"participants":{"total":50},"credit_snapshot":{"below_threshold_count":4}},"warnings":{"open_programs":1},"latest_archive":null}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/periods/{id}/archives'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/periods/{id}/archives/{archiveId}'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      archiveId:
+        custom: []
+        name: archiveId
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+      archiveId: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/archives/{archiveId}/verify'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the period.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      archiveId:
+        custom: []
+        name: archiveId
+        description: ''
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+      archiveId: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/activate'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Activate a planned period.'
+      description: 'Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active/closing period exists.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Optional activation reason.'
+        required: false
+        example: 'Yeni donem baslangici.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Yeni donem baslangici.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem aktif edildi.","period":{"id":3,"status":"active","lifecycle":{"is_current":true}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 409
+        content: '{"message":"Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/closing/start'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Start period closing preparation.'
+      description: 'Requires `periods.closing.start` in the period project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Optional closing preparation note.'
+        required: false
+        example: 'Donem sonu kontrolleri baslatildi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Donem sonu kontrolleri baslatildi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem kapanis hazirligina alindi.","period":{"id":3,"status":"closing"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/closing/cancel'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Cancel closing preparation and return the period to active.'
+      description: 'Requires `periods.closing.cancel` in the period project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Cancellation reason.'
+        required: true
+        example: 'Eksik basvuru kararlari tamamlanacak.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Eksik basvuru kararlari tamamlanacak.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem kapanis hazirligindan cikarilip yeniden aktif edildi.","period":{"id":3,"status":"active"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/complete'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Complete and archive a period.'
+      description: 'Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      notes:
+        custom: []
+        name: notes
+        description: 'Optional archive notes.'
+        required: false
+        example: 'Donem kapanisi tamamlandi.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      notes: 'Donem kapanisi tamamlandi.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem tamamlandi ve gecmis donem olarak arsivlendi.","period":{"id":3,"status":"completed"},"archive":{"archive_version":1,"integrity_hash":"hash"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/reopen'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Reopen a completed period.'
+      description: 'Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      target_status:
+        custom: []
+        name: target_status
+        description: 'Optional next status: `planned` or `active`. Defaults to planned.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: ''
+        required: false
+        example: passive
+        type: string
+        enumValues:
+          - active
+          - passive
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      reason:
+        custom: []
+        name: reason
+        description: 'Reopen reason.'
+        required: true
+        example: 'Arsivdeki ogrenci sonucu duzeltilecek.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      target_status: planned
+      status: passive
+      reason: 'Arsivdeki ogrenci sonucu duzeltilecek.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem yeniden aktif edildi.","period":{"id":3,"status":"active"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: 'api/panel/periods/{id}/cancel'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Cancel a planned period.'
+      description: 'Requires `periods.cancel` in the period project.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      reason:
+        custom: []
+        name: reason
+        description: 'Cancellation reason.'
+        required: true
+        example: 'Proje takvimi degisti.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      reason: 'Proje takvimi degisti.'
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Planlanan donem iptal edildi.","period":{"id":3,"status":"cancelled"}}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/periods/{id}'
+    metadata:
+      custom: []
+      groupName: Periods
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Update a project period.'
+      description: 'Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Period ID.'
+        required: true
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 3
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      name:
+        custom: []
+        name: name
+        description: 'Period name.'
+        required: true
+        example: '2026 Bahar'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      start_date:
+        custom: []
+        name: start_date
+        description: 'Start date.'
+        required: true
+        example: '2026-03-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      end_date:
+        custom: []
+        name: end_date
+        description: 'End date.'
+        required: true
+        example: '2026-06-30'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_start_amount:
+        custom: []
+        name: credit_start_amount
+        description: 'Starting credit amount.'
+        required: true
+        example: 100
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      credit_threshold:
+        custom: []
+        name: credit_threshold
+        description: 'Critical credit threshold.'
+        required: true
+        example: 75
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional current status for compatibility. A different value is rejected.'
+        required: false
+        example: planned
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      name: '2026 Bahar'
+      start_date: '2026-03-01'
+      end_date: '2026-06-30'
+      credit_start_amount: 100
+      credit_threshold: 75
+      status: planned
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Donem guncellendi.","period":{"id":3,"status":"passive"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu proje icin yetkiniz bulunmuyor."}'
         headers: []
         description: ''
     responseFields: []

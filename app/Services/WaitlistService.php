@@ -2,19 +2,24 @@
 
 namespace App\Services;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\Application;
 use App\Models\Participant;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 
 class WaitlistService
 {
     public function __construct(
-        private readonly NotificationService $notificationService
+        private readonly NotificationService $notificationService,
+        private readonly PeriodWritePolicy $periodWritePolicy,
     ) {
     }
 
     public function expireOverdueInvitations(Application $scope): int
     {
+        $this->assertResolvable($scope);
+
         return $this->scopeQuery($scope)
             ->where('status', 'waitlisted')
             ->whereNotNull('waitlist_invited_at')
@@ -28,7 +33,8 @@ class WaitlistService
 
     public function inviteSpecific(Application $application, ?int $senderId = null, Carbon|string|null $expiresAt = null): Application
     {
-        $application->loadMissing(['project:id,name,quota', 'program:id,title,application_quota', 'user:id,email']);
+        $this->assertResolvable($application, $senderId);
+        $application->loadMissing(['project:id,name,quota', 'applicationWindow:id,quota', 'program:id,title,application_quota', 'user:id,email']);
         $this->expireOverdueInvitations($application);
 
         if ($this->hasActiveInvitation($application, $application->id)) {
@@ -40,7 +46,8 @@ class WaitlistService
 
     public function inviteNextIfSeatAvailable(Application $scope, ?int $senderId = null, Carbon|string|null $expiresAt = null): ?Application
     {
-        $scope->loadMissing(['project:id,name,quota', 'program:id,title,application_quota']);
+        $this->assertResolvable($scope, $senderId);
+        $scope->loadMissing(['project:id,name,quota', 'applicationWindow:id,quota', 'program:id,title,application_quota']);
         $this->expireOverdueInvitations($scope);
 
         if (! $this->hasAvailableSeat($scope) || $this->hasActiveInvitation($scope)) {
@@ -48,7 +55,7 @@ class WaitlistService
         }
 
         $candidate = $this->scopeQuery($scope)
-            ->with(['project:id,name,quota', 'program:id,title,application_quota', 'user:id,email'])
+            ->with(['project:id,name,quota', 'applicationWindow:id,quota', 'program:id,title,application_quota', 'user:id,email'])
             ->where('status', 'waitlisted')
             ->whereNull('waitlist_invited_at')
             ->orderByRaw('waitlist_order IS NULL')
@@ -65,8 +72,8 @@ class WaitlistService
 
     public function hasAvailableSeat(Application $scope): bool
     {
-        $scope->loadMissing(['project:id,quota', 'program:id,application_quota']);
-        $quota = $scope->program?->application_quota ?? $scope->project?->quota;
+        $scope->loadMissing(['project:id,quota', 'applicationWindow:id,quota', 'program:id,application_quota']);
+        $quota = $scope->program?->application_quota ?? $scope->projectQuota();
         if ($quota === null || (int) $quota <= 0) {
             return true;
         }
@@ -143,5 +150,19 @@ class WaitlistService
                 fn ($query) => $query->where('program_id', $scope->program_id),
                 fn ($query) => $query->whereNull('program_id')
             );
+    }
+
+    private function assertResolvable(Application $application, ?int $actorId = null): void
+    {
+        $application->loadMissing('period');
+        if (! $application->period) {
+            return;
+        }
+
+        $this->periodWritePolicy->assertAllowed(
+            $actorId ? User::query()->find($actorId) : null,
+            $application->period,
+            PeriodWriteAction::RESOLVE_OPERATION,
+        );
     }
 }

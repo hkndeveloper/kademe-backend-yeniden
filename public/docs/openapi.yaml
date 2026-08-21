@@ -1,4 +1,4 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: 'KADEME API Documentation'
   description: 'KADEME backend API dokumantasyonu. Public, mobil katilimci ve tek panel endpointleri OpenAPI/Swagger uyumlu olarak bu dokumanda toplanir.'
@@ -132,6 +132,9 @@ tags:
     description: ''
   -
     name: Motivation
+    description: ''
+  -
+    name: 'Application Intake Management'
     description: ''
 components:
   securitySchemes:
@@ -430,6 +433,18 @@ components:
           type: string
           nullable: true
         location:
+          type: string
+          nullable: true
+        location_place_name:
+          type: string
+          nullable: true
+        location_place_address:
+          type: string
+          nullable: true
+        location_place_id:
+          type: string
+          nullable: true
+        location_place_provider:
           type: string
           nullable: true
         latitude:
@@ -1215,12 +1230,12 @@ paths:
                 from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:04'
+                  example: '2026-08-21T04:14:28'
                   nullable: true
                 to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 per_page:
                   type: integer
@@ -2102,7 +2117,7 @@ paths:
                   nullable: true
                 gallery_paths:
                   type: array
-                  description: 'Optional gallery items with `path`, optional `caption`, `year`, `period_id`.'
+                  description: "Optional gallery items with `path`, optional `caption`, `year`, `period_id`.\nLegacy application fields are accepted only for users with `applications.intake.manage` and mirrored to the active period window. New clients should use the dedicated application settings endpoint."
                   example:
                     - []
                   items:
@@ -2136,7 +2151,7 @@ paths:
                         nullable: true
                 application_open:
                   type: boolean
-                  description: 'Whether applications are open.'
+                  description: 'Optional legacy application state.'
                   example: true
                 next_application_date:
                   type: date
@@ -2156,7 +2171,6 @@ paths:
                 - name
                 - slug
                 - type
-                - application_open
                 - has_interview
     parameters:
       -
@@ -2425,7 +2439,7 @@ paths:
                       operator:
                         type: string
                         description: 'This field is required when <code>auto_reject_rules</code> is present.'
-                        example: contains
+                        example: gte
                         enum:
                           - equals
                           - not_equals
@@ -2881,7 +2895,7 @@ paths:
                   nullable: true
                 gallery_paths:
                   type: array
-                  description: 'Optional gallery items with `path`, optional `caption`, `year`, `period_id`.'
+                  description: "Optional gallery items with `path`, optional `caption`, `year`, `period_id`.\nLegacy application fields are accepted only for users with `applications.intake.manage` and mirrored to the active period window. New clients should use the dedicated application settings endpoint."
                   example:
                     - []
                   items:
@@ -2915,7 +2929,7 @@ paths:
                         nullable: true
                 application_open:
                   type: boolean
-                  description: 'Whether applications are open.'
+                  description: 'Optional legacy application state.'
                   example: true
                 next_application_date:
                   type: date
@@ -2935,7 +2949,6 @@ paths:
                 - name
                 - slug
                 - type
-                - application_open
                 - has_interview
     parameters:
       -
@@ -3204,7 +3217,7 @@ paths:
                       operator:
                         type: string
                         description: 'This field is required when <code>auto_reject_rules</code> is present.'
-                        example: equals
+                        example: contains
                         enum:
                           - equals
                           - not_equals
@@ -3375,6 +3388,153 @@ paths:
         required: true
         schema:
           type: string
+  /api/certificates:
+    post:
+      summary: 'Upload a participant-owned certificate.'
+      operationId: uploadAParticipantOwnedCertificate
+      description: 'The authenticated participant can add external certificates to their own certificate library and CV selections. Uploaded certificates are marked as `student_upload` and do not require a project/period.'
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+      tags:
+        - Certificates
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: vmqeopfuudtdsufvyvddq
+                issuer:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: amniihfqcoynlazghdtqt
+                type:
+                  type: string
+                  description: 'Must not be greater than 80 characters.'
+                  example: qxbajwbpilpmufinllwlo
+                  nullable: true
+                issued_at:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:30'
+                  nullable: true
+                included_in_cv:
+                  type: boolean
+                  description: ''
+                  example: false
+                  nullable: true
+                certificate_file:
+                  type: string
+                  format: binary
+                  description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+              required:
+                - title
+                - issuer
+                - certificate_file
+    get:
+      summary: 'List authenticated user certificates.'
+      operationId: listAuthenticatedUserCertificates
+      description: 'Participant/mobile endpoint. The route requires `participant.certificates.view` and the controller returns only certificates owned by the authenticated user. Each item includes verification code, project/period metadata, direct file URL when enabled, and the public download URL.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  certificates:
+                    -
+                      id: 1
+                      type: participation
+                      verification_code: ABC123
+                      issued_at: '2026-01-01T00:00:00.000000Z'
+                      download_url: 'https://api.example.com/api/certificates/ABC123/download'
+                      project:
+                        id: 1
+                        name: KADEME
+                        slug: kademe
+                properties:
+                  certificates:
+                    type: array
+                    example:
+                      -
+                        id: 1
+                        type: participation
+                        verification_code: ABC123
+                        issued_at: '2026-01-01T00:00:00.000000Z'
+                        download_url: 'https://api.example.com/api/certificates/ABC123/download'
+                        project:
+                          id: 1
+                          name: KADEME
+                          slug: kademe
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        type:
+                          type: string
+                          example: participation
+                        verification_code:
+                          type: string
+                          example: ABC123
+                        issued_at:
+                          type: string
+                          example: '2026-01-01T00:00:00.000000Z'
+                        download_url:
+                          type: string
+                          example: 'https://api.example.com/api/certificates/ABC123/download'
+                        project:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                              example: 1
+                            name:
+                              type: string
+                              example: KADEME
+                            slug:
+                              type: string
+                              example: kademe
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'This action is unauthorized.'
+                properties:
+                  message:
+                    type: string
+                    example: 'This action is unauthorized.'
+      tags:
+        - 'Participant Content'
   /api/admin/certificates:
     get:
       summary: 'List panel certificates.'
@@ -5816,28 +5976,29 @@ paths:
                           id:
                             type: string
                             description: 'Must not be greater than 120 characters.'
-                            example: oyprjkfdjsneawgaavuiw
+                            example: mqeopfuudtdsufvyvddqa
                             nullable: true
                           title:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: lezlcraoooxrrjhbduowt
-                            nullable: true
+                            example: mniihfqcoynlazghdtqtq
                           subtitle:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: baqrrtgxiuvujtzcirpln
-                            nullable: true
+                            example: xbajwbpilpmufinllwloa
                           date:
                             type: string
-                            description: 'Must not be greater than 120 characters.'
-                            example: fqsaymxpayeblqozckazp
-                            nullable: true
+                            description: 'Must match the regex /^[0-9]+$/. Must not be greater than 20 characters.'
+                            example: uydlsmsjuryvojcyb
                           description:
                             type: string
                             description: 'Must not be greater than 5000 characters.'
-                            example: 'Quidem commodi quia vel accusamus quam.'
-                            nullable: true
+                            example: 'Illum est quae non quia dicta in aut provident.'
+                        required:
+                          - title
+                          - subtitle
+                          - date
+                          - description
                     education:
                       type: array
                       description: 'Optional education rows.'
@@ -5850,28 +6011,29 @@ paths:
                           id:
                             type: string
                             description: 'Must not be greater than 120 characters.'
-                            example: uzgpjfumffsmqnmbekhso
+                            example: kygloigmkwxphlvazjrcn
                             nullable: true
                           title:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: bzoqisjmbiuqxdnvttnwp
-                            nullable: true
+                            example: fbaqywuxhgjjmzuxjubqo
                           subtitle:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: jqkxxmutyzaadbjkbosus
-                            nullable: true
+                            example: uzswiwxtrkimfcatbxspz
                           date:
                             type: string
-                            description: 'Must not be greater than 120 characters.'
-                            example: obdoqhlrecwgwnfrnqkqz
-                            nullable: true
+                            description: 'Must match the regex /^[0-9]+$/. Must not be greater than 20 characters.'
+                            example: mrazsroyjpxmqesed
                           description:
                             type: string
                             description: 'Must not be greater than 5000 characters.'
-                            example: 'Ipsum esse consectetur deleniti aut voluptatibus dicta.'
-                            nullable: true
+                            example: 'Magnam quis dolorem non harum aut iste animi pariatur.'
+                        required:
+                          - title
+                          - subtitle
+                          - date
+                          - description
                     projects:
                       type: array
                       description: 'Optional project rows.'
@@ -5884,28 +6046,29 @@ paths:
                           id:
                             type: string
                             description: 'Must not be greater than 120 characters.'
-                            example: jkacxowxjfjhqnumftkwb
+                            example: vownkbamlnfngefbeilfz
                             nullable: true
                           title:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: fqsgaywjxhjqovkxzlval
-                            nullable: true
+                            example: syuxoezbdtabptcyyerev
                           subtitle:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: yuwppfckszbujxazwsrqg
-                            nullable: true
+                            example: rljcbwkthjnescwsestco
                           date:
                             type: string
-                            description: 'Must not be greater than 120 characters.'
-                            example: zomzeowirvzubjxoeqxih
-                            nullable: true
+                            description: 'Must match the regex /^[0-9]+$/. Must not be greater than 20 characters.'
+                            example: uxpqsydkigioyoypr
                           description:
                             type: string
                             description: 'Must not be greater than 5000 characters.'
-                            example: 'Eaque numquam provident ratione quis.'
-                            nullable: true
+                            example: 'Velit eius qui vel porro occaecati.'
+                        required:
+                          - title
+                          - subtitle
+                          - date
+                          - description
                     certificates:
                       type: array
                       description: 'Optional certificate rows.'
@@ -5918,28 +6081,36 @@ paths:
                           id:
                             type: string
                             description: 'Must not be greater than 120 characters.'
-                            example: giswmddoraronrpbzlovd
+                            example: eawgaavuiwlezlcraooox
                             nullable: true
                           title:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: mbhrpyvkublvfopexlama
-                            nullable: true
+                            example: rrjhbduowtbaqrrtgxiuv
                           subtitle:
                             type: string
                             description: 'Must not be greater than 255 characters.'
-                            example: dlsacjsrgesfcxzbqmrck
-                            nullable: true
+                            example: ujtzcirplnfqsaymxpaye
                           date:
                             type: string
-                            description: 'Must not be greater than 120 characters.'
-                            example: wedjrwdsuajoeoqmqffvh
-                            nullable: true
+                            description: 'Must match the regex /^[0-9]+$/. Must not be greater than 20 characters.'
+                            example: blqozckazplqjijwk
                           description:
                             type: string
                             description: 'Must not be greater than 5000 characters.'
-                            example: 'Doloribus perferendis aut id voluptas quo tempora.'
-                            nullable: true
+                            example: 'Doloribus quaerat deserunt consequatur eius et rem numquam.'
+                        required:
+                          - title
+                          - subtitle
+                          - date
+                          - description
+                    certificateIds:
+                      type: array
+                      description: 'The <code>id</code> of an existing record in the certificates table.'
+                      example:
+                        - 17
+                      items:
+                        type: integer
               required:
                 - form
   /api/dashboard/digital-cv/pdf:
@@ -7417,6 +7588,22 @@ paths:
                   type: string
                   description: 'Optional location text.'
                   example: 'Kademe Salon 1'
+                location_place_name:
+                  type: string
+                  description: 'Optional selected map place name.'
+                  example: 'Kademe Genel Merkez'
+                location_place_address:
+                  type: string
+                  description: 'Optional selected map place address.'
+                  example: 'Bosna Hersek Mahallesi, Istanbul'
+                location_place_id:
+                  type: string
+                  description: 'Optional selected map provider place ID.'
+                  example: 'osm:node:123'
+                location_place_provider:
+                  type: string
+                  description: 'Optional selected map provider.'
+                  example: osm
                 latitude:
                   type: number
                   description: 'Optional location latitude.'
@@ -7559,6 +7746,54 @@ paths:
                   example: 17
                   nullable: true
   '/api/admin/programs/{id}':
+    get:
+      summary: 'Get one panel program.'
+      operationId: getOnePanelProgram
+      description: "Requires permission: `programs.view` for the program project. The project scope is\nchecked against the program itself so a guessed ID cannot bypass the action scope."
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  program:
+                    id: 8
+                    title: 'Haftalik Atolye'
+                    status: scheduled
+                properties:
+                  program:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 8
+                      title:
+                        type: string
+                        example: 'Haftalik Atolye'
+                      status:
+                        type: string
+                        example: scheduled
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Bu proje icin yetkiniz bulunmuyor.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Bu proje icin yetkiniz bulunmuyor.'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Programs & Attendance'
     put:
       summary: 'Update a panel program.'
       operationId: updateAPanelProgram
@@ -7659,6 +7894,30 @@ paths:
         required: true
         schema:
           type: integer
+  '/api/admin/programs/{id}/qr-context':
+    get:
+      summary: 'Return the minimum scoped context needed by the QR attendance screen.'
+      operationId: returnTheMinimumScopedContextNeededByTheQRAttendanceScreen
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Programs & Attendance'
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the program.'
+        example: '1562'
+        required: true
+        schema:
+          type: string
   '/api/admin/programs/{id}/generate-qr':
     post:
       summary: 'Generate or rotate a program QR token.'
@@ -8540,6 +8799,22 @@ paths:
                   type: string
                   description: 'Optional location text.'
                   example: 'Kademe Salon 1'
+                location_place_name:
+                  type: string
+                  description: 'Optional selected map place name.'
+                  example: 'Kademe Genel Merkez'
+                location_place_address:
+                  type: string
+                  description: 'Optional selected map place address.'
+                  example: 'Bosna Hersek Mahallesi, Istanbul'
+                location_place_id:
+                  type: string
+                  description: 'Optional selected map provider place ID.'
+                  example: 'osm:node:123'
+                location_place_provider:
+                  type: string
+                  description: 'Optional selected map provider.'
+                  example: osm
                 latitude:
                   type: number
                   description: 'Optional location latitude.'
@@ -8682,6 +8957,54 @@ paths:
                   example: 17
                   nullable: true
   '/api/panel/programs/{id}':
+    get:
+      summary: 'Get one panel program.'
+      operationId: getOnePanelProgram
+      description: "Requires permission: `programs.view` for the program project. The project scope is\nchecked against the program itself so a guessed ID cannot bypass the action scope."
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  program:
+                    id: 8
+                    title: 'Haftalik Atolye'
+                    status: scheduled
+                properties:
+                  program:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 8
+                      title:
+                        type: string
+                        example: 'Haftalik Atolye'
+                      status:
+                        type: string
+                        example: scheduled
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Bu proje icin yetkiniz bulunmuyor.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Bu proje icin yetkiniz bulunmuyor.'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Programs & Attendance'
     put:
       summary: 'Update a panel program.'
       operationId: updateAPanelProgram
@@ -8782,6 +9105,30 @@ paths:
         required: true
         schema:
           type: integer
+  '/api/panel/programs/{id}/qr-context':
+    get:
+      summary: 'Return the minimum scoped context needed by the QR attendance screen.'
+      operationId: returnTheMinimumScopedContextNeededByTheQRAttendanceScreen
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Programs & Attendance'
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the program.'
+        example: '1562'
+        required: true
+        schema:
+          type: string
   '/api/panel/programs/{id}/complete':
     post:
       summary: 'Complete a program and reconcile credits.'
@@ -9854,101 +10201,6 @@ paths:
         required: true
         schema:
           type: integer
-  /api/certificates:
-    get:
-      summary: 'List authenticated user certificates.'
-      operationId: listAuthenticatedUserCertificates
-      description: 'Participant/mobile endpoint. The route requires `participant.certificates.view` and the controller returns only certificates owned by the authenticated user. Each item includes verification code, project/period metadata, direct file URL when enabled, and the public download URL.'
-      parameters: []
-      responses:
-        200:
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: object
-                example:
-                  certificates:
-                    -
-                      id: 1
-                      type: participation
-                      verification_code: ABC123
-                      issued_at: '2026-01-01T00:00:00.000000Z'
-                      download_url: 'https://api.example.com/api/certificates/ABC123/download'
-                      project:
-                        id: 1
-                        name: KADEME
-                        slug: kademe
-                properties:
-                  certificates:
-                    type: array
-                    example:
-                      -
-                        id: 1
-                        type: participation
-                        verification_code: ABC123
-                        issued_at: '2026-01-01T00:00:00.000000Z'
-                        download_url: 'https://api.example.com/api/certificates/ABC123/download'
-                        project:
-                          id: 1
-                          name: KADEME
-                          slug: kademe
-                    items:
-                      type: object
-                      properties:
-                        id:
-                          type: integer
-                          example: 1
-                        type:
-                          type: string
-                          example: participation
-                        verification_code:
-                          type: string
-                          example: ABC123
-                        issued_at:
-                          type: string
-                          example: '2026-01-01T00:00:00.000000Z'
-                        download_url:
-                          type: string
-                          example: 'https://api.example.com/api/certificates/ABC123/download'
-                        project:
-                          type: object
-                          properties:
-                            id:
-                              type: integer
-                              example: 1
-                            name:
-                              type: string
-                              example: KADEME
-                            slug:
-                              type: string
-                              example: kademe
-        401:
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: object
-                example:
-                  message: Unauthenticated.
-                properties:
-                  message:
-                    type: string
-                    example: Unauthenticated.
-        403:
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: object
-                example:
-                  message: 'This action is unauthorized.'
-                properties:
-                  message:
-                    type: string
-                    example: 'This action is unauthorized.'
-      tags:
-        - 'Participant Content'
   /api/assignments:
     get:
       summary: 'List participant assignments and submissions.'
@@ -10157,6 +10409,30 @@ paths:
           type: integer
   '/api/assignment-submissions/{id}/download':
     get:
+      summary: ''
+      operationId: getApiAssignmentSubmissionsIdDownload
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Assignments
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the assignment submission.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/assignment-attachments/{id}/download':
+    get:
       summary: 'Download my assignment submission file.'
       operationId: downloadMyAssignmentSubmissionFile
       description: 'Requires permission: `participant.assignments.view`. The submission must belong to the authenticated user. Returns a direct download URL when configured, otherwise streams the file.'
@@ -10262,7 +10538,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               properties:
@@ -10291,8 +10567,19 @@ paths:
                 due_date:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
+                attachment:
+                  type: string
+                  format: binary
+                  description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+                  nullable: true
+                attachments:
+                  type: array
+                  description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+                  items:
+                    type: string
+                    format: binary
               required:
                 - project_id
                 - period_id
@@ -10335,6 +10622,71 @@ paths:
                   example: vmqeopfuudtdsufvy
                   nullable: true
   '/api/panel/assignments/{id}':
+    put:
+      summary: ''
+      operationId: putApiPanelAssignmentsId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Assignments
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the projects table.'
+                  example: consequatur
+                period_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: consequatur
+                program_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the programs table.'
+                  example: null
+                  nullable: true
+                title:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: mqeopfuudtdsufvyvddqa
+                description:
+                  type: string
+                  description: 'Must not be greater than 3000 characters.'
+                  example: 'Molestias ipsam sit veniam sed fuga aspernatur.'
+                  nullable: true
+                due_date:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:32'
+                  nullable: true
+                attachment:
+                  type: string
+                  format: binary
+                  description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+                  nullable: true
+                attachments:
+                  type: array
+                  description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+                  items:
+                    type: string
+                    format: binary
+              required:
+                - project_id
+                - period_id
+                - title
     delete:
       summary: ''
       operationId: deleteApiPanelAssignmentsId
@@ -10378,6 +10730,30 @@ paths:
         in: path
         name: id
         description: 'The ID of the assignment submission.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/panel/assignment-attachments/{id}/download':
+    get:
+      summary: ''
+      operationId: getApiPanelAssignmentAttachmentsIdDownload
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Assignments
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the assignment attachment.'
         example: consequatur
         required: true
         schema:
@@ -10653,11 +11029,18 @@ paths:
                 file:
                   type: string
                   format: binary
+                  description: 'This field is required when <code>files</code> is not present. Must be a file. Must not be greater than 20480 kilobytes.'
+                  nullable: true
+                files:
+                  type: array
                   description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+                  items:
+                    type: string
+                    format: binary
                 visible_to_student:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                 category:
                   type: string
                   description: ''
@@ -10665,7 +11048,6 @@ paths:
                   nullable: true
               required:
                 - title
-                - file
   /api/panel/digital-bohca/export:
     get:
       summary: ''
@@ -11011,11 +11393,11 @@ paths:
                 is_default:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
                 is_active:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
                 questions:
                   type: array
                   description: 'Must have at least 1 items. Must not have more than 20 items.'
@@ -11057,7 +11439,7 @@ paths:
                       is_required:
                         type: boolean
                         description: ''
-                        example: true
+                        example: false
                     required:
                       - question_key
                       - label
@@ -11105,7 +11487,7 @@ paths:
                 is_active:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
                 questions:
                   type: array
                   description: 'Must have at least 1 items. Must not have more than 20 items.'
@@ -11475,6 +11857,70 @@ paths:
         required: true
         schema:
           type: integer
+  /api/admin/forum/posts:
+    get:
+      summary: 'List forum posts for authority panel users.'
+      operationId: listForumPostsForAuthorityPanelUsers
+      description: 'Requires permission: `announcements.view`. Returns read-only forum threads from projects visible to the panel user.'
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+      tags:
+        - Forum
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the projects table.'
+                  example: 17
+                  nullable: true
+                period_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: 17
+                  nullable: true
+  /api/panel/forum/posts:
+    get:
+      summary: 'List forum posts for authority panel users.'
+      operationId: listForumPostsForAuthorityPanelUsers
+      description: 'Requires permission: `announcements.view`. Returns read-only forum threads from projects visible to the panel user.'
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+      tags:
+        - Forum
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the projects table.'
+                  example: 17
+                  nullable: true
+                period_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: 17
+                  nullable: true
   /api/kpd/appointments:
     get:
       summary: 'List KPD participant appointments and resources.'
@@ -17097,12 +17543,12 @@ paths:
                 start_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:31'
                   nullable: true
                 end_at:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>start_at</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 quota:
                   type: integer
@@ -17112,7 +17558,7 @@ paths:
                 status:
                   type: string
                   description: ''
-                  example: open
+                  example: closed
                   enum:
                     - open
                     - closed
@@ -17163,6 +17609,99 @@ paths:
                   description: 'Must not be greater than 20 characters.'
                   example: amniihfqcoynlazgh
                   nullable: true
+  '/api/panel/volunteer/opportunities/{id}':
+    put:
+      summary: ''
+      operationId: putApiPanelVolunteerOpportunitiesId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Volunteer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the projects table.'
+                  example: null
+                period_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: null
+                  nullable: true
+                title:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: vmqeopfuudtdsufvyvddq
+                description:
+                  type: string
+                  description: 'Must not be greater than 4000 characters.'
+                  example: 'Dolores molestias ipsam sit.'
+                  nullable: true
+                location:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: hfqcoynlazghdtqtqxbaj
+                  nullable: true
+                start_at:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:31'
+                  nullable: true
+                end_at:
+                  type: string
+                  description: 'Must be a valid date. Must be a date after or equal to <code>start_at</code>.'
+                  example: '2107-09-19'
+                  nullable: true
+                quota:
+                  type: integer
+                  description: 'Must be at least 1.'
+                  example: 45
+                  nullable: true
+                status:
+                  type: string
+                  description: ''
+                  example: open
+                  enum:
+                    - open
+                    - closed
+                    - archived
+    delete:
+      summary: ''
+      operationId: deleteApiPanelVolunteerOpportunitiesId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Volunteer
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the opportunity.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
   '/api/panel/volunteer/applications/{id}':
     put:
       summary: ''
@@ -17190,7 +17729,7 @@ paths:
                 status:
                   type: string
                   description: ''
-                  example: rejected
+                  example: pending
                   enum:
                     - pending
                     - accepted
@@ -17208,30 +17747,6 @@ paths:
         in: path
         name: id
         description: 'The ID of the application.'
-        example: consequatur
-        required: true
-        schema:
-          type: string
-  '/api/panel/volunteer/opportunities/{id}':
-    delete:
-      summary: ''
-      operationId: deleteApiPanelVolunteerOpportunitiesId
-      description: ''
-      parameters: []
-      responses:
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        403:
-          $ref: '#/components/responses/Forbidden'
-        404:
-          $ref: '#/components/responses/NotFound'
-      tags:
-        - Volunteer
-    parameters:
-      -
-        in: path
-        name: id
-        description: 'The ID of the opportunity.'
         example: consequatur
         required: true
         schema:
@@ -17367,11 +17882,12 @@ paths:
                 kind:
                   type: string
                   description: ''
-                  example: internship
+                  example: job
                   enum:
                     - internship
                     - network
                     - event
+                    - job
                     - other
                 summary:
                   type: string
@@ -17396,22 +17912,22 @@ paths:
                 starts_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 ends_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 published_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 expires_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 target_audience:
                   type: array
@@ -17471,11 +17987,12 @@ paths:
                 kind:
                   type: string
                   description: ''
-                  example: internship
+                  example: other
                   enum:
                     - internship
                     - network
                     - event
+                    - job
                     - other
                 summary:
                   type: string
@@ -17500,22 +18017,22 @@ paths:
                 starts_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 ends_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 published_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 expires_at:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 target_audience:
                   type: array
@@ -17829,17 +18346,17 @@ paths:
                 from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:04'
+                  example: '2026-08-21T04:14:30'
                   nullable: true
                 to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 type:
                   type: string
                   description: ''
-                  example: forum_post
+                  example: opportunity
                   enum:
                     - announcement
                     - opportunity
@@ -17848,17 +18365,17 @@ paths:
                 unread_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
                 starred_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
                 pinned_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
   /api/inbox/messages/state:
     put:
@@ -18292,7 +18809,7 @@ paths:
                 type:
                   type: string
                   description: ''
-                  example: email
+                  example: sms
                   enum:
                     - email
                     - sms
@@ -18320,12 +18837,12 @@ paths:
                 date_from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:05'
+                  example: '2026-08-21T04:14:31'
                   nullable: true
                 date_to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 per_page:
                   type: integer
@@ -18477,12 +18994,12 @@ paths:
                 date_from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:05'
+                  example: '2026-08-21T04:14:31'
                   nullable: true
                 date_to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
   '/api/admin/announcements/communication-logs/{id}/attachment':
     get:
@@ -19287,12 +19804,12 @@ paths:
                 from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:05'
+                  example: '2026-08-21T04:14:31'
                   nullable: true
                 to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 type:
                   type: string
@@ -19306,17 +19823,17 @@ paths:
                 unread_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
                 starred_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
                 pinned_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
   /api/admin/inbox/messages/state:
     put:
@@ -19750,7 +20267,7 @@ paths:
                 type:
                   type: string
                   description: ''
-                  example: sms
+                  example: email
                   enum:
                     - email
                     - sms
@@ -19778,12 +20295,12 @@ paths:
                 date_from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 date_to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 per_page:
                   type: integer
@@ -19907,7 +20424,7 @@ paths:
                 type:
                   type: string
                   description: ''
-                  example: email
+                  example: sms
                   enum:
                     - email
                     - sms
@@ -19935,12 +20452,12 @@ paths:
                 date_from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 date_to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>date_from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
   '/api/panel/announcements/communication-logs/{id}/attachment':
     get:
@@ -20745,17 +21262,17 @@ paths:
                 from:
                   type: string
                   description: 'Must be a valid date.'
-                  example: '2026-07-09T11:23:06'
+                  example: '2026-08-21T04:14:32'
                   nullable: true
                 to:
                   type: string
                   description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
-                  example: '2107-08-07'
+                  example: '2107-09-19'
                   nullable: true
                 type:
                   type: string
                   description: ''
-                  example: forum_post
+                  example: opportunity
                   enum:
                     - announcement
                     - opportunity
@@ -20764,17 +21281,17 @@ paths:
                 unread_only:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
                   nullable: true
                 starred_only:
                   type: boolean
                   description: ''
-                  example: true
+                  example: false
                   nullable: true
                 pinned_only:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
                   nullable: true
   /api/panel/inbox/messages/state:
     put:
@@ -24647,7 +25164,7 @@ paths:
                 graduation_status:
                   type: string
                   description: ''
-                  example: completed
+                  example: graduated
                   enum:
                     - completed
                     - graduated
@@ -24686,7 +25203,7 @@ paths:
                 graduation_status:
                   type: string
                   description: ''
-                  example: graduated
+                  example: completed
                   enum:
                     - completed
                     - graduated
@@ -24742,7 +25259,7 @@ paths:
                 public_alumni_visible:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
     parameters:
       -
         in: path
@@ -24931,7 +25448,7 @@ paths:
                 graduation_status:
                   type: string
                   description: ''
-                  example: not_completed
+                  example: graduated
                   enum:
                     - completed
                     - graduated
@@ -24970,7 +25487,7 @@ paths:
                 graduation_status:
                   type: string
                   description: ''
-                  example: graduated
+                  example: completed
                   enum:
                     - completed
                     - graduated
@@ -25022,7 +25539,7 @@ paths:
                 public_photo_visible:
                   type: boolean
                   description: ''
-                  example: false
+                  example: true
                 public_alumni_visible:
                   type: boolean
                   description: ''
@@ -28830,12 +29347,12 @@ paths:
         -
           in: query
           name: status
-          description: 'Optional status filter: `active`, `passive` or `completed`.'
+          description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
           example: active
           required: false
           schema:
             type: string
-            description: 'Optional status filter: `active`, `passive` or `completed`.'
+            description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
             example: active
       responses:
         200:
@@ -28906,7 +29423,7 @@ paths:
     post:
       summary: 'Create a project period.'
       operationId: createAProjectPeriod
-      description: 'Requires permission: `periods.create` for the selected project. If the new period is active, other active periods in the same project are switched to passive.'
+      description: 'Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period.'
       parameters: []
       responses:
         201:
@@ -28998,8 +29515,8 @@ paths:
                   example: 75
                 status:
                   type: string
-                  description: 'Period status: `active`, `passive` or `completed`.'
-                  example: active
+                  description: 'Optional compatibility value: `planned`, `passive` or `active`. Defaults to planned.'
+                  example: planned
               required:
                 - project_id
                 - name
@@ -29007,7 +29524,6 @@ paths:
                 - end_date
                 - credit_start_amount
                 - credit_threshold
-                - status
   /api/admin/periods/export:
     get:
       summary: 'Export panel periods.'
@@ -29027,12 +29543,12 @@ paths:
         -
           in: query
           name: status
-          description: 'Optional status filter: `active`, `passive` or `completed`.'
+          description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
           example: completed
           required: false
           schema:
             type: string
-            description: 'Optional status filter: `active`, `passive` or `completed`.'
+            description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
             example: completed
         -
           in: query
@@ -29070,6 +29586,117 @@ paths:
           $ref: '#/components/responses/ValidationError'
       tags:
         - Periods
+  '/api/admin/periods/{id}':
+    get:
+      summary: 'Show a single period workspace payload.'
+      operationId: showASinglePeriodWorkspacePayload
+      description: "Requires `periods.view` in the period project. Includes the immutable\nlifecycle timeline needed by the panel detail workspace."
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    put:
+      summary: 'Update a project period.'
+      operationId: updateAProjectPeriod
+      description: 'Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem guncellendi.'
+                  period:
+                    id: 3
+                    status: passive
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem guncellendi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: passive
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Bu proje icin yetkiniz bulunmuyor.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Bu proje icin yetkiniz bulunmuyor.'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Period name.'
+                  example: '2026 Bahar'
+                start_date:
+                  type: date
+                  description: 'Start date.'
+                  example: '2026-03-01'
+                end_date:
+                  type: date
+                  description: 'End date.'
+                  example: '2026-06-30'
+                credit_start_amount:
+                  type: integer
+                  description: 'Starting credit amount.'
+                  example: 100
+                credit_threshold:
+                  type: integer
+                  description: 'Critical credit threshold.'
+                  example: 75
+                status:
+                  type: string
+                  description: 'Optional current status for compatibility. A different value is rejected.'
+                  example: planned
+              required:
+                - name
+                - start_date
+                - end_date
+                - credit_start_amount
+                - credit_threshold
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
   '/api/admin/periods/{id}/closure-summary':
     get:
       summary: 'Get period closure summary.'
@@ -29157,11 +29784,308 @@ paths:
         required: true
         schema:
           type: integer
+  '/api/admin/periods/{id}/archives':
+    get:
+      summary: ''
+      operationId: getApiAdminPeriodsIdArchives
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/admin/periods/{id}/archives/{archiveId}':
+    get:
+      summary: ''
+      operationId: getApiAdminPeriodsIdArchivesArchiveId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: archiveId
+        description: ''
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/admin/periods/{id}/archives/{archiveId}/verify':
+    post:
+      summary: ''
+      operationId: postApiAdminPeriodsIdArchivesArchiveIdVerify
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: archiveId
+        description: ''
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/admin/periods/{id}/activate':
+    post:
+      summary: 'Activate a planned period.'
+      operationId: activateAPlannedPeriod
+      description: 'Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active/closing period exists.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem aktif edildi.'
+                  period:
+                    id: 3
+                    status: active
+                    lifecycle:
+                      is_current: true
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem aktif edildi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: active
+                      lifecycle:
+                        type: object
+                        properties:
+                          is_current:
+                            type: boolean
+                            example: true
+        409:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin.'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Optional activation reason.'
+                  example: 'Yeni donem baslangici.'
+                  nullable: true
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'Period ID.'
+        example: 3
+        required: true
+        schema:
+          type: integer
+  '/api/admin/periods/{id}/closing/start':
+    post:
+      summary: 'Start period closing preparation.'
+      operationId: startPeriodClosingPreparation
+      description: 'Requires `periods.closing.start` in the period project.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem kapanis hazirligina alindi.'
+                  period:
+                    id: 3
+                    status: closing
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem kapanis hazirligina alindi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: closing
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Optional closing preparation note.'
+                  example: 'Donem sonu kontrolleri baslatildi.'
+                  nullable: true
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'Period ID.'
+        example: 3
+        required: true
+        schema:
+          type: integer
+  '/api/admin/periods/{id}/closing/cancel':
+    post:
+      summary: 'Cancel closing preparation and return the period to active.'
+      operationId: cancelClosingPreparationAndReturnThePeriodToActive
+      description: 'Requires `periods.closing.cancel` in the period project.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem kapanis hazirligindan cikarilip yeniden aktif edildi.'
+                  period:
+                    id: 3
+                    status: active
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem kapanis hazirligindan cikarilip yeniden aktif edildi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: active
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Cancellation reason.'
+                  example: 'Eksik basvuru kararlari tamamlanacak.'
+              required:
+                - reason
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'Period ID.'
+        example: 3
+        required: true
+        schema:
+          type: integer
   '/api/admin/periods/{id}/complete':
     post:
       summary: 'Complete and archive a period.'
       operationId: completeAndArchiveAPeriod
-      description: 'Requires permission: `periods.update` for the period project. Creates an immutable period archive snapshot with summary, warnings, counts and integrity hash, then marks the period as completed.'
+      description: 'Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction.'
       parameters: []
       responses:
         200:
@@ -29243,9 +30167,9 @@ paths:
           type: integer
   '/api/admin/periods/{id}/reopen':
     post:
-      summary: 'Reopen a completed/passive period.'
-      operationId: reopenACompletedpassivePeriod
-      description: 'Requires permission: `periods.update` for the period project. Reopens the period as passive by default, or active when requested; when reactivated, other active periods in the same project are switched to passive.'
+      summary: 'Reopen a completed period.'
+      operationId: reopenACompletedPeriod
+      description: 'Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail.'
       parameters: []
       responses:
         200:
@@ -29293,17 +30217,31 @@ paths:
       tags:
         - Periods
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
               properties:
+                target_status:
+                  type: string
+                  description: 'Optional next status: `planned` or `active`. Defaults to planned.'
+                  example: planned
+                  nullable: true
                 status:
                   type: string
-                  description: 'Optional next status: `active` or `passive`. Defaults to passive.'
-                  example: active
+                  description: ''
+                  example: passive
+                  enum:
+                    - active
+                    - passive
                   nullable: true
+                reason:
+                  type: string
+                  description: 'Reopen reason.'
+                  example: 'Arsivdeki ogrenci sonucu duzeltilecek.'
+              required:
+                - reason
     parameters:
       -
         in: path
@@ -29313,11 +30251,11 @@ paths:
         required: true
         schema:
           type: integer
-  '/api/admin/periods/{id}':
-    put:
-      summary: 'Update a project period.'
-      operationId: updateAProjectPeriod
-      description: 'Requires permission: `periods.update` for the period project. If the period is set to active, other active periods in the same project are switched to passive.'
+  '/api/admin/periods/{id}/cancel':
+    post:
+      summary: 'Cancel a planned period.'
+      operationId: cancelAPlannedPeriod
+      description: 'Requires `periods.cancel` in the period project.'
       parameters: []
       responses:
         200:
@@ -29327,14 +30265,14 @@ paths:
               schema:
                 type: object
                 example:
-                  message: 'Donem guncellendi.'
+                  message: 'Planlanan donem iptal edildi.'
                   period:
                     id: 3
-                    status: passive
+                    status: cancelled
                 properties:
                   message:
                     type: string
-                    example: 'Donem guncellendi.'
+                    example: 'Planlanan donem iptal edildi.'
                   period:
                     type: object
                     properties:
@@ -29343,21 +30281,11 @@ paths:
                         example: 3
                       status:
                         type: string
-                        example: passive
-        403:
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: object
-                example:
-                  message: 'Bu proje icin yetkiniz bulunmuyor.'
-                properties:
-                  message:
-                    type: string
-                    example: 'Bu proje icin yetkiniz bulunmuyor.'
+                        example: cancelled
         401:
           $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
         422:
           $ref: '#/components/responses/ValidationError'
         404:
@@ -29371,37 +30299,12 @@ paths:
             schema:
               type: object
               properties:
-                name:
+                reason:
                   type: string
-                  description: 'Period name.'
-                  example: '2026 Bahar'
-                start_date:
-                  type: date
-                  description: 'Start date.'
-                  example: '2026-03-01'
-                end_date:
-                  type: date
-                  description: 'End date.'
-                  example: '2026-06-30'
-                credit_start_amount:
-                  type: integer
-                  description: 'Starting credit amount.'
-                  example: 100
-                credit_threshold:
-                  type: integer
-                  description: 'Critical credit threshold.'
-                  example: 75
-                status:
-                  type: string
-                  description: 'Period status: `active`, `passive` or `completed`.'
-                  example: passive
+                  description: 'Cancellation reason.'
+                  example: 'Proje takvimi degisti.'
               required:
-                - name
-                - start_date
-                - end_date
-                - credit_start_amount
-                - credit_threshold
-                - status
+                - reason
     parameters:
       -
         in: path
@@ -29430,12 +30333,12 @@ paths:
         -
           in: query
           name: status
-          description: 'Optional status filter: `active`, `passive` or `completed`.'
+          description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
           example: active
           required: false
           schema:
             type: string
-            description: 'Optional status filter: `active`, `passive` or `completed`.'
+            description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
             example: active
       responses:
         200:
@@ -29506,7 +30409,7 @@ paths:
     post:
       summary: 'Create a project period.'
       operationId: createAProjectPeriod
-      description: 'Requires permission: `periods.create` for the selected project. If the new period is active, other active periods in the same project are switched to passive.'
+      description: 'Requires permission: `periods.create` for the selected project. New periods are planned by default. Explicit active creation additionally requires `periods.activate` and fails when the project already has a current period.'
       parameters: []
       responses:
         201:
@@ -29598,8 +30501,8 @@ paths:
                   example: 75
                 status:
                   type: string
-                  description: 'Period status: `active`, `passive` or `completed`.'
-                  example: active
+                  description: 'Optional compatibility value: `planned`, `passive` or `active`. Defaults to planned.'
+                  example: planned
               required:
                 - project_id
                 - name
@@ -29607,7 +30510,6 @@ paths:
                 - end_date
                 - credit_start_amount
                 - credit_threshold
-                - status
   /api/panel/periods/export:
     get:
       summary: 'Export panel periods.'
@@ -29627,12 +30529,12 @@ paths:
         -
           in: query
           name: status
-          description: 'Optional status filter: `active`, `passive` or `completed`.'
+          description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
           example: completed
           required: false
           schema:
             type: string
-            description: 'Optional status filter: `active`, `passive` or `completed`.'
+            description: 'Optional lifecycle filter: `planned`, `active`, `closing`, `completed`, `cancelled` or legacy `passive`.'
             example: completed
         -
           in: query
@@ -29670,6 +30572,117 @@ paths:
           $ref: '#/components/responses/ValidationError'
       tags:
         - Periods
+  '/api/panel/periods/{id}':
+    get:
+      summary: 'Show a single period workspace payload.'
+      operationId: showASinglePeriodWorkspacePayload
+      description: "Requires `periods.view` in the period project. Includes the immutable\nlifecycle timeline needed by the panel detail workspace."
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    put:
+      summary: 'Update a project period.'
+      operationId: updateAProjectPeriod
+      description: 'Requires permission: `periods.update` for the period project. Lifecycle status cannot be changed through this generic update endpoint.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem guncellendi.'
+                  period:
+                    id: 3
+                    status: passive
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem guncellendi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: passive
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Bu proje icin yetkiniz bulunmuyor.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Bu proje icin yetkiniz bulunmuyor.'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Period name.'
+                  example: '2026 Bahar'
+                start_date:
+                  type: date
+                  description: 'Start date.'
+                  example: '2026-03-01'
+                end_date:
+                  type: date
+                  description: 'End date.'
+                  example: '2026-06-30'
+                credit_start_amount:
+                  type: integer
+                  description: 'Starting credit amount.'
+                  example: 100
+                credit_threshold:
+                  type: integer
+                  description: 'Critical credit threshold.'
+                  example: 75
+                status:
+                  type: string
+                  description: 'Optional current status for compatibility. A different value is rejected.'
+                  example: planned
+              required:
+                - name
+                - start_date
+                - end_date
+                - credit_start_amount
+                - credit_threshold
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
   '/api/panel/periods/{id}/closure-summary':
     get:
       summary: 'Get period closure summary.'
@@ -29757,11 +30770,308 @@ paths:
         required: true
         schema:
           type: integer
+  '/api/panel/periods/{id}/archives':
+    get:
+      summary: ''
+      operationId: getApiPanelPeriodsIdArchives
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/panel/periods/{id}/archives/{archiveId}':
+    get:
+      summary: ''
+      operationId: getApiPanelPeriodsIdArchivesArchiveId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: archiveId
+        description: ''
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/panel/periods/{id}/archives/{archiveId}/verify':
+    post:
+      summary: ''
+      operationId: postApiPanelPeriodsIdArchivesArchiveIdVerify
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the period.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: archiveId
+        description: ''
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/panel/periods/{id}/activate':
+    post:
+      summary: 'Activate a planned period.'
+      operationId: activateAPlannedPeriod
+      description: 'Requires `periods.activate` in the period project. The project is locked and activation fails with 409 when another active/closing period exists.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem aktif edildi.'
+                  period:
+                    id: 3
+                    status: active
+                    lifecycle:
+                      is_current: true
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem aktif edildi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: active
+                      lifecycle:
+                        type: object
+                        properties:
+                          is_current:
+                            type: boolean
+                            example: true
+        409:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Bu projenin zaten guncel bir donemi var. Once mevcut donemi kapatin.'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Optional activation reason.'
+                  example: 'Yeni donem baslangici.'
+                  nullable: true
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'Period ID.'
+        example: 3
+        required: true
+        schema:
+          type: integer
+  '/api/panel/periods/{id}/closing/start':
+    post:
+      summary: 'Start period closing preparation.'
+      operationId: startPeriodClosingPreparation
+      description: 'Requires `periods.closing.start` in the period project.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem kapanis hazirligina alindi.'
+                  period:
+                    id: 3
+                    status: closing
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem kapanis hazirligina alindi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: closing
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Optional closing preparation note.'
+                  example: 'Donem sonu kontrolleri baslatildi.'
+                  nullable: true
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'Period ID.'
+        example: 3
+        required: true
+        schema:
+          type: integer
+  '/api/panel/periods/{id}/closing/cancel':
+    post:
+      summary: 'Cancel closing preparation and return the period to active.'
+      operationId: cancelClosingPreparationAndReturnThePeriodToActive
+      description: 'Requires `periods.closing.cancel` in the period project.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Donem kapanis hazirligindan cikarilip yeniden aktif edildi.'
+                  period:
+                    id: 3
+                    status: active
+                properties:
+                  message:
+                    type: string
+                    example: 'Donem kapanis hazirligindan cikarilip yeniden aktif edildi.'
+                  period:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 3
+                      status:
+                        type: string
+                        example: active
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - Periods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Cancellation reason.'
+                  example: 'Eksik basvuru kararlari tamamlanacak.'
+              required:
+                - reason
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'Period ID.'
+        example: 3
+        required: true
+        schema:
+          type: integer
   '/api/panel/periods/{id}/complete':
     post:
       summary: 'Complete and archive a period.'
       operationId: completeAndArchiveAPeriod
-      description: 'Requires permission: `periods.update` for the period project. Creates an immutable period archive snapshot with summary, warnings, counts and integrity hash, then marks the period as completed.'
+      description: 'Requires permission: `periods.complete` for the period project. Creates an archive snapshot and completes the period inside the locked lifecycle transaction.'
       parameters: []
       responses:
         200:
@@ -29843,9 +31153,9 @@ paths:
           type: integer
   '/api/panel/periods/{id}/reopen':
     post:
-      summary: 'Reopen a completed/passive period.'
-      operationId: reopenACompletedpassivePeriod
-      description: 'Requires permission: `periods.update` for the period project. Reopens the period as passive by default, or active when requested; when reactivated, other active periods in the same project are switched to passive.'
+      summary: 'Reopen a completed period.'
+      operationId: reopenACompletedPeriod
+      description: 'Requires restricted permission: `periods.reopen` for the period project. A mandatory reason is recorded in the lifecycle audit trail.'
       parameters: []
       responses:
         200:
@@ -29893,17 +31203,31 @@ paths:
       tags:
         - Periods
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
               properties:
+                target_status:
+                  type: string
+                  description: 'Optional next status: `planned` or `active`. Defaults to planned.'
+                  example: planned
+                  nullable: true
                 status:
                   type: string
-                  description: 'Optional next status: `active` or `passive`. Defaults to passive.'
+                  description: ''
                   example: active
+                  enum:
+                    - active
+                    - passive
                   nullable: true
+                reason:
+                  type: string
+                  description: 'Reopen reason.'
+                  example: 'Arsivdeki ogrenci sonucu duzeltilecek.'
+              required:
+                - reason
     parameters:
       -
         in: path
@@ -29913,11 +31237,11 @@ paths:
         required: true
         schema:
           type: integer
-  '/api/panel/periods/{id}':
-    put:
-      summary: 'Update a project period.'
-      operationId: updateAProjectPeriod
-      description: 'Requires permission: `periods.update` for the period project. If the period is set to active, other active periods in the same project are switched to passive.'
+  '/api/panel/periods/{id}/cancel':
+    post:
+      summary: 'Cancel a planned period.'
+      operationId: cancelAPlannedPeriod
+      description: 'Requires `periods.cancel` in the period project.'
       parameters: []
       responses:
         200:
@@ -29927,14 +31251,14 @@ paths:
               schema:
                 type: object
                 example:
-                  message: 'Donem guncellendi.'
+                  message: 'Planlanan donem iptal edildi.'
                   period:
                     id: 3
-                    status: passive
+                    status: cancelled
                 properties:
                   message:
                     type: string
-                    example: 'Donem guncellendi.'
+                    example: 'Planlanan donem iptal edildi.'
                   period:
                     type: object
                     properties:
@@ -29943,21 +31267,11 @@ paths:
                         example: 3
                       status:
                         type: string
-                        example: passive
-        403:
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: object
-                example:
-                  message: 'Bu proje icin yetkiniz bulunmuyor.'
-                properties:
-                  message:
-                    type: string
-                    example: 'Bu proje icin yetkiniz bulunmuyor.'
+                        example: cancelled
         401:
           $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
         422:
           $ref: '#/components/responses/ValidationError'
         404:
@@ -29971,37 +31285,12 @@ paths:
             schema:
               type: object
               properties:
-                name:
+                reason:
                   type: string
-                  description: 'Period name.'
-                  example: '2026 Bahar'
-                start_date:
-                  type: date
-                  description: 'Start date.'
-                  example: '2026-03-01'
-                end_date:
-                  type: date
-                  description: 'End date.'
-                  example: '2026-06-30'
-                credit_start_amount:
-                  type: integer
-                  description: 'Starting credit amount.'
-                  example: 100
-                credit_threshold:
-                  type: integer
-                  description: 'Critical credit threshold.'
-                  example: 75
-                status:
-                  type: string
-                  description: 'Period status: `active`, `passive` or `completed`.'
-                  example: passive
+                  description: 'Cancellation reason.'
+                  example: 'Proje takvimi degisti.'
               required:
-                - name
-                - start_date
-                - end_date
-                - credit_start_amount
-                - credit_threshold
-                - status
+                - reason
     parameters:
       -
         in: path
@@ -30013,8 +31302,8 @@ paths:
           type: integer
   /api/admin/credits/adjust:
     post:
-      summary: 'Ã–ÄŸrenciye manuel kredi ekleme/Ã§Ä±karma'
-      operationId: renciyeManuelKrediEklemekarma
+      summary: 'Ogrenciye manuel kredi ekleme/cikarma.'
+      operationId: ogrenciyeManuelKrediEklemecikarma
       description: ''
       parameters: []
       responses:
@@ -30051,8 +31340,84 @@ paths:
                 - reason
   /api/admin/badges/award:
     post:
-      summary: 'Ã–ÄŸrenciye manuel rozet verme'
-      operationId: renciyeManuelRozetVerme
+      summary: 'Ogrenciye manuel rozet verme.'
+      operationId: ogrenciyeManuelRozetVerme
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+      tags:
+        - 'Credits & Rewards'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the users table.'
+                  example: consequatur
+                badge_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the badges table.'
+                  example: consequatur
+                project_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the projects table.'
+                  example: null
+                  nullable: true
+              required:
+                - user_id
+                - badge_id
+  /api/panel/credits/adjust:
+    post:
+      summary: 'Ogrenciye manuel kredi ekleme/cikarma.'
+      operationId: ogrenciyeManuelKrediEklemecikarma
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+      tags:
+        - 'Credits & Rewards'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                participant_id:
+                  type: string
+                  description: 'The <code>id</code> of an existing record in the participants table.'
+                  example: consequatur
+                amount:
+                  type: integer
+                  description: 'Must not be one of <code>0</code>.'
+                  example: 17
+                reason:
+                  type: string
+                  description: '+10 veya -10 gibi. Must not be greater than 255 characters.'
+                  example: mqeopfuudtdsufvyvddqa
+              required:
+                - participant_id
+                - amount
+                - reason
+  /api/panel/badges/award:
+    post:
+      summary: 'Ogrenciye manuel rozet verme.'
+      operationId: ogrenciyeManuelRozetVerme
       description: ''
       parameters: []
       responses:
@@ -30507,6 +31872,11 @@ paths:
                   type: string
                   description: 'Transaction category, max 80 chars.'
                   example: travel
+                category_note:
+                  type: string
+                  description: 'This field is required when <code>category</code> is <code>other</code>. Must not be greater than 500 characters.'
+                  example: amniihfqcoynlazghdtqt
+                  nullable: true
                 spending_unit:
                   type: string
                   description: 'Optional spending unit/cost center.'
@@ -31392,6 +32762,11 @@ paths:
                   type: string
                   description: 'Transaction category, max 80 chars.'
                   example: travel
+                category_note:
+                  type: string
+                  description: 'This field is required when <code>category</code> is <code>other</code>. Must not be greater than 500 characters.'
+                  example: amniihfqcoynlazghdtqt
+                  nullable: true
                 spending_unit:
                   type: string
                   description: 'Optional spending unit/cost center.'
@@ -32053,6 +33428,11 @@ paths:
                   type: string
                   description: 'Transaction category, max 80 chars.'
                   example: travel
+                category_note:
+                  type: string
+                  description: 'This field is required when <code>category</code> is <code>other</code>. Must not be greater than 500 characters.'
+                  example: amniihfqcoynlazghdtqt
+                  nullable: true
                 spending_unit:
                   type: string
                   description: 'Optional spending unit/cost center.'
@@ -39059,7 +40439,7 @@ paths:
                 status:
                   type: string
                   description: ''
-                  example: candidate
+                  example: active
                   enum:
                     - active
                     - passive
@@ -39068,7 +40448,7 @@ paths:
                 format:
                   type: string
                   description: ''
-                  example: word
+                  example: csv
                   enum:
                     - xlsx
                     - excel
@@ -39239,7 +40619,7 @@ paths:
                 status:
                   type: string
                   description: ''
-                  example: active
+                  example: passive
                   enum:
                     - active
                     - passive
@@ -41812,11 +43192,11 @@ paths:
               schema:
                 type: object
                 example:
-                  message: 'Veri asistanÄ± iÃ§in tÃ¼m sistem kapsamÄ± gerekir.'
+                  message: 'Veri asistanı için tüm sistem kapsamı gerekir.'
                 properties:
                   message:
                     type: string
-                    example: 'Veri asistanÄ± iÃ§in tÃ¼m sistem kapsamÄ± gerekir.'
+                    example: 'Veri asistanı için tüm sistem kapsamı gerekir.'
         422:
           description: ''
           content:
@@ -41888,7 +43268,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 'GeÃ§ersiz dÄ±ÅŸa aktarma isteÄŸi.'
+                example: 'Geçersiz dışa aktarma isteği.'
         403:
           description: ''
           content:
@@ -41902,7 +43282,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 'DÄ±ÅŸa aktarma sÃ¼resi dolmuÅŸ veya geÃ§ersiz.'
+                example: 'Dışa aktarma süresi dolmuş veya geçersiz.'
         422:
           description: ''
           content:
@@ -41943,7 +43323,7 @@ paths:
                 format:
                   type: string
                   description: ''
-                  example: pdf
+                  example: docx
                   enum:
                     - csv
                     - xlsx
@@ -42065,11 +43445,11 @@ paths:
               schema:
                 type: object
                 example:
-                  message: 'Veri asistanÄ± iÃ§in tÃ¼m sistem kapsamÄ± gerekir.'
+                  message: 'Veri asistanı için tüm sistem kapsamı gerekir.'
                 properties:
                   message:
                     type: string
-                    example: 'Veri asistanÄ± iÃ§in tÃ¼m sistem kapsamÄ± gerekir.'
+                    example: 'Veri asistanı için tüm sistem kapsamı gerekir.'
         422:
           description: ''
           content:
@@ -42141,7 +43521,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 'GeÃ§ersiz dÄ±ÅŸa aktarma isteÄŸi.'
+                example: 'Geçersiz dışa aktarma isteği.'
         403:
           description: ''
           content:
@@ -42155,7 +43535,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 'DÄ±ÅŸa aktarma sÃ¼resi dolmuÅŸ veya geÃ§ersiz.'
+                example: 'Dışa aktarma süresi dolmuş veya geçersiz.'
         422:
           description: ''
           content:
@@ -42196,7 +43576,7 @@ paths:
                 format:
                   type: string
                   description: ''
-                  example: docx
+                  example: xlsx
                   enum:
                     - csv
                     - xlsx
@@ -42587,7 +43967,7 @@ paths:
                 context:
                   type: string
                   description: ''
-                  example: meeting_manage
+                  example: program
                   enum:
                     - program
                     - meeting_create
@@ -42730,7 +44110,7 @@ paths:
                 panel:
                   type: string
                   description: ''
-                  example: staff
+                  example: coordinator
                   enum:
                     - admin
                     - coordinator
@@ -46297,4 +47677,207 @@ paths:
         required: true
         schema:
           type: integer
-
+  '/api/admin/projects/{id}/application-settings':
+    get:
+      summary: ''
+      operationId: getApiAdminProjectsIdApplicationSettings
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Application Intake Management'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: 17
+                  nullable: true
+    patch:
+      summary: ''
+      operationId: patchApiAdminProjectsIdApplicationSettings
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Application Intake Management'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: 17
+                is_open:
+                  type: boolean
+                  description: ''
+                  example: true
+                starts_at:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:30'
+                  nullable: true
+                ends_at:
+                  type: string
+                  description: 'Must be a valid date. Must be a date after <code>starts_at</code>.'
+                  example: '2107-09-19'
+                  nullable: true
+                next_application_date:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:30'
+                  nullable: true
+                has_interview:
+                  type: boolean
+                  description: ''
+                  example: true
+                quota:
+                  type: integer
+                  description: 'Must be at least 1.'
+                  example: 45
+                  nullable: true
+                change_note:
+                  type: string
+                  description: 'Must not be greater than 1000 characters.'
+                  example: qeopfuudtdsufvyvddqam
+                  nullable: true
+              required:
+                - period_id
+                - is_open
+                - has_interview
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the project.'
+        example: consequatur
+        required: true
+        schema:
+          type: string
+  '/api/panel/projects/{id}/application-settings':
+    get:
+      summary: ''
+      operationId: getApiPanelProjectsIdApplicationSettings
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Application Intake Management'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: 17
+                  nullable: true
+    patch:
+      summary: ''
+      operationId: patchApiPanelProjectsIdApplicationSettings
+      description: ''
+      parameters: []
+      responses:
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        422:
+          $ref: '#/components/responses/ValidationError'
+        404:
+          $ref: '#/components/responses/NotFound'
+      tags:
+        - 'Application Intake Management'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the periods table.'
+                  example: 17
+                is_open:
+                  type: boolean
+                  description: ''
+                  example: true
+                starts_at:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:31'
+                  nullable: true
+                ends_at:
+                  type: string
+                  description: 'Must be a valid date. Must be a date after <code>starts_at</code>.'
+                  example: '2107-09-19'
+                  nullable: true
+                next_application_date:
+                  type: string
+                  description: 'Must be a valid date.'
+                  example: '2026-08-21T04:14:31'
+                  nullable: true
+                has_interview:
+                  type: boolean
+                  description: ''
+                  example: true
+                quota:
+                  type: integer
+                  description: 'Must be at least 1.'
+                  example: 45
+                  nullable: true
+                change_note:
+                  type: string
+                  description: 'Must not be greater than 1000 characters.'
+                  example: qeopfuudtdsufvyvddqam
+                  nullable: true
+              required:
+                - period_id
+                - is_open
+                - has_interview
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the project.'
+        example: consequatur
+        required: true
+        schema:
+          type: string

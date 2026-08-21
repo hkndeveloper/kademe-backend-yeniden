@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Announcement;
 use App\Models\Application;
 use App\Models\Assignment;
-use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\Certificate;
 use App\Models\DigitalBohca;
@@ -17,8 +17,8 @@ use App\Models\Period;
 use App\Models\PeriodArchive;
 use App\Models\Program;
 use App\Models\Project;
-use App\Models\RolePermissionScope;
 use App\Models\Request as WorkflowRequest;
+use App\Models\RolePermissionScope;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Models\VolunteerOpportunity;
@@ -787,15 +787,15 @@ class PeriodContextRegressionTest extends TestCase
             ->assertJsonPath('message', 'Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir.');
     }
 
-    public function test_archive_update_permission_allows_completed_period_program_create(): void
+    public function test_legacy_archive_update_permission_does_not_bypass_completed_period_immutability(): void
     {
         $this->actorWithAllScopes(['programs.create', 'periods.archive.update'], 'program_creator_with_archive');
         $project = $this->project('archive-override-program-project');
         [, $completedPeriod] = $this->periodsFor($project);
 
         $this->postJson('/api/panel/programs', $this->programPayload($project, $completedPeriod))
-            ->assertCreated()
-            ->assertJsonPath('program.period.id', $completedPeriod->id);
+            ->assertStatus(423)
+            ->assertJsonPath('message', 'Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir.');
     }
 
     public function test_completed_period_blocks_financial_approval_without_archive_permission(): void
@@ -841,7 +841,7 @@ class PeriodContextRegressionTest extends TestCase
 
     public function test_period_completion_creates_persistent_archive_snapshot(): void
     {
-        $actor = $this->actorWithAllScopes(['periods.update', 'periods.view'], 'period_snapshot_closer');
+        $actor = $this->actorWithAllScopes(['periods.complete', 'periods.view'], 'period_snapshot_closer');
         $project = $this->project('period-snapshot-project');
         [$activePeriod] = $this->periodsFor($project);
         $riskStudent = User::factory()->create(['name' => 'Risk', 'surname' => 'Snapshot', 'email' => 'risk-snapshot@test.local', 'role' => 'student']);
@@ -851,6 +851,7 @@ class PeriodContextRegressionTest extends TestCase
             'project_id' => $project->id,
             'period_id' => $activePeriod->id,
             'status' => 'active',
+            'graduation_status' => 'not_completed',
             'credit' => 70,
         ]);
         Participant::query()->create([
@@ -858,11 +859,12 @@ class PeriodContextRegressionTest extends TestCase
             'project_id' => $project->id,
             'period_id' => $activePeriod->id,
             'status' => 'active',
+            'graduation_status' => 'completed',
             'credit' => 95,
         ]);
 
         Program::query()->create($this->programPayload($project, $activePeriod) + [
-            'status' => 'scheduled',
+            'status' => 'completed',
             'created_by' => $actor->id,
         ]);
 
@@ -878,7 +880,8 @@ class PeriodContextRegressionTest extends TestCase
             ->assertJsonPath('archive.summary.credit_snapshot.below_threshold_count', 1)
             ->assertJsonPath('archive.summary.credit_snapshot.participants.0.student', 'Risk Snapshot')
             ->assertJsonPath('archive.summary.credit_snapshot.participants.0.credit', 70)
-            ->assertJsonPath('archive.warnings.open_programs', 1);
+            ->assertJsonPath('archive.warnings.open_programs', 0)
+            ->assertJsonPath('archive.readiness.ready', true);
 
         $archive = PeriodArchive::query()->where('period_id', $activePeriod->id)->first();
         $this->assertNotNull($archive);

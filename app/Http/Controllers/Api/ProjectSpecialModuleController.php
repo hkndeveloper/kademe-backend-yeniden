@@ -432,7 +432,7 @@ class ProjectSpecialModuleController extends Controller
             ->with('module:id,project_id,period_id')
             ->whereHas('module', fn ($q) => $q->where('project_id', $projectId))
             ->findOrFail($enrollmentId);
-        $this->assertPeriodWritable($request, $enrollment->module?->period_id);
+        $this->assertPeriodResolvable($request, $enrollment->module?->period_id);
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
@@ -1193,7 +1193,7 @@ class ProjectSpecialModuleController extends Controller
             ->with('participant:id,period_id')
             ->where('project_id', $projectId)
             ->findOrFail($id);
-        $this->assertPeriodWritable($request, $award->participant?->period_id);
+        $this->assertPeriodResolvable($request, $award->participant?->period_id);
 
         $award->markDelivered($request->user()->id);
 

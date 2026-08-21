@@ -126,6 +126,113 @@ endpoints:
   -
     custom: []
     httpMethods:
+      - POST
+    uri: api/certificates
+    metadata:
+      custom: []
+      groupName: Certificates
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Upload a participant-owned certificate.'
+      description: 'The authenticated participant can add external certificates to their own certificate library and CV selections. Uploaded certificates are marked as `student_upload` and do not require a project/period.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: multipart/form-data
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      title:
+        custom: []
+        name: title
+        description: 'Must not be greater than 255 characters.'
+        required: true
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      issuer:
+        custom: []
+        name: issuer
+        description: 'Must not be greater than 255 characters.'
+        required: true
+        example: amniihfqcoynlazghdtqt
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Must not be greater than 80 characters.'
+        required: false
+        example: qxbajwbpilpmufinllwlo
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      issued_at:
+        custom: []
+        name: issued_at
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-08-21T04:15:37'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      included_in_cv:
+        custom: []
+        name: included_in_cv
+        description: ''
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      certificate_file:
+        custom: []
+        name: certificate_file
+        description: 'Must be a file. Must not be greater than 20480 kilobytes.'
+        required: true
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: vmqeopfuudtdsufvyvddq
+      issuer: amniihfqcoynlazghdtqt
+      type: qxbajwbpilpmufinllwlo
+      issued_at: '2026-08-21T04:15:37'
+      included_in_cv: true
+    fileParameters:
+      certificate_file: null
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
       - GET
     uri: api/admin/certificates
     metadata:

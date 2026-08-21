@@ -341,7 +341,7 @@ endpoints:
         name: 'questions[].is_required'
         description: ''
         required: false
-        example: true
+        example: false
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -361,7 +361,7 @@ endpoints:
             - mqeopfuudtdsufvyvddqa
           min_value: 5
           max_value: 6
-          is_required: true
+          is_required: false
     fileParameters: []
     responses: []
     responseFields: []
@@ -435,7 +435,7 @@ endpoints:
         name: is_default
         description: ''
         required: false
-        example: true
+        example: false
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -446,7 +446,7 @@ endpoints:
         name: is_active
         description: ''
         required: false
-        example: false
+        example: true
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -535,7 +535,7 @@ endpoints:
         name: 'questions[].is_required'
         description: ''
         required: false
-        example: true
+        example: false
         type: boolean
         enumValues: []
         exampleWasSpecified: false
@@ -544,8 +544,8 @@ endpoints:
     cleanBodyParameters:
       name: vmqeopfuudtdsufvyvddq
       description: 'Dolores molestias ipsam sit.'
-      is_default: true
-      is_active: false
+      is_default: false
+      is_active: true
       questions:
         -
           question_key: hfqcoynlazghdtqtqxbaj
@@ -554,7 +554,7 @@ endpoints:
             - smsjuryvojcybzvrbyick
           min_value: 10
           max_value: 6
-          is_required: true
+          is_required: false
     fileParameters: []
     responses: []
     responseFields: []

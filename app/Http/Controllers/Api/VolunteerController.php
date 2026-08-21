@@ -391,7 +391,7 @@ class VolunteerController extends Controller
             ->findOrFail($id);
 
         $this->abortUnlessProjectAllowed($request, 'volunteer.manage', (int) $application->opportunity->project_id);
-        $this->assertPeriodWritable($request, $application->opportunity->period_id);
+        $this->assertPeriodResolvable($request, $application->opportunity->period_id);
 
         $application->update($validated);
 

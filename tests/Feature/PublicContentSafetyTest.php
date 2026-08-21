@@ -57,9 +57,11 @@ class PublicContentSafetyTest extends TestCase
             'status' => 'active',
             'application_open' => true,
         ]);
+        $period = $this->activePeriod($project);
 
         $program = Program::query()->create([
             'project_id' => $project->id,
+            'period_id' => $period->id,
             'title' => 'Acik Etkinlik',
             'description' => 'Genel aciklama',
             'location' => 'Istanbul',
@@ -73,6 +75,7 @@ class PublicContentSafetyTest extends TestCase
             'qr_token' => 'SECRET_QR',
             'qr_expires_at' => now()->addHours(2),
             'status' => 'scheduled',
+            'is_public' => true,
         ]);
 
         $list = $this->getJson('/api/activities');
@@ -103,13 +106,16 @@ class PublicContentSafetyTest extends TestCase
             'status' => 'active',
             'application_open' => true,
         ]);
+        $period = $this->activePeriod($project);
 
         $cancelled = Program::query()->create([
             'project_id' => $project->id,
+            'period_id' => $period->id,
             'title' => 'Iptal Etkinlik',
             'start_at' => now()->addDay(),
             'end_at' => now()->addDays(2),
             'status' => 'cancelled',
+            'is_public' => true,
         ]);
 
         $this->getJson('/api/activities/'.$cancelled->id)->assertNotFound();
@@ -220,9 +226,11 @@ class PublicContentSafetyTest extends TestCase
             'status' => 'active',
             'application_open' => true,
         ]);
+        $period = $this->activePeriod($project);
 
         Program::query()->create([
             'project_id' => $project->id,
+            'period_id' => $period->id,
             'title' => 'Homepage Etkinlik',
             'location' => 'Istanbul',
             'latitude' => 40.12,
@@ -279,6 +287,7 @@ class PublicContentSafetyTest extends TestCase
             'start_at' => now()->setDate(2026, 5, 20)->setTime(10, 0),
             'end_at' => now()->setDate(2026, 5, 20)->setTime(12, 0),
             'status' => 'scheduled',
+            'is_public' => true,
         ]);
         Program::query()->create([
             'project_id' => $project->id,
@@ -287,6 +296,7 @@ class PublicContentSafetyTest extends TestCase
             'start_at' => now()->setDate(2026, 6, 10)->setTime(14, 0),
             'end_at' => now()->setDate(2026, 6, 10)->setTime(16, 0),
             'status' => 'completed',
+            'is_public' => true,
         ]);
 
         $response = $this->getJson('/api/projects/'.$project->slug);
@@ -300,5 +310,16 @@ class PublicContentSafetyTest extends TestCase
         $response->assertJsonMissingPath('programs.calendar.0.latitude');
         $response->assertJsonMissingPath('programs.calendar.0.longitude');
         $response->assertJsonMissingPath('programs.calendar.0.credit_deduction');
+    }
+
+    private function activePeriod(Project $project): Period
+    {
+        return Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Aktif Donem',
+            'start_date' => now()->startOfYear()->toDateString(),
+            'end_date' => now()->endOfYear()->toDateString(),
+            'status' => 'active',
+        ]);
     }
 }

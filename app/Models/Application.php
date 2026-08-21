@@ -15,6 +15,7 @@ class Application extends Model
         'user_id',
         'project_id',
         'period_id',
+        'application_window_id',
         'program_id',
         'application_form_id',
         'form_data',
@@ -52,6 +53,11 @@ class Application extends Model
         return $this->belongsTo(Period::class);
     }
 
+    public function applicationWindow()
+    {
+        return $this->belongsTo(ApplicationWindow::class);
+    }
+
     public function program()
     {
         return $this->belongsTo(Program::class);
@@ -61,6 +67,22 @@ class Application extends Model
     {
         return $this->belongsTo(ApplicationForm::class, 'application_form_id');
     }
+
+    public function usesInterview(): bool
+    {
+        $this->loadMissing(['applicationWindow:id,has_interview', 'project:id,has_interview']);
+
+        return (bool) ($this->applicationWindow?->has_interview ?? $this->project?->has_interview);
+    }
+
+    public function projectQuota(): ?int
+    {
+        $this->loadMissing(['applicationWindow:id,quota', 'project:id,quota']);
+        $quota = $this->applicationWindow?->quota ?? $this->project?->quota;
+
+        return $quota === null ? null : (int) $quota;
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -69,4 +91,3 @@ class Application extends Model
             ->dontLogEmptyChanges();
     }
 }
-

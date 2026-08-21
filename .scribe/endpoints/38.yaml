@@ -1,14 +1,14 @@
-name: 'Project Family Modules'
+name: 'Admin Panel'
 description: ''
 endpoints:
   -
     custom: []
     httpMethods:
       - GET
-    uri: 'api/panel/project-families/{family}'
+    uri: api/panel/modules
     metadata:
       custom: []
-      groupName: 'Project Family Modules'
+      groupName: 'Admin Panel'
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
@@ -20,48 +20,12 @@ endpoints:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
       Content-Type: application/json
       Accept: application/json
-    urlParameters:
-      family:
-        custom: []
-        name: family
-        description: ''
-        required: true
-        example: consequatur
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      family: consequatur
+    urlParameters: []
+    cleanUrlParameters: []
     queryParameters: []
     cleanQueryParameters: []
-    bodyParameters:
-      project_id:
-        custom: []
-        name: project_id
-        description: 'The <code>id</code> of an existing record in the projects table.'
-        required: false
-        example: 17
-        type: integer
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-      period_id:
-        custom: []
-        name: period_id
-        description: 'The <code>id</code> of an existing record in the periods table.'
-        required: false
-        example: 17
-        type: integer
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      project_id: 17
-      period_id: 17
+    bodyParameters: []
+    cleanBodyParameters: []
     fileParameters: []
     responses: []
     responseFields: []

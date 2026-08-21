@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AdminProgramController;
 use App\Http\Controllers\Api\AlumniOpportunityController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\ApplicationController;
+use App\Http\Controllers\Api\ApplicationIntakeController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -39,10 +40,12 @@ use App\Http\Controllers\Api\ProjectSpecialModuleController;
 use App\Http\Controllers\Api\Public\PublicContentController;
 use App\Http\Controllers\Api\RequestController;
 use App\Http\Controllers\Api\SiteSettingsController;
+use App\Http\Controllers\Api\SocialSharingController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentDashboardController;
 use App\Http\Controllers\Api\StudentKpdController;
 use App\Http\Controllers\Api\SupportTicketController;
+use App\Http\Controllers\Api\SystemNotificationController;
 use App\Http\Controllers\Api\TrainerController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VolunteerController;
@@ -53,6 +56,7 @@ use Illuminate\Support\Facades\Route;
  * API health check.
  *
  * @group Health
+ *
  * @unauthenticated
  *
  * @response 200 {"message":"KADEME API is running!"}
@@ -108,10 +112,10 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
         Route::post('/personality-test', [PersonalityTestController::class, 'submit']);
 
         // Sistem bildirimleri
-        Route::get('/notifications', [\App\Http\Controllers\Api\SystemNotificationController::class, 'index']);
-        Route::patch('/notifications/{id}/read', [\App\Http\Controllers\Api\SystemNotificationController::class, 'markRead']);
-        Route::post('/notifications/read-all', [\App\Http\Controllers\Api\SystemNotificationController::class, 'markAllRead']);
-        Route::delete('/notifications/{id}', [\App\Http\Controllers\Api\SystemNotificationController::class, 'destroy']);
+        Route::get('/notifications', [SystemNotificationController::class, 'index']);
+        Route::patch('/notifications/{id}/read', [SystemNotificationController::class, 'markRead']);
+        Route::post('/notifications/read-all', [SystemNotificationController::class, 'markAllRead']);
+        Route::delete('/notifications/{id}', [SystemNotificationController::class, 'destroy']);
     });
 });
 
@@ -161,7 +165,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages'])->middleware('scoped.permission:participant.inbox.view');
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState'])->middleware('scoped.permission:participant.inbox.view');
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
-    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post'])->middleware('scoped.permission:participant.profile.manage');
+    Route::post('/social-sharing/post', [SocialSharingController::class, 'post'])->middleware('scoped.permission:participant.profile.manage');
 
     Route::get('/digital-bohca', [DigitalBohcaController::class, 'index'])->middleware('scoped.permission:participant.bohca.view');
     Route::get('/digital-bohca/{id}/download', [DigitalBohcaController::class, 'download'])->middleware('scoped.permission:participant.bohca.view');
@@ -220,6 +224,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
     Route::get('/programs/{id}', [AdminProgramController::class, 'show'])->whereNumber('id');
+    Route::get('/programs/{id}/qr-context', [AdminProgramController::class, 'qrContext'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
     Route::post('/programs/{id}/generate-qr', [AdminProgramController::class, 'generateQr']);
@@ -243,6 +248,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/projects/manageable', [ProjectContentController::class, 'manageable']);
     Route::get('/projects/export', [ProjectContentController::class, 'exportManageable']);
     Route::get('/projects/{id}/modules', [ProjectContentController::class, 'modules']);
+    Route::get('/projects/{id}/application-settings', [ApplicationIntakeController::class, 'show']);
+    Route::patch('/projects/{id}/application-settings', [ApplicationIntakeController::class, 'update']);
     Route::get('/projects/{id}/special-modules', [ProjectSpecialModuleController::class, 'index']);
     Route::post('/projects/{id}/special-modules/internships', [ProjectSpecialModuleController::class, 'storeInternship']);
     Route::put('/projects/{id}/special-modules/internships/{item}', [ProjectSpecialModuleController::class, 'updateInternship']);
@@ -276,9 +283,17 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/periods', [PeriodController::class, 'index']);
     Route::get('/periods/export', [PeriodController::class, 'export']);
     Route::post('/periods', [PeriodController::class, 'store']);
+    Route::get('/periods/{id}', [PeriodController::class, 'show']);
     Route::get('/periods/{id}/closure-summary', [PeriodController::class, 'closureSummary']);
+    Route::get('/periods/{id}/archives', [PeriodController::class, 'archives']);
+    Route::get('/periods/{id}/archives/{archiveId}', [PeriodController::class, 'archive']);
+    Route::post('/periods/{id}/archives/{archiveId}/verify', [PeriodController::class, 'verifyArchive']);
+    Route::post('/periods/{id}/activate', [PeriodController::class, 'activate']);
+    Route::post('/periods/{id}/closing/start', [PeriodController::class, 'startClosing']);
+    Route::post('/periods/{id}/closing/cancel', [PeriodController::class, 'cancelClosing']);
     Route::post('/periods/{id}/complete', [PeriodController::class, 'complete']);
     Route::post('/periods/{id}/reopen', [PeriodController::class, 'reopen']);
+    Route::post('/periods/{id}/cancel', [PeriodController::class, 'cancel']);
     Route::put('/periods/{id}', [PeriodController::class, 'update']);
 
     // KPD YÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶netimi
@@ -363,7 +378,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
     Route::get('/forum/posts', [ForumController::class, 'panelIndex']);
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
-    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
+    Route::post('/social-sharing/post', [SocialSharingController::class, 'post']);
 
     // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ KULLANICI YÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“NETÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°MÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
     Route::get('/users/export', [UserController::class, 'exportUsers']);
@@ -406,6 +421,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
     Route::get('/programs/{id}', [AdminProgramController::class, 'show'])->whereNumber('id');
+    Route::get('/programs/{id}/qr-context', [AdminProgramController::class, 'qrContext'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
     Route::post('/programs/{id}/complete', [AdminProgramController::class, 'complete']);
@@ -438,6 +454,9 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::post('/applications/{id}/waitlist-invite', [AdminApplicationController::class, 'inviteFromWaitlist']);
     Route::post('/applications/{id}/waitlist-refresh', [AdminApplicationController::class, 'refreshWaitlistInvitations']);
 
+    Route::post('/credits/adjust', [AdminCreditController::class, 'adjustCredit']);
+    Route::post('/badges/award', [AdminCreditController::class, 'awardBadge']);
+
     Route::get('/volunteer/opportunities', [VolunteerController::class, 'panelIndex']);
     Route::get('/volunteer/opportunities/export', [VolunteerController::class, 'panelExport']);
     Route::post('/volunteer/opportunities', [VolunteerController::class, 'panelStore']);
@@ -448,15 +467,25 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/periods', [PeriodController::class, 'index']);
     Route::get('/periods/export', [PeriodController::class, 'export']);
     Route::post('/periods', [PeriodController::class, 'store']);
+    Route::get('/periods/{id}', [PeriodController::class, 'show']);
     Route::get('/periods/{id}/closure-summary', [PeriodController::class, 'closureSummary']);
+    Route::get('/periods/{id}/archives', [PeriodController::class, 'archives']);
+    Route::get('/periods/{id}/archives/{archiveId}', [PeriodController::class, 'archive']);
+    Route::post('/periods/{id}/archives/{archiveId}/verify', [PeriodController::class, 'verifyArchive']);
+    Route::post('/periods/{id}/activate', [PeriodController::class, 'activate']);
+    Route::post('/periods/{id}/closing/start', [PeriodController::class, 'startClosing']);
+    Route::post('/periods/{id}/closing/cancel', [PeriodController::class, 'cancelClosing']);
     Route::post('/periods/{id}/complete', [PeriodController::class, 'complete']);
     Route::post('/periods/{id}/reopen', [PeriodController::class, 'reopen']);
+    Route::post('/periods/{id}/cancel', [PeriodController::class, 'cancel']);
     Route::put('/periods/{id}', [PeriodController::class, 'update']);
 
     Route::get('/projects/manageable', [ProjectContentController::class, 'manageable']);
     Route::get('/projects/export', [ProjectContentController::class, 'exportManageable']);
     Route::get('/project-families/{family}', [ProjectFamilyPanelController::class, 'show']);
     Route::get('/projects/{id}/modules', [ProjectContentController::class, 'modules']);
+    Route::get('/projects/{id}/application-settings', [ApplicationIntakeController::class, 'show']);
+    Route::patch('/projects/{id}/application-settings', [ApplicationIntakeController::class, 'update']);
     Route::get('/projects/{id}/special-modules', [ProjectSpecialModuleController::class, 'index']);
     Route::post('/projects/{id}/special-modules/internships', [ProjectSpecialModuleController::class, 'storeInternship']);
     Route::put('/projects/{id}/special-modules/internships/{item}', [ProjectSpecialModuleController::class, 'updateInternship']);
@@ -559,7 +588,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
     Route::get('/forum/posts', [ForumController::class, 'panelIndex']);
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
-    Route::post('/social-sharing/post', [\App\Http\Controllers\Api\SocialSharingController::class, 'post']);
+    Route::post('/social-sharing/post', [SocialSharingController::class, 'post']);
 
     Route::get('/alumni-opportunities', [AlumniOpportunityController::class, 'panelIndex']);
     Route::get('/alumni-opportunities/{id}', [AlumniOpportunityController::class, 'panelShow']);

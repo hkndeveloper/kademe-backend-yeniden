@@ -33,6 +33,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\VolunteerOpportunity;
+use App\Support\IstanbulDateTime;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -83,6 +84,13 @@ class PanelRegressionFixTest extends TestCase
     {
         $this->actingSuperAdmin();
         $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Basvuru',
+            'start_date' => now()->startOfYear()->toDateString(),
+            'end_date' => now()->endOfYear()->toDateString(),
+            'status' => 'active',
+        ]);
         $alumni = User::factory()->create([
             'name' => 'Pasif',
             'surname' => 'Mezun',
@@ -98,6 +106,7 @@ class PanelRegressionFixTest extends TestCase
         Application::query()->create([
             'user_id' => $alumni->id,
             'project_id' => $project->id,
+            'period_id' => $period->id,
             'application_form_id' => $form->id,
             'status' => 'accepted',
         ]);
@@ -246,7 +255,7 @@ class PanelRegressionFixTest extends TestCase
         ]);
 
         $this->postJson('/api/panel/permissions-matrix/roles', [
-            'name' => 'Sosyal Medya KoordinatÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼',
+            'name' => 'Sosyal Medya Koordinatörü',
             'permissions' => ['announcements.view'],
         ])
             ->assertCreated()
@@ -725,7 +734,7 @@ class PanelRegressionFixTest extends TestCase
             'name' => '2026 Mezuniyet',
             'start_date' => now()->subMonth()->toDateString(),
             'end_date' => now()->toDateString(),
-            'status' => 'completed',
+            'status' => 'closing',
         ]);
         $student = User::factory()->create([
             'role' => 'student',
@@ -777,7 +786,7 @@ class PanelRegressionFixTest extends TestCase
             'name' => '2026 Tamamlayamadi',
             'start_date' => now()->subMonth()->toDateString(),
             'end_date' => now()->toDateString(),
-            'status' => 'completed',
+            'status' => 'closing',
         ]);
         $student = User::factory()->create(['role' => 'student', 'surname' => 'FailedFlow']);
         $participant = Participant::query()->create([
@@ -914,8 +923,16 @@ class PanelRegressionFixTest extends TestCase
     {
         $admin = $this->actingSuperAdmin();
         $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Dashboard',
+            'start_date' => now()->startOfYear()->toDateString(),
+            'end_date' => now()->endOfYear()->toDateString(),
+            'status' => 'active',
+        ]);
         $program = Program::query()->create([
             'project_id' => $project->id,
+            'period_id' => $period->id,
             'title' => 'Assigned Dashboard Task',
             'description' => 'Dashboard assignment summary',
             'location' => 'KADEME',
@@ -1359,8 +1376,8 @@ class PanelRegressionFixTest extends TestCase
             'title' => 'Mevcut Program',
             'location' => 'Salon A',
             'radius_meters' => 100,
-            'start_at' => '2026-10-10 10:00:00',
-            'end_at' => '2026-10-10 12:00:00',
+            'start_at' => IstanbulDateTime::toUtc('2026-10-10 10:00:00'),
+            'end_at' => IstanbulDateTime::toUtc('2026-10-10 12:00:00'),
             'credit_deduction' => 10,
             'status' => 'scheduled',
         ]);
@@ -1527,8 +1544,8 @@ class PanelRegressionFixTest extends TestCase
             'title' => 'Sabit Program',
             'location' => 'Salon A',
             'radius_meters' => 100,
-            'start_at' => '2026-10-10 10:00:00',
-            'end_at' => '2026-10-10 12:00:00',
+            'start_at' => IstanbulDateTime::toUtc('2026-10-10 10:00:00'),
+            'end_at' => IstanbulDateTime::toUtc('2026-10-10 12:00:00'),
             'credit_deduction' => 10,
             'status' => 'scheduled',
         ]);
@@ -1538,8 +1555,8 @@ class PanelRegressionFixTest extends TestCase
             'title' => 'Guncellenecek Program',
             'location' => 'Salon B',
             'radius_meters' => 100,
-            'start_at' => '2026-10-10 14:00:00',
-            'end_at' => '2026-10-10 15:00:00',
+            'start_at' => IstanbulDateTime::toUtc('2026-10-10 14:00:00'),
+            'end_at' => IstanbulDateTime::toUtc('2026-10-10 15:00:00'),
             'credit_deduction' => 10,
             'status' => 'scheduled',
         ]);
@@ -2353,7 +2370,7 @@ class PanelRegressionFixTest extends TestCase
             'name' => '2026 Bahar',
             'start_date' => now()->addMonths(2)->toDateString(),
             'end_date' => now()->addMonths(3)->toDateString(),
-            'status' => 'active',
+            'status' => 'planned',
         ]);
 
         ApplicationForm::query()->create([
@@ -2396,7 +2413,7 @@ class PanelRegressionFixTest extends TestCase
             'name' => '2026 Bahar',
             'start_date' => now()->addMonths(2)->toDateString(),
             'end_date' => now()->addMonths(3)->toDateString(),
-            'status' => 'active',
+            'status' => 'planned',
         ]);
         $program = Program::query()->create([
             'project_id' => $project->id,

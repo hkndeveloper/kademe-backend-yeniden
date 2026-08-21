@@ -75,6 +75,34 @@ class PanelModuleCatalogTest extends TestCase
         );
     }
 
+    public function test_operational_view_permission_exposes_dashboard_module_without_dashboard_specific_permission(): void
+    {
+        Permission::findOrCreate('programs.view', 'web');
+        $role = Role::findOrCreate('program_dashboard_viewer', 'web');
+        $role->givePermissionTo('programs.view');
+
+        RolePermissionScope::query()->create([
+            'role_name' => 'program_dashboard_viewer',
+            'permission_name' => 'programs.view',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'visitor',
+            'surname' => 'Dashboard',
+            'email' => 'program-dashboard@test.local',
+        ]);
+        $user->assignRole('program_dashboard_viewer');
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/panel/modules')->assertOk();
+        $dashboard = collect($response->json('modules'))->firstWhere('id', 'dashboard');
+
+        $this->assertNotNull($dashboard);
+        $this->assertContains('programs.view', $dashboard['view_permissions']);
+    }
+
     public function test_user_deny_override_removes_role_module_from_manifest(): void
     {
         Permission::findOrCreate('periods.view', 'web');

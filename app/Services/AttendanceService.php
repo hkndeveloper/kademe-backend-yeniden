@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PeriodWriteAction;
 use App\Models\Attendance;
 use App\Models\Participant;
 use App\Models\Program;
@@ -10,7 +11,8 @@ use App\Models\User;
 class AttendanceService
 {
     public function __construct(
-        protected QrCodeService $qrCodeService
+        protected QrCodeService $qrCodeService,
+        protected PeriodWritePolicy $periodWritePolicy,
     ) {
     }
 
@@ -23,6 +25,11 @@ class AttendanceService
 
         if (! $program) {
             throw new \Exception('Gecersiz veya suresi dolmus QR kod.');
+        }
+
+        $program->loadMissing('period');
+        if ($program->period) {
+            $this->periodWritePolicy->assertAllowed($user, $program->period, PeriodWriteAction::RESOLVE_OPERATION);
         }
 
         if ($program->qr_expires_at && now()->isAfter($program->qr_expires_at)) {

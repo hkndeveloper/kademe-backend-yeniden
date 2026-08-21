@@ -330,7 +330,7 @@ endpoints:
         name: status
         description: ''
         required: false
-        example: active
+        example: scheduled
         type: string
         enumValues:
           - scheduled
@@ -344,7 +344,7 @@ endpoints:
         name: from
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:49'
+        example: '2026-08-21T04:15:36'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -355,7 +355,7 @@ endpoints:
         name: to
         description: 'Must be a valid date. Must be a date after or equal to <code>from</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -375,9 +375,9 @@ endpoints:
     cleanBodyParameters:
       search: vmqeopfuudtdsufvyvddq
       project_id: 17
-      status: active
-      from: '2026-07-02T10:54:49'
-      to: '2107-07-31'
+      status: scheduled
+      from: '2026-08-21T04:15:36'
+      to: '2107-09-19'
       per_page: 13
     fileParameters: []
     responses:

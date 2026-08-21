@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\CreditLog;
 use App\Models\Participant;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 class AdminCreditController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
@@ -46,6 +48,7 @@ class AdminCreditController extends Controller
             403,
             'Bu katilimci icin yetkiniz bulunmuyor.'
         );
+        $this->assertPeriodResolvable($request, $participant->period_id);
 
         DB::beginTransaction();
         try {

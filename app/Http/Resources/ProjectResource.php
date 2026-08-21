@@ -2,12 +2,41 @@
 
 namespace App\Http\Resources;
 
+use App\Services\PeriodLifecycleService;
 use App\Support\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProjectResource extends JsonResource
 {
+    private function applicationSettings(): array
+    {
+        $periodContextLoaded = $this->relationLoaded('periods') || $this->relationLoaded('currentPeriod');
+        $activePeriod = $periodContextLoaded
+            ? $this->resource->currentPeriodOrLegacy()
+            : null;
+        $window = $activePeriod && $this->relationLoaded('applicationWindows')
+            ? $this->applicationWindows->firstWhere('period_id', $activePeriod->id)
+            : null;
+        $startsAt = $window?->starts_at ?? $this->application_start_at;
+        $endsAt = $window?->ends_at ?? $this->application_end_at;
+        $enabled = (bool) ($window?->is_open ?? $this->application_open);
+        $isOpen = $this->status === 'active'
+            && (! $periodContextLoaded || $activePeriod?->status === 'active')
+            && $enabled
+            && (! $startsAt || $startsAt->lte(now()))
+            && (! $endsAt || $endsAt->gte(now()));
+
+        return [
+            'is_open' => $isOpen,
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+            'next_application_date' => $window?->next_application_date ?? $this->next_application_date,
+            'has_interview' => (bool) ($window?->has_interview ?? $this->has_interview),
+            'quota' => $window?->quota ?? $this->quota,
+        ];
+    }
+
     private function mediaUrl(?string $path): ?string
     {
         if (! $path) {
@@ -64,7 +93,7 @@ class ProjectResource extends JsonResource
 
         return [
             'id' => $participant->id,
-            'name' => trim(($user?->name ?? '') . ' ' . ($user?->surname ?? '')),
+            'name' => trim(($user?->name ?? '').' '.($user?->surname ?? '')),
             'university' => $user?->university,
             'department' => $user?->department,
             'class_year' => $user?->class_year,
@@ -106,7 +135,9 @@ class ProjectResource extends JsonResource
     private function managementParticipantSummary(): array
     {
         $participants = $this->relationLoaded('participants') ? $this->participants : collect();
-        $activePeriod = $this->relationLoaded('periods') ? $this->periods->where('status', 'active')->first() : null;
+        $activePeriod = ($this->relationLoaded('periods') || $this->relationLoaded('currentPeriod'))
+            ? $this->resource->currentPeriodOrLegacy()
+            : null;
 
         $activeAll = $participants
             ->where('status', 'active')
@@ -125,8 +156,13 @@ class ProjectResource extends JsonResource
                 ->count(),
         ];
     }
+
     public function toArray(Request $request): array
     {
+        $applicationSettings = $this->applicationSettings();
+        $periodContextLoaded = $this->relationLoaded('periods') || $this->relationLoaded('currentPeriod');
+        $currentPeriod = $periodContextLoaded ? $this->resource->currentPeriodOrLegacy() : null;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -135,7 +171,9 @@ class ProjectResource extends JsonResource
             'short_description' => $this->short_description,
             'cover_image' => $this->mediaUrl($this->cover_image_path),
             'status' => $this->status,
-            'is_application_open' => (bool) $this->application_open,
+            'is_application_open' => $applicationSettings['is_open'],
+            'application_start_at' => optional($applicationSettings['starts_at'])?->toISOString(),
+            'application_end_at' => optional($applicationSettings['ends_at'])?->toISOString(),
             'description' => $this->when(! is_null($this->description), $this->description),
             'gallery' => $this->when(
                 ! is_null($this->gallery_paths),
@@ -150,14 +188,19 @@ class ProjectResource extends JsonResource
                 fn () => $this->galleryItems()
             ),
             'next_application_date' => $this->when(
-                ! is_null($this->next_application_date),
-                fn () => optional($this->next_application_date)->format('Y-m-d')
+                ! is_null($applicationSettings['next_application_date']),
+                fn () => optional($applicationSettings['next_application_date'])->format('Y-m-d')
             ),
-            'has_interview' => (bool) $this->has_interview,
-            'quota' => $this->quota,
-            'active_period' => $this->whenLoaded('periods', function () {
-                return $this->periods->where('status', 'active')->first();
-            }),
+            'has_interview' => $applicationSettings['has_interview'],
+            'quota' => $applicationSettings['quota'],
+            'active_period' => $this->when(
+                $periodContextLoaded,
+                fn () => $currentPeriod,
+            ),
+            'current_period' => $this->when(
+                $periodContextLoaded,
+                fn () => $currentPeriod,
+            ),
             'periods' => $this->whenLoaded('periods', function () {
                 return $this->periods
                     ->sortByDesc(fn ($period) => optional($period->start_date)->timestamp ?? 0)
@@ -167,6 +210,11 @@ class ProjectResource extends JsonResource
                         'status' => $period->status,
                         'start_date' => optional($period->start_date)->format('Y-m-d'),
                         'end_date' => optional($period->end_date)->format('Y-m-d'),
+                        'lifecycle' => [
+                            'is_current' => (int) $this->current_period_id === (int) $period->id,
+                            'is_archive_mode' => PeriodLifecycleService::isArchiveStatus($period->status),
+                            'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($period->status),
+                        ],
                     ])
                     ->values()
                     ->all();
@@ -198,8 +246,7 @@ class ProjectResource extends JsonResource
             }),
             'alumni' => $this->whenLoaded('participants', function () {
                 return $this->participants
-                    ->filter(fn ($participant) =>
-                        (bool) ($participant->user?->public_alumni_visible ?? false)
+                    ->filter(fn ($participant) => (bool) ($participant->user?->public_alumni_visible ?? false)
                         && (! is_null($participant->graduated_at) || $participant->graduation_status === 'graduated')
                     )
                     ->map(fn ($participant) => $this->publicAlumniPayload($participant))
@@ -208,8 +255,7 @@ class ProjectResource extends JsonResource
             }),
             'alumni_groups' => $this->whenLoaded('participants', function () {
                 return $this->participants
-                    ->filter(fn ($participant) =>
-                        (bool) ($participant->user?->public_alumni_visible ?? false)
+                    ->filter(fn ($participant) => (bool) ($participant->user?->public_alumni_visible ?? false)
                         && (! is_null($participant->graduated_at) || $participant->graduation_status === 'graduated')
                     )
                     ->groupBy(fn ($participant) => optional($participant->graduated_at)->format('Y') ?? 'Mezun')

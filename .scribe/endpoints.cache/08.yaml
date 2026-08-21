@@ -526,7 +526,9 @@ endpoints:
       gallery_paths:
         custom: []
         name: gallery_paths
-        description: 'Optional gallery items with `path`, optional `caption`, `year`, `period_id`.'
+        description: |-
+          Optional gallery items with `path`, optional `caption`, `year`, `period_id`.
+          Legacy application fields are accepted only for users with `applications.intake.manage` and mirrored to the active period window. New clients should use the dedicated application settings endpoint.
         required: false
         example:
           - []
@@ -538,8 +540,8 @@ endpoints:
       application_open:
         custom: []
         name: application_open
-        description: 'Whether applications are open.'
-        required: true
+        description: 'Optional legacy application state.'
+        required: false
         example: true
         type: boolean
         enumValues: []
@@ -981,7 +983,7 @@ endpoints:
         name: 'auto_reject_rules[].operator'
         description: 'This field is required when <code>auto_reject_rules</code> is present.'
         required: false
-        example: lte
+        example: lt
         type: string
         enumValues:
           - equals
@@ -1034,7 +1036,7 @@ endpoints:
       auto_reject_rules:
         -
           field_id: byickznkygloigmkwxphl
-          operator: lte
+          operator: lt
           value: vazjrcnfbaqywuxhgjjmz
           reason: uxjubqouzswiwxtrkimfc
     fileParameters: []
@@ -1448,7 +1450,9 @@ endpoints:
       gallery_paths:
         custom: []
         name: gallery_paths
-        description: 'Optional gallery items with `path`, optional `caption`, `year`, `period_id`.'
+        description: |-
+          Optional gallery items with `path`, optional `caption`, `year`, `period_id`.
+          Legacy application fields are accepted only for users with `applications.intake.manage` and mirrored to the active period window. New clients should use the dedicated application settings endpoint.
         required: false
         example:
           - []
@@ -1460,8 +1464,8 @@ endpoints:
       application_open:
         custom: []
         name: application_open
-        description: 'Whether applications are open.'
-        required: true
+        description: 'Optional legacy application state.'
+        required: false
         example: true
         type: boolean
         enumValues: []
@@ -1903,7 +1907,7 @@ endpoints:
         name: 'auto_reject_rules[].operator'
         description: 'This field is required when <code>auto_reject_rules</code> is present.'
         required: false
-        example: lte
+        example: contains
         type: string
         enumValues:
           - equals
@@ -1956,7 +1960,7 @@ endpoints:
       auto_reject_rules:
         -
           field_id: byickznkygloigmkwxphl
-          operator: lte
+          operator: contains
           value: vazjrcnfbaqywuxhgjjmz
           reason: uxjubqouzswiwxtrkimfc
     fileParameters: []

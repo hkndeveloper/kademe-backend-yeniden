@@ -15,6 +15,7 @@ use App\Models\RewardAward;
 use App\Models\RewardTier;
 use App\Models\User;
 use App\Services\ProjectFamilyAccessResolver;
+use App\Services\PeriodLifecycleService;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -113,6 +114,10 @@ class ProjectFamilyPanelController extends Controller
                 'status' => $period->status,
                 'start_date' => $period->start_date,
                 'end_date' => $period->end_date,
+                'lifecycle' => [
+                    'is_archive_mode' => PeriodLifecycleService::isArchiveStatus($period->status),
+                    'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($period->status),
+                ],
             ])
             ->values()
             ->all();

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
+use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectResource;
 use App\Models\Application;
 use App\Models\ApplicationForm;
+use App\Models\ApplicationWindow;
 use App\Models\Assignment;
 use App\Models\Certificate;
 use App\Models\DigitalBohca;
@@ -14,9 +16,9 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
+use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\ProjectSpecialModuleCatalog;
-use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -27,11 +29,11 @@ use Illuminate\Validation\Rule;
 class ProjectContentController extends Controller
 {
     use AuthorizesGranularPermissions;
+    use ResolvesProjectPeriodContext;
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     /**
      * List projects manageable by the current panel user.
@@ -39,7 +41,9 @@ class ProjectContentController extends Controller
      * Requires the selected `permission` action, defaulting to `projects.view`. Global scope returns all projects; scoped users only receive projects allowed by their action+scope permission. Exposed under `/api/admin/projects/manageable` and `/api/panel/projects/manageable`.
      *
      * @authenticated
+     *
      * @queryParam permission string Optional permission to evaluate for project visibility. Must be in the permission catalog. Defaults to `projects.view`. Example: programs.view
+     *
      * @response 200 {"projects":[{"id":1,"name":"Diplomasi360","slug":"diplomasi360","periods":[]}]}
      * @response 403 {"message":"Projelere erisim yetkiniz yok."}
      */
@@ -94,7 +98,9 @@ class ProjectContentController extends Controller
      * Requires permission: `projects.export`. Global scope exports all projects; scoped users export only projects allowed by their `projects.export` action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
      *
      * @authenticated
+     *
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     *
      * @response 200 binary Projects export file.
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      */
@@ -121,7 +127,7 @@ class ProjectContentController extends Controller
             $project->slug,
             $project->type,
             $project->status,
-            optional($project->periods->firstWhere('status', 'active'))->name ?? '-',
+            optional($project->currentPeriodOrLegacy())->name ?? '-',
             $project->participants->where('status', 'active')->count(),
             $project->participants->where('graduation_status', 'graduated')->count(),
             $project->application_open ? 'evet' : 'hayir',
@@ -129,7 +135,7 @@ class ProjectContentController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'projeler_' . now()->format('Ymd_His'),
+            'projeler_'.now()->format('Ymd_His'),
             'Projeler',
             $headings,
             $rows,
@@ -142,7 +148,9 @@ class ProjectContentController extends Controller
      * Requires project access for either `projects.view` or `projects.content.update`. Returns public project resource data plus editable panel fields and the latest active application form.
      *
      * @authenticated
+     *
      * @urlParam id integer required Project ID. Example: 1
+     *
      * @response 200 {"project":{"id":1,"name":"Diplomasi360"},"editable":{"name":"Diplomasi360","application_open":true,"has_interview":false},"application_form":{"id":5,"fields":[]}}
      * @response 403 {"message":"Bu proje icerigini goruntuleme yetkiniz yok."}
      */
@@ -183,8 +191,11 @@ class ProjectContentController extends Controller
      * Requires at least one project-scoped permission for the selected project. The response exposes an `access` matrix for supported module actions, applicable project-special module keys, period context, summaries and previews. Project-specific module access is filtered by project type/module support.
      *
      * @authenticated
+     *
      * @urlParam id integer required Project ID. Example: 1
+     *
      * @queryParam period_id integer Optional period filter. Must belong to the project. Defaults to active period when omitted. Example: 3
+     *
      * @response 200 {"project":{"id":1,"name":"Diplomasi360","selected_period":{"id":3,"status":"active"}},"access":{"projects.participants.view":true},"applicable_modules":["mentors"],"summary":{},"previews":{}}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Secilen donem bu projeye ait degil."}
@@ -201,7 +212,7 @@ class ProjectContentController extends Controller
             abort(422, 'Secilen donem bu projeye ait degil.');
         }
 
-        $activePeriod = $project->periods->firstWhere('status', 'active');
+        $activePeriod = $project->currentPeriodOrLegacy();
         $selectedPeriodId = array_key_exists('period_id', $validated)
             ? ($validated['period_id'] ?: null)
             : ($activePeriod?->id);
@@ -210,6 +221,8 @@ class ProjectContentController extends Controller
             'projects.view',
             'projects.content.update',
             'projects.application_form.update',
+            'applications.intake.view',
+            'applications.intake.manage',
             'projects.participants.view',
             'projects.alumni.view',
             'projects.student_cv.view',
@@ -253,7 +266,7 @@ class ProjectContentController extends Controller
                 'type' => $project->type,
                 'quota' => $project->quota,
                 'application_open' => (bool) $project->application_open,
-                'active_period' => optional($project->periods->firstWhere('status', 'active'))?->only(['id', 'name', 'status']),
+                'active_period' => optional($project->currentPeriodOrLegacy())?->only(['id', 'name', 'status']),
                 'selected_period' => optional($project->periods->firstWhere('id', $selectedPeriodId))?->only(['id', 'name', 'status', 'start_date', 'end_date']),
                 'periods' => $project->periods
                     ->map(fn (Period $period) => $period->only(['id', 'name', 'status', 'start_date', 'end_date']))
@@ -276,8 +289,7 @@ class ProjectContentController extends Controller
             $payload['summary']['participants'] = [
                 'total' => $participants->count(),
                 'active' => $participants->where('status', 'active')->count(),
-                'graduates' => $participants->filter(fn (Participant $participant) =>
-                    $participant->graduation_status === 'graduated' || $participant->graduated_at !== null
+                'graduates' => $participants->filter(fn (Participant $participant) => $participant->graduation_status === 'graduated' || $participant->graduated_at !== null
                 )->count(),
                 'average_credit' => $participants->count() > 0 ? round($participants->avg('credit') ?? 0, 1) : 0,
             ];
@@ -292,8 +304,7 @@ class ProjectContentController extends Controller
 
             if ($access['projects.alumni.view']) {
                 $payload['previews']['alumni'] = $participants
-                    ->filter(fn (Participant $participant) =>
-                        $participant->graduation_status === 'graduated' || $participant->graduated_at !== null
+                    ->filter(fn (Participant $participant) => $participant->graduation_status === 'graduated' || $participant->graduated_at !== null
                     )
                     ->take(5)
                     ->map(fn (Participant $participant) => $this->participantPreview($participant, false))
@@ -492,7 +503,9 @@ class ProjectContentController extends Controller
      * Requires permission: `projects.content.update` for the project. Gallery period references must belong to the same project. This endpoint updates public-facing content, application flags, interview flag and quota, but does not create periods or project-special module records.
      *
      * @authenticated
+     *
      * @urlParam id integer required Project ID. Example: 1
+     *
      * @bodyParam name string required Project name. Example: Diplomasi360
      * @bodyParam slug string required Unique project slug. Example: diplomasi360
      * @bodyParam type string required Project type. Example: diplomacy
@@ -500,10 +513,12 @@ class ProjectContentController extends Controller
      * @bodyParam description string Optional long description.
      * @bodyParam cover_image_path string Optional cover image path or URL. Example: projects/diplomasi/cover.jpg
      * @bodyParam gallery_paths object[] Optional gallery items with `path`, optional `caption`, `year`, `period_id`.
-     * @bodyParam application_open boolean required Whether applications are open. Example: true
+     * Legacy application fields are accepted only for users with `applications.intake.manage` and mirrored to the active period window. New clients should use the dedicated application settings endpoint.
+     * @bodyParam application_open boolean Optional legacy application state. Example: true
      * @bodyParam next_application_date date Optional next application date. Example: 2026-09-01
      * @bodyParam has_interview boolean required Whether applications use interview workflow. Example: false
      * @bodyParam quota integer Optional project quota. Example: 100
+     *
      * @response 200 {"message":"Proje icerigi guncellendi.","project":{"id":1,"name":"Diplomasi360"},"editable":{"application_open":true}}
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Galeri donemi bu projeye ait olmalidir."}
@@ -532,9 +547,9 @@ class ProjectContentController extends Controller
             'gallery_paths.*.caption' => 'nullable|string|max:255',
             'gallery_paths.*.year' => 'nullable|string|max:32',
             'gallery_paths.*.period_id' => 'nullable|integer|exists:periods,id',
-            'application_open' => 'required|boolean',
+            'application_open' => 'sometimes|boolean',
             'next_application_date' => 'nullable|date',
-            'has_interview' => 'required|boolean',
+            'has_interview' => 'sometimes|boolean',
             'quota' => 'nullable|integer|min:0',
         ]);
         $galleryItems = $this->normalizeGalleryItems($validated['gallery_paths'] ?? []);
@@ -548,6 +563,24 @@ class ProjectContentController extends Controller
             abort_unless($validPeriodCount === count($galleryPeriodIds), 422, 'Galeri donemi bu projeye ait olmalidir.');
         }
 
+        $applicationKeys = ['application_open', 'next_application_date', 'has_interview', 'quota'];
+        $hasLegacyApplicationSettings = collect($applicationKeys)->contains(fn (string $key) => $request->exists($key));
+        $activePeriod = null;
+        $legacyIsOpen = null;
+        $legacyNextApplicationDate = null;
+        if ($hasLegacyApplicationSettings) {
+            $this->abortUnlessProjectAllowed($request, 'applications.intake.manage', $project->id);
+            $activePeriod = $project->currentPeriodOrLegacy();
+            abort_unless($activePeriod, 422, 'Basvuru ayarlari icin aktif bir donem bulunmalidir.');
+            $this->assertPeriodWritable($request, $activePeriod->id);
+            $legacyIsOpen = (bool) ($validated['application_open'] ?? $project->application_open);
+            $legacyNextApplicationDate = array_key_exists('next_application_date', $validated)
+                ? $validated['next_application_date']
+                : $project->next_application_date;
+            abort_if($legacyIsOpen && $project->status !== 'active', 422, 'Pasif veya arsivlenmis bir projede basvuru acilamaz.');
+            abort_if(! $legacyIsOpen && ! $legacyNextApplicationDate, 422, 'Aktif donemde basvurular kapaliysa sonraki basvuru tarihi zorunludur.');
+        }
+
         $project->update([
             'name' => $validated['name'],
             'slug' => $validated['slug'],
@@ -556,11 +589,60 @@ class ProjectContentController extends Controller
             'description' => $validated['description'] ?? null,
             'cover_image_path' => $validated['cover_image_path'] ?? null,
             'gallery_paths' => $galleryItems,
-            'application_open' => $validated['application_open'],
-            'next_application_date' => $validated['next_application_date'] ?? null,
-            'has_interview' => $validated['has_interview'],
-            'quota' => $validated['quota'] ?? null,
         ]);
+
+        if ($hasLegacyApplicationSettings && $activePeriod) {
+            $window = ApplicationWindow::query()->firstOrNew([
+                'project_id' => $project->id,
+                'period_id' => $activePeriod->id,
+            ]);
+            $wasOpen = (bool) ($window->is_open ?? $project->application_open);
+            $isOpen = (bool) ($legacyIsOpen ?? $wasOpen);
+            $now = now();
+            $window->fill([
+                'is_open' => $isOpen,
+                'starts_at' => $project->application_start_at,
+                'ends_at' => $project->application_end_at,
+                'next_application_date' => $legacyNextApplicationDate,
+                'has_interview' => (bool) ($validated['has_interview'] ?? $project->has_interview),
+                'quota' => array_key_exists('quota', $validated) ? $validated['quota'] : $project->quota,
+                'change_note' => 'Eski proje icerik endpointinden guncellendi.',
+                'updated_by' => $request->user()->id,
+            ]);
+            if (! $window->exists || $wasOpen !== $isOpen) {
+                $window->status_changed_at = $now;
+                if ($isOpen) {
+                    $window->opened_by = $request->user()->id;
+                    $window->opened_at = $now;
+                } else {
+                    $window->closed_by = $request->user()->id;
+                    $window->closed_at = $now;
+                }
+            }
+            $window->save();
+
+            if ($isOpen) {
+                ApplicationWindow::query()
+                    ->where('project_id', $project->id)
+                    ->whereKeyNot($window->id)
+                    ->where('is_open', true)
+                    ->update([
+                        'is_open' => false,
+                        'closed_by' => $request->user()->id,
+                        'closed_at' => $now,
+                        'updated_by' => $request->user()->id,
+                        'status_changed_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+            }
+
+            $project->update([
+                'application_open' => $isOpen,
+                'next_application_date' => $legacyNextApplicationDate,
+                'has_interview' => (bool) ($validated['has_interview'] ?? $project->has_interview),
+                'quota' => array_key_exists('quota', $validated) ? $validated['quota'] : $project->quota,
+            ]);
+        }
 
         $project->load(['periods', 'participants.user']);
 
@@ -589,9 +671,12 @@ class ProjectContentController extends Controller
      * Requires permission: `projects.view` for the project. Optional period/program filters must belong to the same project; program-specific forms are resolved separately from general project/period forms.
      *
      * @authenticated
+     *
      * @urlParam id integer required Project ID. Example: 1
+     *
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam program_id integer Optional program filter. Must belong to the project and selected period when both are provided. Example: 8
+     *
      * @response 200 {"project":{"id":1,"name":"Diplomasi360"},"periods":[],"programs":[],"application_form":{"id":5,"fields":[]}}
      * @response 403 {"message":"Bu proje icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Secilen program bu doneme ait degil."}
@@ -660,7 +745,9 @@ class ProjectContentController extends Controller
      * Requires permission: `projects.application_form.update` for the project. Period and program must belong to the project; when a program is selected, its period is used. Previous active form for the same project/period/program context is deactivated before the new form is saved.
      *
      * @authenticated
+     *
      * @urlParam id integer required Project ID. Example: 1
+     *
      * @bodyParam period_id integer Optional period ID. Example: 3
      * @bodyParam program_id integer Optional program ID. Example: 8
      * @bodyParam fields object[] required Form fields. Each field needs `id`, `type`, `label`, `required` and optional `options` for choice fields.
@@ -673,6 +760,7 @@ class ProjectContentController extends Controller
      * @bodyParam consent_text string Optional consent text.
      * @bodyParam is_active boolean Optional active flag. Defaults to true. Example: true
      * @bodyParam auto_reject_rules object[] Optional automatic rejection rules.
+     *
      * @response 200 {"message":"Basvuru formu kaydedildi.","application_form":{"id":5,"fields":[]}}
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Secilen donem bu projeye ait degil."}
@@ -702,9 +790,14 @@ class ProjectContentController extends Controller
             'auto_reject_rules.*.reason' => 'nullable|string|max:500',
         ]);
 
-        if (!empty($validated['period_id']) && !$project->periods->contains('id', $validated['period_id'])) {
+        if (! empty($validated['period_id']) && ! $project->periods->contains('id', $validated['period_id'])) {
             abort(422, 'Secilen donem bu projeye ait degil.');
         }
+
+        $this->assertPeriodConfigurable(
+            $request,
+            isset($validated['period_id']) ? (int) $validated['period_id'] : null,
+        );
 
         $program = null;
 

@@ -29,6 +29,10 @@ class RotateQrTokenJob implements ShouldQueue
     {
         // Statüsü 'active' olan tüm programları bul
         $activePrograms = Program::where('status', 'active')
+            ->where(function ($query) {
+                $query->whereNull('period_id')
+                    ->orWhereHas('period', fn ($periodQuery) => $periodQuery->whereIn('status', ['active', 'closing']));
+            })
             ->where('start_at', '<=', now())
             ->where('end_at', '>=', now())
             ->get();

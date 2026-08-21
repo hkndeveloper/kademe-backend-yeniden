@@ -228,7 +228,7 @@ class AssignmentController extends Controller
 
         $assignment = Assignment::findOrFail($id);
         $user = $request->user();
-        $this->assertPeriodWritable($request, $assignment->period_id);
+        $this->assertPeriodResolvable($request, $assignment->period_id);
 
         $canSubmit = Participant::query()
             ->where('user_id', $user->id)
@@ -645,7 +645,7 @@ class AssignmentController extends Controller
             ->findOrFail($id);
 
         $this->abortUnlessProjectAllowed($request, 'assignments.submissions.review', (int) $submission->assignment->project_id);
-        $this->assertPeriodWritable($request, $submission->assignment->period_id);
+        $this->assertPeriodResolvable($request, $submission->assignment->period_id);
 
         $validated = $request->validate([
             'status' => 'required|in:reviewed,approved,rejected',

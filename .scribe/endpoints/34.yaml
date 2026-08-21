@@ -1,19 +1,19 @@
-name: Staff
+name: Financials
 description: ''
 endpoints:
   -
     custom: []
     httpMethods:
       - GET
-    uri: api/admin/staff/export
+    uri: api/admin/financials/export
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Export panel staff.'
-      description: 'Requires permission: `staff.export`. Applies employee and coordinator unit scope, supports project/role/search filters and exports through the shared admin export responder.'
+      title: 'Export financial transactions.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/export` and `/panel/financials/export`. Requires `financial.export`; users with global scope export all matching transactions, while scoped users are limited to project ids resolved by the action+scope matrix. Project and period filters are validated through project-period context. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.'
       authenticated: true
       deprecated: false
     headers:
@@ -26,7 +26,7 @@ endpoints:
       project_id:
         custom: []
         name: project_id
-        description: 'Optional project assignment filter.'
+        description: 'Optional project filter; scoped by `financial.export`.'
         required: false
         example: 1
         type: integer
@@ -34,23 +34,78 @@ endpoints:
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      role:
+      period_id:
         custom: []
-        name: role
-        description: 'Optional role filter.'
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
         required: false
-        example: staff
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: paid
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      search:
+      category:
         custom: []
-        name: search
-        description: 'Optional search filter.'
+        name: category
+        description: 'Optional category filter.'
         required: false
-        example: ayse
+        example: travel
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Optional transaction type: expense or payment.'
+        required: false
+        example: expense
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      payee:
+        custom: []
+        name: payee
+        description: 'Optional payee, spending unit, invoice no, or accounting code search.'
+        required: false
+        example: ABC
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional submitted date lower bound.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional submitted date upper bound.'
+        required: false
+        example: '2026-01-31'
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -59,7 +114,7 @@ endpoints:
       format:
         custom: []
         name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        description: 'Optional export format.'
         required: false
         example: xlsx
         type: string
@@ -69,276 +124,62 @@ endpoints:
         deprecated: false
     cleanQueryParameters:
       project_id: 1
-      role: staff
-      search: ayse
+      period_id: 3
+      status: paid
+      category: travel
+      type: expense
+      payee: ABC
+      date_from: '2026-01-01'
+      date_to: '2026-01-31'
       format: xlsx
-    bodyParameters: []
-    cleanBodyParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Must not be greater than 20 characters.'
+        required: false
+        example: vmqeopfuudtdsufvy
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      format: vmqeopfuudtdsufvy
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '{"download":"Staff export file stream"}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/admin/staff/active
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List active and on-leave staff.'
-      description: 'Requires permission: `staff.view`. Active staff are approximated by Sanctum tokens used in the last 8 hours; on-leave staff are approved leave requests covering today. Non-global viewers are limited to their unit.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"active_staff":[{"id":8,"name":"Ayse","role":"coordinator"}],"on_leave":[{"id":9,"name":"Mehmet","role":"staff"}]}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/admin/staff/create-options
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get staff creation options.'
-      description: 'Requires permission: `staff.update` with global `all` scope. Returns assignable non-participant, non-super-admin Spatie roles for the panel staff creation form.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"roles":[{"name":"coordinator","label":"Koordinator"},{"name":"staff","label":"Personel"}]}'
+        content: '{"download":"Export file stream"}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"Calisan olusturmak icin tum sistem kapsami gerekir."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - POST
-    uri: api/admin/staff
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Create a staff account.'
-      description: 'Requires permission: `staff.update` with global `all` scope. Creates an active coordinator/staff/custom authority user, syncs the selected role, creates the staff profile, assigns coordinated projects for coordinators or assigned projects for other staff, and sends the password setup email.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      name:
-        custom: []
-        name: name
-        description: 'Staff first name.'
-        required: true
-        example: Ayse
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      surname:
-        custom: []
-        name: surname
-        description: 'Staff surname.'
-        required: true
-        example: Yilmaz
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      email:
-        custom: []
-        name: email
-        description: 'Unique email address.'
-        required: true
-        example: ayse@example.com
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      phone:
-        custom: []
-        name: phone
-        description: 'Optional phone number.'
-        required: false
-        example: '05550000000'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      tc_no:
-        custom: []
-        name: tc_no
-        description: 'Optional identity number, exactly 11 characters.'
-        required: false
-        example: '12345678901'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      role:
-        custom: []
-        name: role
-        description: 'Existing role name except super_admin/student/alumni/visitor.'
-        required: true
-        example: coordinator
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      unit:
-        custom: []
-        name: unit
-        description: 'Optional unit name. Defaults to Genel.'
-        required: false
-        example: Program
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      title:
-        custom: []
-        name: title
-        description: 'Optional staff title. Allowed values: researcher, specialist, coordinator, manager, other.'
-        required: false
-        example: coordinator
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      contract_type:
-        custom: []
-        name: contract_type
-        description: 'Optional contract type.'
-        required: false
-        example: full_time
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      project_ids:
-        custom: []
-        name: project_ids
-        description: 'Optional project IDs to assign. Coordinators receive coordinated projects; other staff receive assigned projects.'
-        required: false
-        example:
-          - 1
-          - 2
-        type: 'string[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      name: Ayse
-      surname: Yilmaz
-      email: ayse@example.com
-      phone: '05550000000'
-      tc_no: '12345678901'
-      role: coordinator
-      unit: Program
-      title: coordinator
-      contract_type: full_time
-      project_ids:
-        - 1
-        - 2
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 201
-        content: '{"message":"Calisan olusturuldu. Sifre belirleme baglantisi e-posta ile gonderildi.","staff":{"id":8,"role":"coordinator","projects":[{"id":1,"name":"KADEME","assignment_type":"coordinator"}]},"reset_email_status":"passwords.sent"}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Bu rol personel ekranindan olusturulamaz."}'
+        content: '{"message":"This action is unauthorized."}'
         headers: []
         description: ''
     responseFields: []
@@ -353,15 +194,18 @@ endpoints:
     custom: []
     httpMethods:
       - GET
-    uri: api/admin/staff
+    uri: api/admin/financials
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'List panel staff.'
-      description: 'Requires permission: `staff.view`. Returns authority users and users with staff/project assignments. Global scope can see every staff record; non-global staff view scope is limited to the caller staff unit through `applyCoordinatorUnitScope`.'
+      title: 'List financial transactions.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/financials` and `/panel/financials`. Requires `financial.view`; users with global scope see all matching transactions, while scoped users are limited to the project ids resolved by the action+scope matrix. `project_id` and `period_id` are validated through project-period context, so archive/period restrictions remain aligned with the panel.
+
+        Returns paginated transactions plus total amount, category totals, project totals, and status totals for dashboard cards/charts.
       authenticated: true
       deprecated: false
     headers:
@@ -374,7 +218,7 @@ endpoints:
       project_id:
         custom: []
         name: project_id
-        description: 'Optional project assignment filter.'
+        description: 'Optional project filter; scoped by `financial.view`.'
         required: false
         example: 1
         type: integer
@@ -382,45 +226,78 @@ endpoints:
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      unit:
+      period_id:
         custom: []
-        name: unit
-        description: 'Optional staff unit filter.'
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
         required: false
-        example: Program
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: pending
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      title:
+      category:
         custom: []
-        name: title
-        description: 'Optional title search.'
+        name: category
+        description: 'Optional category filter.'
         required: false
-        example: coordinator
+        example: travel
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      role:
+      type:
         custom: []
-        name: role
-        description: 'Optional role filter.'
+        name: type
+        description: 'Optional transaction type: expense or payment.'
         required: false
-        example: staff
+        example: expense
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      search:
+      payee:
         custom: []
-        name: search
-        description: 'Optional name, surname, email or phone search.'
+        name: payee
+        description: 'Optional payee, spending unit, invoice no, or accounting code search.'
         required: false
-        example: ayse
+        example: Otel
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional submitted date lower bound.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional submitted date upper bound.'
+        required: false
+        example: '2026-01-31'
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -428,283 +305,49 @@ endpoints:
         deprecated: false
     cleanQueryParameters:
       project_id: 1
-      unit: Program
-      title: coordinator
-      role: staff
-      search: ayse
-    bodyParameters: []
+      period_id: 3
+      status: pending
+      category: travel
+      type: expense
+      payee: Otel
+      date_from: '2026-01-01'
+      date_to: '2026-01-31'
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
     cleanBodyParameters: []
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '{"staff":{"data":[{"id":8,"name":"Ayse","role":"coordinator","projects":[{"id":1,"assignment_type":"coordinator"}]}],"current_page":1}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: 'api/admin/staff/{id}'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get panel staff details.'
-      description: 'Requires permission: `staff.view`. The target must be an authority/staff-like user. Unit access is enforced through `abortUnlessUnitAllowed`; personal document paths are returned with storage URLs and project assignments are summarized.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"staff":{"id":8,"name":"Ayse","role":"coordinator","staff_profile":{"unit":"Program","personal_documents":[{"label":"CV","url":"https://storage.example.com/cv.pdf"}]},"projects":[{"id":1,"assignment_type":"coordinator"}]}}'
+        content: '{"transactions":{"data":[{"id":1,"type":"expense","category":"travel","amount":"1250.00","status":"pending"}]},"total_amount":"1250.00","category_stats":[],"project_stats":[],"status_stats":[]}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"Bu birim icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/admin/staff/{id}'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Update staff profile information.'
-      description: 'Requires permission: `staff.update`. Unit access is enforced with `abortUnlessUnitAllowed`; non-global users cannot move staff to another unit. Updates staff profile fields and optionally the user phone number.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      title:
-        custom: []
-        name: title
-        description: 'Optional title. Allowed values: researcher, specialist, coordinator, manager, other.'
-        required: false
-        example: specialist
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      unit:
-        custom: []
-        name: unit
-        description: 'Optional unit name.'
-        required: false
-        example: Program
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      contract_type:
-        custom: []
-        name: contract_type
-        description: 'Optional contract type.'
-        required: false
-        example: full_time
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      start_date:
-        custom: []
-        name: start_date
-        description: 'Optional start date.'
-        required: false
-        example: '2026-01-15'
-        type: date
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      phone:
-        custom: []
-        name: phone
-        description: 'Optional phone number.'
-        required: false
-        example: '05550000000'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      title: specialist
-      unit: Program
-      contract_type: full_time
-      start_date: '2026-01-15'
-      phone: '05550000000'
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Personel bilgileri guncellendi.","staff":{"id":8,"staff_profile":{"unit":"Program","title":"specialist"}}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Birim kapsami olan kullanici personeli baska birime tasiyamaz."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/admin/staff/{id}/projects'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Sync staff project assignments.'
-      description: 'Requires permission: `staff.update` with global `all` scope. Super admin and participant/visitor accounts cannot be managed here. Coordinators receive `coordinated_project_ids`; other staff receive `assigned_project_ids`; the unused relation is cleared.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      coordinated_project_ids:
-        custom: []
-        name: coordinated_project_ids
-        description: 'Project IDs for coordinator assignment. Send empty array when not applicable.'
-        required: true
-        example:
-          - 1
-        type: 'string[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      assigned_project_ids:
-        custom: []
-        name: assigned_project_ids
-        description: 'Project IDs for staff assignment. Send empty array when not applicable.'
-        required: true
-        example:
-          - 2
-        type: 'string[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      coordinated_project_ids:
-        - 1
-      assigned_project_ids:
-        - 2
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Calisan proje atamalari guncellendi.","staff":{"id":8,"projects":[{"id":1,"assignment_type":"coordinator"}]}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Proje atamasi icin tum sistem kapsami gerekir."}'
+        content: '{"message":"This action is unauthorized."}'
         headers: []
         description: ''
     responseFields: []
@@ -719,75 +362,204 @@ endpoints:
     custom: []
     httpMethods:
       - POST
-    uri: 'api/admin/staff/{id}/documents'
+    uri: api/admin/financials
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Upload a staff personal document.'
-      description: 'Requires permission: `staff.documents.upload` and unit access for the target staff member. Stores the file through `MediaStorage` under the staff document folder and appends it to `staff_profile.personal_documents` with a label and URL.'
+      title: 'Create a financial transaction.'
+      description: |-
+        Panel/admin and coordinator endpoint exposed under `/admin/financials`, `/panel/financials`, and `/coordinator/financials`. Requires `financial.create`. If `project_id` is supplied, the actor must have create scope for that project; creating a projectless financial transaction requires global `financial.create` scope. If `period_id` is supplied, it must belong to the selected project and the period must be writable.
+
+        Send as `multipart/form-data` when uploading an invoice. Created transactions start as `pending` and are audit logged as `financial.created`.
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
       Content-Type: multipart/form-data
       Accept: application/json
-    urlParameters:
-      id:
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
         custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
+        name: project_id
+        description: 'Optional project id. Required for non-global scoped users.'
+        required: false
+        example: 1
         type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period id belonging to the selected project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Transaction type, one of `expense` or `payment`.'
+        required: true
+        example: expense
+        type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      document:
+      category:
         custom: []
-        name: document
-        description: 'Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB.'
+        name: category
+        description: 'Transaction category, max 80 chars.'
         required: true
-        example: null
-        type: file
+        example: travel
+        type: string
         enumValues: []
-        exampleWasSpecified: false
+        exampleWasSpecified: true
         nullable: false
         deprecated: false
-      label:
+      category_note:
         custom: []
-        name: label
-        description: 'Optional document label. Max 100 characters.'
+        name: category_note
+        description: 'This field is required when <code>category</code> is <code>other</code>. Must not be greater than 500 characters.'
         required: false
-        example: CV
+        example: amniihfqcoynlazghdtqt
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      spending_unit:
+        custom: []
+        name: spending_unit
+        description: 'Optional spending unit/cost center.'
+        required: false
+        example: Operasyon
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: true
         deprecated: false
+      payee_name:
+        custom: []
+        name: payee_name
+        description: 'Person or company to be paid.'
+        required: true
+        example: 'ABC Turizm'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      amount:
+        custom: []
+        name: amount
+        description: 'Amount, minimum 0.01.'
+        required: true
+        example: 1250.5
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      invoice_no:
+        custom: []
+        name: invoice_no
+        description: 'Optional invoice number.'
+        required: false
+        example: INV-2026-001
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      payment_date:
+        custom: []
+        name: payment_date
+        description: 'Optional planned or actual payment date.'
+        required: false
+        example: '2026-02-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      payment_method:
+        custom: []
+        name: payment_method
+        description: 'Optional payment method.'
+        required: false
+        example: bank_transfer
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      accounting_code:
+        custom: []
+        name: accounting_code
+        description: 'Optional accounting code.'
+        required: false
+        example: '770.01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      invoice:
+        custom: []
+        name: invoice
+        description: 'Optional invoice file; pdf, jpg, jpeg, png, max 10MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
     cleanBodyParameters:
-      label: CV
+      project_id: 1
+      period_id: 3
+      type: expense
+      category: travel
+      category_note: amniihfqcoynlazghdtqt
+      spending_unit: Operasyon
+      payee_name: 'ABC Turizm'
+      amount: 1250.5
+      invoice_no: INV-2026-001
+      payment_date: '2026-02-01'
+      payment_method: bank_transfer
+      accounting_code: '770.01'
     fileParameters:
-      document: null
+      invoice: null
     responses:
       -
         custom: []
-        status: 200
-        content: '{"message":"Belge yuklendi.","documents":[{"label":"CV","url":"https://storage.example.com/staff/8/documents/cv.pdf"}]}'
+        status: 201
+        content: '{"message":"Islem basariyla kaydedildi.","transaction":{"id":1,"status":"pending","amount":"1250.50"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Projesiz mali islem icin global kapsam gerekir."}'
         headers: []
         description: ''
       -
         custom: []
         status: 422
-        content: '{"message":"Bu kullanici calisan rolu tasimiyor."}'
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
         headers: []
         description: ''
     responseFields: []
@@ -802,15 +574,423 @@ endpoints:
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/staff/export
+    uri: 'api/admin/financials/{id}'
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Export panel staff.'
-      description: 'Requires permission: `staff.export`. Applies employee and coordinator unit scope, supports project/role/search filters and exports through the shared admin export responder.'
+      title: 'Show a financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.view` access to the transaction project; projectless records require the permission itself. Includes project, period, submitter, and approver summary data.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"transaction":{"id":1,"type":"expense","category":"travel","status":"pending","project":{"id":1,"name":"KADEME"}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu isleme erisim yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/financials/{id}/approve'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Approve a financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/approve` and `/panel/financials/{id}/approve`. Requires `financial.approve` and access to the transaction project. The related period must be writable and only `pending` transactions can be approved. Status changes are audit logged as `financial.approved`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Islem onaylandi.","transaction":{"id":1,"status":"approved"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin onay yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu islem zaten islenmis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/financials/{id}/reject'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Reject a financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/reject` and `/panel/financials/{id}/reject`. Requires `financial.reject` and access to the transaction project. The related period must be writable and only `pending` transactions can be rejected. Status changes are audit logged as `financial.rejected`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Islem reddedildi.","transaction":{"id":1,"status":"rejected"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin red yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu islem zaten islenmis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/admin/financials/{id}/pay'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark a financial transaction as paid.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/pay` and `/panel/financials/{id}/pay`. Requires `financial.mark_paid` and access to the transaction project. The related period must be writable and only `approved` transactions can be marked as paid. If `payment_date` is empty, the controller sets it to today. Status changes are audit logged as `financial.paid`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Odeme tamamlandi.","transaction":{"id":1,"status":"paid"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin odeme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Sadece onaylanan islemler odenmis olarak isaretlenebilir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/admin/financials/{id}'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a pending financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.delete` and access to the transaction project. The related period must be writable and only `pending` transactions can be deleted. Attached invoice files are removed from storage and the deletion is audit logged as `financial.deleted`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Islem silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin silme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Sadece bekleyen islemler silinebilir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/admin/financials/{id}/invoice'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Download a financial invoice.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/invoice` and `/panel/financials/{id}/invoice`. Requires `financial.invoice.download` and access to the transaction project. If `direct=true` and public/direct downloads are configured, returns a `download_url`; otherwise streams the stored file with its MIME type.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters:
+      direct:
+        custom: []
+        name: direct
+        description: 'Optional. Return direct storage URL when configured.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      direct: true
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download_url":"https://storage.example.com/invoices/file.pdf"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Binary invoice file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu fatura icin erisim yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Fatura bulunamadi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/panel/financials/export
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Export financial transactions.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/export` and `/panel/financials/export`. Requires `financial.export`; users with global scope export all matching transactions, while scoped users are limited to project ids resolved by the action+scope matrix. Project and period filters are validated through project-period context. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.'
       authenticated: true
       deprecated: false
     headers:
@@ -823,7 +1003,7 @@ endpoints:
       project_id:
         custom: []
         name: project_id
-        description: 'Optional project assignment filter.'
+        description: 'Optional project filter; scoped by `financial.export`.'
         required: false
         example: 1
         type: integer
@@ -831,23 +1011,78 @@ endpoints:
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      role:
+      period_id:
         custom: []
-        name: role
-        description: 'Optional role filter.'
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
         required: false
-        example: staff
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: paid
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      search:
+      category:
         custom: []
-        name: search
-        description: 'Optional search filter.'
+        name: category
+        description: 'Optional category filter.'
         required: false
-        example: ayse
+        example: travel
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Optional transaction type: expense or payment.'
+        required: false
+        example: expense
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      payee:
+        custom: []
+        name: payee
+        description: 'Optional payee, spending unit, invoice no, or accounting code search.'
+        required: false
+        example: ABC
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional submitted date lower bound.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional submitted date upper bound.'
+        required: false
+        example: '2026-01-31'
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -856,7 +1091,7 @@ endpoints:
       format:
         custom: []
         name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        description: 'Optional export format.'
         required: false
         example: xlsx
         type: string
@@ -866,276 +1101,62 @@ endpoints:
         deprecated: false
     cleanQueryParameters:
       project_id: 1
-      role: staff
-      search: ayse
+      period_id: 3
+      status: paid
+      category: travel
+      type: expense
+      payee: ABC
+      date_from: '2026-01-01'
+      date_to: '2026-01-31'
       format: xlsx
-    bodyParameters: []
-    cleanBodyParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      format:
+        custom: []
+        name: format
+        description: 'Must not be greater than 20 characters.'
+        required: false
+        example: vmqeopfuudtdsufvy
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+    cleanBodyParameters:
+      format: vmqeopfuudtdsufvy
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '{"download":"Staff export file stream"}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/staff/active
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List active and on-leave staff.'
-      description: 'Requires permission: `staff.view`. Active staff are approximated by Sanctum tokens used in the last 8 hours; on-leave staff are approved leave requests covering today. Non-global viewers are limited to their unit.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"active_staff":[{"id":8,"name":"Ayse","role":"coordinator"}],"on_leave":[{"id":9,"name":"Mehmet","role":"staff"}]}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/staff/create-options
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get staff creation options.'
-      description: 'Requires permission: `staff.update` with global `all` scope. Returns assignable non-participant, non-super-admin Spatie roles for the panel staff creation form.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"roles":[{"name":"coordinator","label":"Koordinator"},{"name":"staff","label":"Personel"}]}'
+        content: '{"download":"Export file stream"}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"Calisan olusturmak icin tum sistem kapsami gerekir."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - POST
-    uri: api/panel/staff
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Create a staff account.'
-      description: 'Requires permission: `staff.update` with global `all` scope. Creates an active coordinator/staff/custom authority user, syncs the selected role, creates the staff profile, assigns coordinated projects for coordinators or assigned projects for other staff, and sends the password setup email.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      name:
-        custom: []
-        name: name
-        description: 'Staff first name.'
-        required: true
-        example: Ayse
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      surname:
-        custom: []
-        name: surname
-        description: 'Staff surname.'
-        required: true
-        example: Yilmaz
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      email:
-        custom: []
-        name: email
-        description: 'Unique email address.'
-        required: true
-        example: ayse@example.com
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      phone:
-        custom: []
-        name: phone
-        description: 'Optional phone number.'
-        required: false
-        example: '05550000000'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      tc_no:
-        custom: []
-        name: tc_no
-        description: 'Optional identity number, exactly 11 characters.'
-        required: false
-        example: '12345678901'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      role:
-        custom: []
-        name: role
-        description: 'Existing role name except super_admin/student/alumni/visitor.'
-        required: true
-        example: coordinator
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      unit:
-        custom: []
-        name: unit
-        description: 'Optional unit name. Defaults to Genel.'
-        required: false
-        example: Program
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      title:
-        custom: []
-        name: title
-        description: 'Optional staff title. Allowed values: researcher, specialist, coordinator, manager, other.'
-        required: false
-        example: coordinator
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      contract_type:
-        custom: []
-        name: contract_type
-        description: 'Optional contract type.'
-        required: false
-        example: full_time
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      project_ids:
-        custom: []
-        name: project_ids
-        description: 'Optional project IDs to assign. Coordinators receive coordinated projects; other staff receive assigned projects.'
-        required: false
-        example:
-          - 1
-          - 2
-        type: 'string[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      name: Ayse
-      surname: Yilmaz
-      email: ayse@example.com
-      phone: '05550000000'
-      tc_no: '12345678901'
-      role: coordinator
-      unit: Program
-      title: coordinator
-      contract_type: full_time
-      project_ids:
-        - 1
-        - 2
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 201
-        content: '{"message":"Calisan olusturuldu. Sifre belirleme baglantisi e-posta ile gonderildi.","staff":{"id":8,"role":"coordinator","projects":[{"id":1,"name":"KADEME","assignment_type":"coordinator"}]},"reset_email_status":"passwords.sent"}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Bu rol personel ekranindan olusturulamaz."}'
+        content: '{"message":"This action is unauthorized."}'
         headers: []
         description: ''
     responseFields: []
@@ -1150,15 +1171,18 @@ endpoints:
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/staff
+    uri: api/panel/financials
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'List panel staff.'
-      description: 'Requires permission: `staff.view`. Returns authority users and users with staff/project assignments. Global scope can see every staff record; non-global staff view scope is limited to the caller staff unit through `applyCoordinatorUnitScope`.'
+      title: 'List financial transactions.'
+      description: |-
+        Panel/admin endpoint exposed under `/admin/financials` and `/panel/financials`. Requires `financial.view`; users with global scope see all matching transactions, while scoped users are limited to the project ids resolved by the action+scope matrix. `project_id` and `period_id` are validated through project-period context, so archive/period restrictions remain aligned with the panel.
+
+        Returns paginated transactions plus total amount, category totals, project totals, and status totals for dashboard cards/charts.
       authenticated: true
       deprecated: false
     headers:
@@ -1171,7 +1195,7 @@ endpoints:
       project_id:
         custom: []
         name: project_id
-        description: 'Optional project assignment filter.'
+        description: 'Optional project filter; scoped by `financial.view`.'
         required: false
         example: 1
         type: integer
@@ -1179,45 +1203,78 @@ endpoints:
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      unit:
+      period_id:
         custom: []
-        name: unit
-        description: 'Optional staff unit filter.'
+        name: period_id
+        description: 'Optional period filter; must belong to the selected/allowed project.'
         required: false
-        example: Program
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: 'Optional status filter.'
+        required: false
+        example: pending
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      title:
+      category:
         custom: []
-        name: title
-        description: 'Optional title search.'
+        name: category
+        description: 'Optional category filter.'
         required: false
-        example: coordinator
+        example: travel
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      role:
+      type:
         custom: []
-        name: role
-        description: 'Optional role filter.'
+        name: type
+        description: 'Optional transaction type: expense or payment.'
         required: false
-        example: staff
+        example: expense
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      search:
+      payee:
         custom: []
-        name: search
-        description: 'Optional name, surname, email or phone search.'
+        name: payee
+        description: 'Optional payee, spending unit, invoice no, or accounting code search.'
         required: false
-        example: ayse
+        example: Otel
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional submitted date lower bound.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional submitted date upper bound.'
+        required: false
+        example: '2026-01-31'
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -1225,283 +1282,49 @@ endpoints:
         deprecated: false
     cleanQueryParameters:
       project_id: 1
-      unit: Program
-      title: coordinator
-      role: staff
-      search: ayse
-    bodyParameters: []
+      period_id: 3
+      status: pending
+      category: travel
+      type: expense
+      payee: Otel
+      date_from: '2026-01-01'
+      date_to: '2026-01-31'
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
     cleanBodyParameters: []
     fileParameters: []
     responses:
       -
         custom: []
         status: 200
-        content: '{"staff":{"data":[{"id":8,"name":"Ayse","role":"coordinator","projects":[{"id":1,"assignment_type":"coordinator"}]}],"current_page":1}}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: 'api/panel/staff/{id}'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Get panel staff details.'
-      description: 'Requires permission: `staff.view`. The target must be an authority/staff-like user. Unit access is enforced through `abortUnlessUnitAllowed`; personal document paths are returned with storage URLs and project assignments are summarized.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"staff":{"id":8,"name":"Ayse","role":"coordinator","staff_profile":{"unit":"Program","personal_documents":[{"label":"CV","url":"https://storage.example.com/cv.pdf"}]},"projects":[{"id":1,"assignment_type":"coordinator"}]}}'
+        content: '{"transactions":{"data":[{"id":1,"type":"expense","category":"travel","amount":"1250.00","status":"pending"}]},"total_amount":"1250.00","category_stats":[],"project_stats":[],"status_stats":[]}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"Bu birim icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/panel/staff/{id}'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Update staff profile information.'
-      description: 'Requires permission: `staff.update`. Unit access is enforced with `abortUnlessUnitAllowed`; non-global users cannot move staff to another unit. Updates staff profile fields and optionally the user phone number.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      title:
-        custom: []
-        name: title
-        description: 'Optional title. Allowed values: researcher, specialist, coordinator, manager, other.'
-        required: false
-        example: specialist
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      unit:
-        custom: []
-        name: unit
-        description: 'Optional unit name.'
-        required: false
-        example: Program
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      contract_type:
-        custom: []
-        name: contract_type
-        description: 'Optional contract type.'
-        required: false
-        example: full_time
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      start_date:
-        custom: []
-        name: start_date
-        description: 'Optional start date.'
-        required: false
-        example: '2026-01-15'
-        type: date
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-      phone:
-        custom: []
-        name: phone
-        description: 'Optional phone number.'
-        required: false
-        example: '05550000000'
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: true
-        deprecated: false
-    cleanBodyParameters:
-      title: specialist
-      unit: Program
-      contract_type: full_time
-      start_date: '2026-01-15'
-      phone: '05550000000'
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Personel bilgileri guncellendi.","staff":{"id":8,"staff_profile":{"unit":"Program","title":"specialist"}}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Birim kapsami olan kullanici personeli baska birime tasiyamaz."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/panel/staff/{id}/projects'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Sync staff project assignments.'
-      description: 'Requires permission: `staff.update` with global `all` scope. Super admin and participant/visitor accounts cannot be managed here. Coordinators receive `coordinated_project_ids`; other staff receive `assigned_project_ids`; the unused relation is cleared.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      coordinated_project_ids:
-        custom: []
-        name: coordinated_project_ids
-        description: 'Project IDs for coordinator assignment. Send empty array when not applicable.'
-        required: true
-        example:
-          - 1
-        type: 'string[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      assigned_project_ids:
-        custom: []
-        name: assigned_project_ids
-        description: 'Project IDs for staff assignment. Send empty array when not applicable.'
-        required: true
-        example:
-          - 2
-        type: 'string[]'
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanBodyParameters:
-      coordinated_project_ids:
-        - 1
-      assigned_project_ids:
-        - 2
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Calisan proje atamalari guncellendi.","staff":{"id":8,"projects":[{"id":1,"assignment_type":"coordinator"}]}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Proje atamasi icin tum sistem kapsami gerekir."}'
+        content: '{"message":"This action is unauthorized."}'
         headers: []
         description: ''
     responseFields: []
@@ -1516,75 +1339,204 @@ endpoints:
     custom: []
     httpMethods:
       - POST
-    uri: 'api/panel/staff/{id}/documents'
+    uri: api/panel/financials
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Upload a staff personal document.'
-      description: 'Requires permission: `staff.documents.upload` and unit access for the target staff member. Stores the file through `MediaStorage` under the staff document folder and appends it to `staff_profile.personal_documents` with a label and URL.'
+      title: 'Create a financial transaction.'
+      description: |-
+        Panel/admin and coordinator endpoint exposed under `/admin/financials`, `/panel/financials`, and `/coordinator/financials`. Requires `financial.create`. If `project_id` is supplied, the actor must have create scope for that project; creating a projectless financial transaction requires global `financial.create` scope. If `period_id` is supplied, it must belong to the selected project and the period must be writable.
+
+        Send as `multipart/form-data` when uploading an invoice. Created transactions start as `pending` and are audit logged as `financial.created`.
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
       Content-Type: multipart/form-data
       Accept: application/json
-    urlParameters:
-      id:
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
         custom: []
-        name: id
-        description: 'Staff user ID.'
-        required: true
-        example: 8
+        name: project_id
+        description: 'Optional project id. Required for non-global scoped users.'
+        required: false
+        example: 1
         type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period id belonging to the selected project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Transaction type, one of `expense` or `payment`.'
+        required: true
+        example: expense
+        type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-    cleanUrlParameters:
-      id: 8
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      document:
+      category:
         custom: []
-        name: document
-        description: 'Staff document. Allowed: pdf, doc, docx, jpg, jpeg, png. Max 10 MB.'
+        name: category
+        description: 'Transaction category, max 80 chars.'
         required: true
-        example: null
-        type: file
+        example: travel
+        type: string
         enumValues: []
-        exampleWasSpecified: false
+        exampleWasSpecified: true
         nullable: false
         deprecated: false
-      label:
+      category_note:
         custom: []
-        name: label
-        description: 'Optional document label. Max 100 characters.'
+        name: category_note
+        description: 'This field is required when <code>category</code> is <code>other</code>. Must not be greater than 500 characters.'
         required: false
-        example: CV
+        example: amniihfqcoynlazghdtqt
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      spending_unit:
+        custom: []
+        name: spending_unit
+        description: 'Optional spending unit/cost center.'
+        required: false
+        example: Operasyon
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: true
         deprecated: false
+      payee_name:
+        custom: []
+        name: payee_name
+        description: 'Person or company to be paid.'
+        required: true
+        example: 'ABC Turizm'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      amount:
+        custom: []
+        name: amount
+        description: 'Amount, minimum 0.01.'
+        required: true
+        example: 1250.5
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      invoice_no:
+        custom: []
+        name: invoice_no
+        description: 'Optional invoice number.'
+        required: false
+        example: INV-2026-001
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      payment_date:
+        custom: []
+        name: payment_date
+        description: 'Optional planned or actual payment date.'
+        required: false
+        example: '2026-02-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      payment_method:
+        custom: []
+        name: payment_method
+        description: 'Optional payment method.'
+        required: false
+        example: bank_transfer
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      accounting_code:
+        custom: []
+        name: accounting_code
+        description: 'Optional accounting code.'
+        required: false
+        example: '770.01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      invoice:
+        custom: []
+        name: invoice
+        description: 'Optional invoice file; pdf, jpg, jpeg, png, max 10MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
     cleanBodyParameters:
-      label: CV
+      project_id: 1
+      period_id: 3
+      type: expense
+      category: travel
+      category_note: amniihfqcoynlazghdtqt
+      spending_unit: Operasyon
+      payee_name: 'ABC Turizm'
+      amount: 1250.5
+      invoice_no: INV-2026-001
+      payment_date: '2026-02-01'
+      payment_method: bank_transfer
+      accounting_code: '770.01'
     fileParameters:
-      document: null
+      invoice: null
     responses:
       -
         custom: []
-        status: 200
-        content: '{"message":"Belge yuklendi.","documents":[{"label":"CV","url":"https://storage.example.com/staff/8/documents/cv.pdf"}]}'
+        status: 201
+        content: '{"message":"Islem basariyla kaydedildi.","transaction":{"id":1,"status":"pending","amount":"1250.50"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Projesiz mali islem icin global kapsam gerekir."}'
         headers: []
         description: ''
       -
         custom: []
         status: 422
-        content: '{"message":"Bu kullanici calisan rolu tasimiyor."}'
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
         headers: []
         description: ''
     responseFields: []
@@ -1599,15 +1551,423 @@ endpoints:
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/leave-requests
+    uri: 'api/panel/financials/{id}'
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'List staff leave requests for the panel.'
-      description: 'Requires permission: `staff.view`. Global users see all leave requests; non-global viewers are limited to their own staff unit. Supports status and user filters.'
+      title: 'Show a financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.view` access to the transaction project; projectless records require the permission itself. Includes project, period, submitter, and approver summary data.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"transaction":{"id":1,"type":"expense","category":"travel","status":"pending","project":{"id":1,"name":"KADEME"}}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu isleme erisim yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"No query results for model"}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/financials/{id}/approve'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Approve a financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/approve` and `/panel/financials/{id}/approve`. Requires `financial.approve` and access to the transaction project. The related period must be writable and only `pending` transactions can be approved. Status changes are audit logged as `financial.approved`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Islem onaylandi.","transaction":{"id":1,"status":"approved"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin onay yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu islem zaten islenmis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/financials/{id}/reject'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Reject a financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/reject` and `/panel/financials/{id}/reject`. Requires `financial.reject` and access to the transaction project. The related period must be writable and only `pending` transactions can be rejected. Status changes are audit logged as `financial.rejected`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Islem reddedildi.","transaction":{"id":1,"status":"rejected"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin red yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Bu islem zaten islenmis."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/financials/{id}/pay'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Mark a financial transaction as paid.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/pay` and `/panel/financials/{id}/pay`. Requires `financial.mark_paid` and access to the transaction project. The related period must be writable and only `approved` transactions can be marked as paid. If `payment_date` is empty, the controller sets it to today. Status changes are audit logged as `financial.paid`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Odeme tamamlandi.","transaction":{"id":1,"status":"paid"}}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin odeme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Sadece onaylanan islemler odenmis olarak isaretlenebilir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - DELETE
+    uri: 'api/panel/financials/{id}'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Delete a pending financial transaction.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.delete` and access to the transaction project. The related period must be writable and only `pending` transactions can be deleted. Attached invoice files are removed from storage and the deletion is audit logged as `financial.deleted`.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Islem silindi."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu islem icin silme yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Sadece bekleyen islemler silinebilir."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: 'api/panel/financials/{id}/invoice'
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Download a financial invoice.'
+      description: 'Panel/admin endpoint exposed under `/admin/financials/{id}/invoice` and `/panel/financials/{id}/invoice`. Requires `financial.invoice.download` and access to the transaction project. If `direct=true` and public/direct downloads are configured, returns a `download_url`; otherwise streams the stored file with its MIME type.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'Financial transaction id.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: 1
+    queryParameters:
+      direct:
+        custom: []
+        name: direct
+        description: 'Optional. Return direct storage URL when configured.'
+        required: false
+        example: true
+        type: boolean
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+    cleanQueryParameters:
+      direct: true
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"download_url":"https://storage.example.com/invoices/file.pdf"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 200
+        content: '{"download":"Binary invoice file stream"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Bu fatura icin erisim yetkiniz yok."}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 404
+        content: '{"message":"Fatura bulunamadi."}'
+        headers: []
+        description: ''
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - GET
+    uri: api/coordinator/financials
+    metadata:
+      custom: []
+      groupName: Financials
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'List my coordinator financial transactions.'
+      description: 'Coordinator endpoint exposed under `/coordinator/financials`. Requires `financial.view`; results are limited to transactions submitted by the authenticated user and to project ids available through `financial.view` scope. Returns paginated records, category totals, and the current page total amount.'
       authenticated: true
       deprecated: false
     headers:
@@ -1620,7 +1980,7 @@ endpoints:
       status:
         custom: []
         name: status
-        description: 'Optional leave status filter.'
+        description: 'Optional status filter.'
         required: false
         example: pending
         type: string
@@ -1628,20 +1988,44 @@ endpoints:
         exampleWasSpecified: true
         nullable: false
         deprecated: false
-      user_id:
+      period_id:
         custom: []
-        name: user_id
-        description: 'Optional staff user filter.'
+        name: period_id
+        description: 'Optional period filter.'
         required: false
-        example: 8
+        example: 3
         type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional submitted date lower bound.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional submitted date upper bound.'
+        required: false
+        example: '2026-01-31'
+        type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: false
         deprecated: false
     cleanQueryParameters:
       status: pending
-      user_id: 8
+      period_id: 3
+      date_from: '2026-01-01'
+      date_to: '2026-01-31'
     bodyParameters: []
     cleanBodyParameters: []
     fileParameters: []
@@ -1649,7 +2033,13 @@ endpoints:
       -
         custom: []
         status: 200
-        content: '{"leave_requests":{"data":[{"id":5,"status":"pending","user":{"id":8,"name":"Ayse"}}],"current_page":1}}'
+        content: '{"transactions":{"data":[{"id":1,"status":"pending","amount":"1250.00"}]},"category_stats":[],"total_amount":"1250.00"}'
+        headers: []
+        description: ''
+      -
+        custom: []
+        status: 403
+        content: '{"message":"This action is unauthorized."}'
         headers: []
         description: ''
     responseFields: []
@@ -1664,15 +2054,15 @@ endpoints:
     custom: []
     httpMethods:
       - GET
-    uri: api/panel/leave-requests/export
+    uri: api/coordinator/financials/export
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Export staff leave requests.'
-      description: 'Requires permission: `staff.export`. Global users can export all leave requests; non-global staff view scope is limited to the caller unit. Exports through the shared admin export responder.'
+      title: 'Export my coordinator financial transactions.'
+      description: 'Coordinator endpoint exposed under `/coordinator/financials/export`. Requires `financial.export`; results are limited to transactions submitted by the authenticated user and to project ids available through `financial.export` scope. Supports the shared `csv`, `xlsx`, or `pdf` export responder when enabled.'
       authenticated: true
       deprecated: false
     headers:
@@ -1682,12 +2072,89 @@ endpoints:
     urlParameters: []
     cleanUrlParameters: []
     queryParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'Optional project filter inside coordinator export scope.'
+        required: false
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period filter.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
       status:
         custom: []
         name: status
-        description: 'Optional leave status filter.'
+        description: 'Optional status filter.'
         required: false
-        example: pending
+        example: approved
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Optional category filter.'
+        required: false
+        example: travel
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Optional transaction type: expense or payment.'
+        required: false
+        example: expense
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      payee:
+        custom: []
+        name: payee
+        description: 'Optional payee, spending unit, invoice no, or accounting code search.'
+        required: false
+        example: ABC
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_from:
+        custom: []
+        name: date_from
+        description: 'date Optional submitted date lower bound.'
+        required: false
+        example: '2026-01-01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      date_to:
+        custom: []
+        name: date_to
+        description: 'date Optional submitted date upper bound.'
+        required: false
+        example: '2026-01-31'
         type: string
         enumValues: []
         exampleWasSpecified: true
@@ -1696,7 +2163,7 @@ endpoints:
       format:
         custom: []
         name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
+        description: 'Optional export format.'
         required: false
         example: csv
         type: string
@@ -1705,7 +2172,14 @@ endpoints:
         nullable: false
         deprecated: false
     cleanQueryParameters:
-      status: pending
+      project_id: 1
+      period_id: 3
+      status: approved
+      category: travel
+      type: expense
+      payee: ABC
+      date_from: '2026-01-01'
+      date_to: '2026-01-31'
       format: csv
     bodyParameters: []
     cleanBodyParameters: []
@@ -1714,355 +2188,13 @@ endpoints:
       -
         custom: []
         status: 200
-        content: '{"download":"Leave requests export file stream"}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/panel/leave-requests/{id}/approve'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Approve a staff leave request.'
-      description: 'Requires permission: `staff.leave.approve` and unit access for the leave owner. Marks the leave as approved, stores the approver and emails the staff member when an address exists.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Leave request ID.'
-        required: true
-        example: 5
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 5
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Izin talebi onaylandi.","leave_request":{"id":5,"status":"approved"}}'
+        content: '{"download":"Export file stream"}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"Bu birim icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - PUT
-    uri: 'api/panel/leave-requests/{id}/reject'
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Reject a staff leave request.'
-      description: 'Requires permission: `staff.leave.reject` and unit access for the leave owner. Marks the leave as rejected, stores the reviewer and emails the staff member when an address exists.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      id:
-        custom: []
-        name: id
-        description: 'Leave request ID.'
-        required: true
-        example: 5
-        type: integer
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanUrlParameters:
-      id: 5
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"message":"Izin talebi reddedildi.","leave_request":{"id":5,"status":"rejected"}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu birim icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/members
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List members visible to the current staff user.'
-      description: 'Requires permission: `staff.view`. The current user must have a staff unit. Rows are filtered through `PermissionResolver::applyUserScope`, so global users can see all matching staff while own-unit users only see their unit.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      search:
-        custom: []
-        name: search
-        description: 'Optional name, email or title search.'
-        required: false
-        example: uzman
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      search: uzman
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"unit":"Program","members":{"data":[{"id":8,"name":"Ayse","role":"coordinator","staff_profile":{"unit":"Program"}}],"current_page":1}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 200
-        content: '{"members":[],"unit":null,"message":"Kullaniciya bagli birim bilgisi bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/members/export
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Export members visible to the current staff user.'
-      description: 'Requires permission: `staff.export`. The current user must have a staff unit and the export rows are filtered through `PermissionResolver::applyUserScope`.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      search:
-        custom: []
-        name: search
-        description: 'Optional name, email or title search.'
-        required: false
-        example: uzman
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      format:
-        custom: []
-        name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
-        required: false
-        example: csv
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      search: uzman
-      format: csv
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"download":"Unit members export file stream"}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Kullaniciya bagli birim bilgisi bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/my-projects
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List the current staff user projects.'
-      description: 'Requires permission: `projects.view`. Project visibility comes from `PermissionResolver::projectIdsForPermission`; if no project is visible an empty assignment response is returned. Media unit users are labelled with an `all_active_for_media_unit` scope in the response.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"scope":"assignment","projects":[{"id":1,"name":"KADEME","active_period":{"id":3,"name":"2026 Bahar"},"participant_summary":{"total":40,"active":35,"graduates":5}}]}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 403
-        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/panel/my-projects/export
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Export the current staff user projects.'
-      description: 'Requires permission: `projects.export`. Uses the same project visibility resolver as the staff project list and exports through the shared admin export responder.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      format:
-        custom: []
-        name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
-        required: false
-        example: xlsx
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      format: xlsx
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"download":"Staff project export file stream"}'
+        content: '{"message":"This action is unauthorized."}'
         headers: []
         description: ''
     responseFields: []
@@ -2077,346 +2209,204 @@ endpoints:
     custom: []
     httpMethods:
       - POST
-    uri: api/leave-requests
+    uri: api/coordinator/financials
     metadata:
       custom: []
-      groupName: Staff
+      groupName: Financials
       groupDescription: ''
       subgroup: ''
       subgroupDescription: ''
-      title: 'Create a leave request for the current staff user.'
-      description: 'Requires permission: `staff.leave.request`. Creates a pending leave request for the authenticated user and notifies super admins plus coordinators in the same unit when available.'
+      title: 'Create a financial transaction.'
+      description: |-
+        Panel/admin and coordinator endpoint exposed under `/admin/financials`, `/panel/financials`, and `/coordinator/financials`. Requires `financial.create`. If `project_id` is supplied, the actor must have create scope for that project; creating a projectless financial transaction requires global `financial.create` scope. If `period_id` is supplied, it must belong to the selected project and the period must be writable.
+
+        Send as `multipart/form-data` when uploading an invoice. Created transactions start as `pending` and are audit logged as `financial.created`.
       authenticated: true
       deprecated: false
     headers:
       Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
+      Content-Type: multipart/form-data
       Accept: application/json
     urlParameters: []
     cleanUrlParameters: []
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters:
-      start_date:
+      project_id:
         custom: []
-        name: start_date
-        description: 'Leave start date. Must be today or later.'
-        required: true
-        example: '2026-07-10'
-        type: date
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      end_date:
-        custom: []
-        name: end_date
-        description: 'Leave end date. Must be after or equal to start_date.'
-        required: true
-        example: '2026-07-12'
-        type: date
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      reason:
-        custom: []
-        name: reason
-        description: 'Optional reason. Max 1000 characters.'
+        name: project_id
+        description: 'Optional project id. Required for non-global scoped users.'
         required: false
-        example: 'Yillik izin'
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'Optional period id belonging to the selected project.'
+        required: false
+        example: 3
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      type:
+        custom: []
+        name: type
+        description: 'Transaction type, one of `expense` or `payment`.'
+        required: true
+        example: expense
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category:
+        custom: []
+        name: category
+        description: 'Transaction category, max 80 chars.'
+        required: true
+        example: travel
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      category_note:
+        custom: []
+        name: category_note
+        description: 'This field is required when <code>category</code> is <code>other</code>. Must not be greater than 500 characters.'
+        required: false
+        example: amniihfqcoynlazghdtqt
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      spending_unit:
+        custom: []
+        name: spending_unit
+        description: 'Optional spending unit/cost center.'
+        required: false
+        example: Operasyon
         type: string
         enumValues: []
         exampleWasSpecified: true
         nullable: true
         deprecated: false
+      payee_name:
+        custom: []
+        name: payee_name
+        description: 'Person or company to be paid.'
+        required: true
+        example: 'ABC Turizm'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      amount:
+        custom: []
+        name: amount
+        description: 'Amount, minimum 0.01.'
+        required: true
+        example: 1250.5
+        type: number
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        deprecated: false
+      invoice_no:
+        custom: []
+        name: invoice_no
+        description: 'Optional invoice number.'
+        required: false
+        example: INV-2026-001
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      payment_date:
+        custom: []
+        name: payment_date
+        description: 'Optional planned or actual payment date.'
+        required: false
+        example: '2026-02-01'
+        type: date
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      payment_method:
+        custom: []
+        name: payment_method
+        description: 'Optional payment method.'
+        required: false
+        example: bank_transfer
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      accounting_code:
+        custom: []
+        name: accounting_code
+        description: 'Optional accounting code.'
+        required: false
+        example: '770.01'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        deprecated: false
+      invoice:
+        custom: []
+        name: invoice
+        description: 'Optional invoice file; pdf, jpg, jpeg, png, max 10MB.'
+        required: false
+        example: null
+        type: file
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
     cleanBodyParameters:
-      start_date: '2026-07-10'
-      end_date: '2026-07-12'
-      reason: 'Yillik izin'
-    fileParameters: []
+      project_id: 1
+      period_id: 3
+      type: expense
+      category: travel
+      category_note: amniihfqcoynlazghdtqt
+      spending_unit: Operasyon
+      payee_name: 'ABC Turizm'
+      amount: 1250.5
+      invoice_no: INV-2026-001
+      payment_date: '2026-02-01'
+      payment_method: bank_transfer
+      accounting_code: '770.01'
+    fileParameters:
+      invoice: null
     responses:
       -
         custom: []
         status: 201
-        content: '{"message":"Izin talebiniz iletildi.","leave_request":{"id":5,"status":"pending"}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"The start date must be a date after or equal to today."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/my-leave-requests
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List the current staff user leave requests.'
-      description: 'Requires permission: `staff.leave.request`. Returns the authenticated user leave history with approver metadata.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"leave_requests":[{"id":5,"status":"pending","approver":null}]}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/staff/members
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List members visible to the current staff user.'
-      description: 'Requires permission: `staff.view`. The current user must have a staff unit. Rows are filtered through `PermissionResolver::applyUserScope`, so global users can see all matching staff while own-unit users only see their unit.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      search:
-        custom: []
-        name: search
-        description: 'Optional name, email or title search.'
-        required: false
-        example: uzman
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      search: uzman
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"unit":"Program","members":{"data":[{"id":8,"name":"Ayse","role":"coordinator","staff_profile":{"unit":"Program"}}],"current_page":1}}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 200
-        content: '{"members":[],"unit":null,"message":"Kullaniciya bagli birim bilgisi bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/staff/members/export
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Export members visible to the current staff user.'
-      description: 'Requires permission: `staff.export`. The current user must have a staff unit and the export rows are filtered through `PermissionResolver::applyUserScope`.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      search:
-        custom: []
-        name: search
-        description: 'Optional name, email or title search.'
-        required: false
-        example: uzman
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-      format:
-        custom: []
-        name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
-        required: false
-        example: csv
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      search: uzman
-      format: csv
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"download":"Unit members export file stream"}'
-        headers: []
-        description: ''
-      -
-        custom: []
-        status: 422
-        content: '{"message":"Kullaniciya bagli birim bilgisi bulunmuyor."}'
-        headers: []
-        description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/staff/projects
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'List the current staff user projects.'
-      description: 'Requires permission: `projects.view`. Project visibility comes from `PermissionResolver::projectIdsForPermission`; if no project is visible an empty assignment response is returned. Media unit users are labelled with an `all_active_for_media_unit` scope in the response.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        custom: []
-        status: 200
-        content: '{"scope":"assignment","projects":[{"id":1,"name":"KADEME","active_period":{"id":3,"name":"2026 Bahar"},"participant_summary":{"total":40,"active":35,"graduates":5}}]}'
+        content: '{"message":"Islem basariyla kaydedildi.","transaction":{"id":1,"status":"pending","amount":"1250.50"}}'
         headers: []
         description: ''
       -
         custom: []
         status: 403
-        content: '{"message":"Bu islem icin yetkiniz bulunmuyor."}'
+        content: '{"message":"Projesiz mali islem icin global kapsam gerekir."}'
         headers: []
         description: ''
-    responseFields: []
-    auth:
-      - headers
-      - Authorization
-      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
-    controller: null
-    method: null
-    route: null
-  -
-    custom: []
-    httpMethods:
-      - GET
-    uri: api/staff/projects/export
-    metadata:
-      custom: []
-      groupName: Staff
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Export the current staff user projects.'
-      description: 'Requires permission: `projects.export`. Uses the same project visibility resolver as the staff project list and exports through the shared admin export responder.'
-      authenticated: true
-      deprecated: false
-    headers:
-      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters:
-      format:
-        custom: []
-        name: format
-        description: 'Optional export format. Allowed values: xlsx, excel, pdf, docx, word, csv. Defaults to csv.'
-        required: false
-        example: xlsx
-        type: string
-        enumValues: []
-        exampleWasSpecified: true
-        nullable: false
-        deprecated: false
-    cleanQueryParameters:
-      format: xlsx
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
       -
         custom: []
-        status: 200
-        content: '{"download":"Staff project export file stream"}'
+        status: 422
+        content: '{"message":"Secilen donem bu projeye ait degil."}'
         headers: []
         description: ''
     responseFields: []

@@ -99,6 +99,32 @@ class ManualCreditAdjustmentTest extends TestCase
         ]);
     }
 
+    public function test_credit_adjustment_is_resolution_in_closing_but_locked_in_completed_period(): void
+    {
+        $project = $this->project('credit-lifecycle-project');
+        $closing = $this->period($project, 'closing');
+        $closingParticipant = $this->participant($project, $closing, 80);
+        $actor = $this->actorWithParticipantManageAccess($project);
+
+        $this->postJson('/api/panel/credits/adjust', [
+            'participant_id' => $closingParticipant->id,
+            'amount' => 5,
+            'reason' => 'Kapanis kredi mutabakati',
+        ])->assertOk()->assertJsonPath('current_credit', 85);
+
+        $completed = $this->period($project, 'completed');
+        $completedParticipant = $this->participant($project, $completed, 70);
+        Sanctum::actingAs($actor);
+
+        $this->postJson('/api/panel/credits/adjust', [
+            'participant_id' => $completedParticipant->id,
+            'amount' => 5,
+            'reason' => 'Arsivde yasak olmali',
+        ])
+            ->assertStatus(423)
+            ->assertJsonPath('message', 'Tamamlanmis donem arsiv modundadir. Degisiklik icin arsiv duzeltme yetkisi gerekir.');
+    }
+
     private function actorWithParticipantManageAccess(Project $project): User
     {
         $actor = User::factory()->create([
@@ -138,14 +164,14 @@ class ManualCreditAdjustmentTest extends TestCase
         ]);
     }
 
-    private function period(Project $project): Period
+    private function period(Project $project, string $status = 'active'): Period
     {
         return Period::query()->create([
             'project_id' => $project->id,
-            'name' => '2026 Aktif Donem',
+            'name' => '2026 '.strtoupper($status).' Donem',
             'start_date' => '2026-01-01',
             'end_date' => '2026-12-31',
-            'status' => 'active',
+            'status' => $status,
         ]);
     }
 

@@ -379,7 +379,7 @@ endpoints:
         name: start_at
         description: 'Must be a valid date.'
         required: false
-        example: '2026-07-02T10:54:52'
+        example: '2026-08-21T04:15:38'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -390,7 +390,7 @@ endpoints:
         name: end_at
         description: 'Must be a valid date. Must be a date after or equal to <code>start_at</code>.'
         required: false
-        example: '2107-07-31'
+        example: '2107-09-19'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -412,7 +412,7 @@ endpoints:
         name: status
         description: ''
         required: true
-        example: closed
+        example: archived
         type: string
         enumValues:
           - open
@@ -426,8 +426,164 @@ endpoints:
       title: mqeopfuudtdsufvyvddqa
       description: 'Molestias ipsam sit veniam sed fuga aspernatur.'
       location: oynlazghdtqtqxbajwbpi
-      start_at: '2026-07-02T10:54:52'
-      end_at: '2107-07-31'
+      start_at: '2026-08-21T04:15:38'
+      end_at: '2107-09-19'
+      quota: 45
+      status: archived
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 3V5EgbkvZcDPa166h8fd4ae'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - PUT
+    uri: 'api/panel/volunteer/opportunities/{id}'
+    metadata:
+      custom: []
+      groupName: Volunteer
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: ''
+      description: ''
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      id:
+        custom: []
+        name: id
+        description: 'The ID of the opportunity.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanUrlParameters:
+      id: consequatur
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      project_id:
+        custom: []
+        name: project_id
+        description: 'The <code>id</code> of an existing record in the projects table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      period_id:
+        custom: []
+        name: period_id
+        description: 'The <code>id</code> of an existing record in the periods table.'
+        required: false
+        example: null
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      title:
+        custom: []
+        name: title
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      description:
+        custom: []
+        name: description
+        description: 'Must not be greater than 4000 characters.'
+        required: false
+        example: 'Dolores molestias ipsam sit.'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      location:
+        custom: []
+        name: location
+        description: 'Must not be greater than 255 characters.'
+        required: false
+        example: hfqcoynlazghdtqtqxbaj
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      start_at:
+        custom: []
+        name: start_at
+        description: 'Must be a valid date.'
+        required: false
+        example: '2026-08-21T04:15:38'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      end_at:
+        custom: []
+        name: end_at
+        description: 'Must be a valid date. Must be a date after or equal to <code>start_at</code>.'
+        required: false
+        example: '2107-09-19'
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      quota:
+        custom: []
+        name: quota
+        description: 'Must be at least 1.'
+        required: false
+        example: 45
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: true
+        deprecated: false
+      status:
+        custom: []
+        name: status
+        description: ''
+        required: false
+        example: closed
+        type: string
+        enumValues:
+          - open
+          - closed
+          - archived
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      title: vmqeopfuudtdsufvyvddq
+      description: 'Dolores molestias ipsam sit.'
+      location: hfqcoynlazghdtqtqxbaj
+      start_at: '2026-08-21T04:15:38'
+      end_at: '2107-09-19'
       quota: 45
       status: closed
     fileParameters: []

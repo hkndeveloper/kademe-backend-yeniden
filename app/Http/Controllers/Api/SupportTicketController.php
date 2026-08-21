@@ -155,6 +155,8 @@ class SupportTicketController extends Controller
             $this->resolveProjectPeriodContext($request, $permission, (int) $period->project_id, (int) $period->id);
         }
 
+        $this->assertPeriodWritable($request, (int) $period->id);
+
         return (int) $period->id;
     }
 
@@ -636,6 +638,7 @@ class SupportTicketController extends Controller
             $this->abortUnlessAllowed($request, 'support.reply');
             abort_unless($this->canAccessTicket($user, $ticket, 'support.reply'), 403, 'Bu ticket icin yanit yetkiniz yok.');
         }
+        $this->assertPeriodResolvable($request, $ticket->period_id);
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -1031,6 +1034,7 @@ class SupportTicketController extends Controller
 
         $ticket = SupportTicket::findOrFail($id);
         abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.assign'), 403, 'Bu ticket icin atama yetkiniz yok.');
+        $this->assertPeriodResolvable($request, $ticket->period_id);
 
         $assignee = User::query()
             ->where('id', $request->integer('assigned_to'))
@@ -1089,6 +1093,7 @@ class SupportTicketController extends Controller
         $this->abortUnlessAllowed($request, 'support.close');
         $ticket = SupportTicket::findOrFail($id);
         abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.close'), 403, 'Bu ticketi kapatma yetkiniz yok.');
+        $this->assertPeriodResolvable($request, $ticket->period_id);
 
         $ticket->update(['status' => 'closed']);
 
