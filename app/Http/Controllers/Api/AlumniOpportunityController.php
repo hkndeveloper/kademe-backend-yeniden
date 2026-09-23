@@ -86,6 +86,7 @@ class AlumniOpportunityController extends Controller
      * Requires permission: `alumni.opportunities.view`. Returns published and non-expired opportunities matching the current user role and participant project scope.
      *
      * @group Alumni Opportunities
+     *
      * @authenticated
      *
      * @response 200 {"opportunities":[{"id":1,"title":"Staj Firsati","kind":"internship","summary":"Ozet","link_url":"https://example.com","project":{"id":1,"name":"KADEME"}}]}
@@ -133,12 +134,12 @@ class AlumniOpportunityController extends Controller
 
     public function panelIndex(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'announcements.view');
+        $this->abortUnlessAllowed($request, 'alumni_opportunities.view');
         $query = AlumniOpportunity::with(['project:id,name', 'creator:id,name,surname'])->latest();
-        $query = $this->scopeManageableOpportunities($request, $query, 'announcements.view');
+        $query = $this->scopeManageableOpportunities($request, $query, 'alumni_opportunities.view');
 
         if ($request->filled('project_id')) {
-            $this->assertProjectOpportunityScope($request, (int) $request->project_id, 'announcements.view');
+            $this->assertProjectOpportunityScope($request, (int) $request->project_id, 'alumni_opportunities.view');
             $query->where('project_id', (int) $request->project_id);
         }
 
@@ -148,14 +149,14 @@ class AlumniOpportunityController extends Controller
     public function panelShow(Request $request, int $id): JsonResponse
     {
         $opportunity = AlumniOpportunity::with(['project:id,name', 'creator:id,name,surname'])->findOrFail($id);
-        $this->abortUnlessOpportunityAccessible($request, $opportunity, 'announcements.view');
+        $this->abortUnlessOpportunityAccessible($request, $opportunity, 'alumni_opportunities.view');
 
         return response()->json(['opportunity' => $opportunity]);
     }
 
     public function panelStore(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'announcements.create');
+        $this->abortUnlessAllowed($request, 'alumni_opportunities.manage');
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'kind' => 'required|in:internship,network,event,job,other',
@@ -173,7 +174,7 @@ class AlumniOpportunityController extends Controller
         $validated = IstanbulDateTime::normalizeFields($validated, ['starts_at', 'ends_at', 'published_at', 'expires_at']);
 
         if (! empty($validated['project_id'])) {
-            $this->assertProjectOpportunityScope($request, (int) $validated['project_id'], 'announcements.create');
+            $this->assertProjectOpportunityScope($request, (int) $validated['project_id'], 'alumni_opportunities.manage');
         }
 
         $opportunity = AlumniOpportunity::create([
@@ -200,7 +201,7 @@ class AlumniOpportunityController extends Controller
     public function panelUpdate(Request $request, int $id): JsonResponse
     {
         $opportunity = AlumniOpportunity::findOrFail($id);
-        $this->abortUnlessOpportunityAccessible($request, $opportunity, 'announcements.update');
+        $this->abortUnlessOpportunityAccessible($request, $opportunity, 'alumni_opportunities.manage');
 
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
@@ -221,8 +222,8 @@ class AlumniOpportunityController extends Controller
         if (array_key_exists('project_id', $validated)) {
             $newProjectId = $validated['project_id'];
             if ($newProjectId !== null) {
-                $this->assertProjectOpportunityScope($request, (int) $newProjectId, 'announcements.update');
-            } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'announcements.update')) {
+                $this->assertProjectOpportunityScope($request, (int) $newProjectId, 'alumni_opportunities.manage');
+            } elseif (! $this->permissionResolver->hasGlobalScope($request->user(), 'alumni_opportunities.manage')) {
                 abort(403, 'Proje baglantisi kaldirma yalnizca ust admin icin yapilabilir.');
             }
         }
@@ -238,7 +239,7 @@ class AlumniOpportunityController extends Controller
     public function panelDestroy(Request $request, int $id): JsonResponse
     {
         $opportunity = AlumniOpportunity::findOrFail($id);
-        $this->abortUnlessOpportunityAccessible($request, $opportunity, 'announcements.delete');
+        $this->abortUnlessOpportunityAccessible($request, $opportunity, 'alumni_opportunities.manage');
         $opportunity->delete();
 
         return response()->json(['message' => 'Firsat kaydi silindi.']);

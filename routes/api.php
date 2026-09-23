@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CertificateController;
 use App\Http\Controllers\Api\ContentManagementController;
+use App\Http\Controllers\Api\CoordinationUnitController;
 use App\Http\Controllers\Api\CoordinatorParticipantController;
 use App\Http\Controllers\Api\DigitalBohcaController;
 use App\Http\Controllers\Api\FeedbackController;
@@ -90,7 +91,7 @@ Route::prefix('auth')->group(function () {
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
-    Route::middleware(['auth:sanctum', 'blacklist', 'audit.action'])->group(function () {
+    Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'audit.action'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::middleware('password.not_pending_setup')->group(function () {
             Route::get('/me', [AuthController::class, 'me']);
@@ -100,7 +101,7 @@ Route::prefix('auth')->group(function () {
 
 // --- KULLANICI & PROFÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°L --- //
 // KVKK onay endpointi haricindekilere 'kvkk' kÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±tlamasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± getiriyoruz
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('user')->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('user')->group(function () {
     Route::post('/consent-kvkk', [UserController::class, 'consentKvkk']);
     Route::post('/kvkk/forget-request', [UserController::class, 'requestKvkkForget']);
 
@@ -127,7 +128,7 @@ Route::prefix('projects')->group(function () {
 });
 
 // BaÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸vuru iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemleri (Oturum gerektirir)
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->prefix('applications')->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->prefix('applications')->group(function () {
     Route::get('/', [ApplicationController::class, 'myApplications']);
     Route::get('/{id}', [ApplicationController::class, 'show']);
     Route::post('/{id}/waitlist-response', [ApplicationController::class, 'respondWaitlistInvitation']);
@@ -139,7 +140,7 @@ Route::post('/applications/public', [ApplicationController::class, 'storePublic'
     ->middleware('throttle:10,1');
 
 // --- PROGRAM (ETKÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°NLÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°K) & YOKLAMA --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->group(function () {
 
     // ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸rencinin kendi programlarÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±nÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± listelemesi
     Route::get('/programs', [ProgramController::class, 'myPrograms'])->middleware('scoped.permission:participant.programs.view');
@@ -201,7 +202,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'k
 });
 
 // --- ADMIN / KOORDÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°NATÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“R PANELÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â° --- //
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'role:super_admin|coordinator|staff', 'audit.action'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('admin')->group(function () {
 
     // Dashboard ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°statistikleri
     Route::get('/dashboard/stats', [AdminDashboardController::class, 'stats']);
@@ -227,6 +228,9 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::get('/programs/{id}/qr-context', [AdminProgramController::class, 'qrContext'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
+    Route::post('/programs/community-events', [AdminProgramController::class, 'storeCommunityEvent']);
+    Route::put('/programs/{id}/community-event', [AdminProgramController::class, 'updateCommunityEvent'])->whereNumber('id');
+    Route::patch('/programs/{id}/logistics', [AdminProgramController::class, 'updateLogistics'])->whereNumber('id');
     Route::post('/programs/{id}/generate-qr', [AdminProgramController::class, 'generateQr']);
     Route::post('/programs/{id}/complete', [AdminProgramController::class, 'complete']);
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
@@ -278,6 +282,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::put('/projects/{id}/special-modules/kademe-module-enrollments/{enrollment}', [ProjectSpecialModuleController::class, 'updateKademeModuleEnrollment']);
     Route::get('/projects/{id}/content', [ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [ProjectContentController::class, 'update']);
+    Route::patch('/projects/{id}/public-content', [ProjectContentController::class, 'updatePublicContent']);
+    Route::put('/projects/{id}/gallery', [ProjectContentController::class, 'updateGallery']);
     Route::get('/projects/{id}/application-form', [ProjectContentController::class, 'applicationForm']);
     Route::put('/projects/{id}/application-form', [ProjectContentController::class, 'updateApplicationForm']);
     Route::get('/periods', [PeriodController::class, 'index']);
@@ -402,20 +408,31 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'r
     Route::put('/permissions-matrix/roles/{id}', [PermissionMatrixController::class, 'updateRole']);
     Route::delete('/permissions-matrix/roles/{id}', [PermissionMatrixController::class, 'deleteRole']);
 
+    // Legacy admin aliases use the same controller and record policy as /panel/requests.
+    Route::get('/requests', [RequestController::class, 'index']);
+    Route::get('/requests/export', [RequestController::class, 'export']);
+    Route::post('/requests', [RequestController::class, 'store']);
+    Route::put('/requests/{id}/status', [RequestController::class, 'updateStatus']);
+    Route::post('/requests/{id}/upload-response', [RequestController::class, 'uploadResponseFile']);
+    Route::get('/requests/{id}/response-file', [RequestController::class, 'downloadResponseFile']);
+
     // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ DESTEK MERKEZÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â° (Admin) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
     Route::get('/support/tickets', [SupportTicketController::class, 'index']);
+    Route::post('/support/tickets', [SupportTicketController::class, 'store']);
     Route::get('/support/assignable-users', [SupportTicketController::class, 'assignableUsers']);
     Route::get('/support/tickets/export', [SupportTicketController::class, 'export']);
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'reply']);
     Route::get('/support/tickets/{id}/attachment', [SupportTicketController::class, 'downloadTicketAttachment']);
     Route::put('/support/tickets/{id}/assign', [SupportTicketController::class, 'assign']);
     Route::put('/support/tickets/{id}/close', [SupportTicketController::class, 'close']);
+    Route::put('/support/tickets/{id}/reopen', [SupportTicketController::class, 'reopen']);
+    Route::patch('/support/tickets/{id}', [SupportTicketController::class, 'update']);
     Route::get('/tickets/replies/{id}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
 });
 
 // Unified panel icin rol-prefix bagimsiz generic alias endpointleri.
 // /admin/* endpointleri geriye donuk uyumluluk icin oldugu gibi korunur.
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('panel')->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('panel')->group(function () {
     Route::get('/modules', [PanelModuleController::class, 'index']);
 
     Route::get('/programs', [AdminProgramController::class, 'index']);
@@ -424,6 +441,9 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/programs/{id}/qr-context', [AdminProgramController::class, 'qrContext'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
+    Route::post('/programs/community-events', [AdminProgramController::class, 'storeCommunityEvent']);
+    Route::put('/programs/{id}/community-event', [AdminProgramController::class, 'updateCommunityEvent'])->whereNumber('id');
+    Route::patch('/programs/{id}/logistics', [AdminProgramController::class, 'updateLogistics'])->whereNumber('id');
     Route::post('/programs/{id}/complete', [AdminProgramController::class, 'complete']);
     Route::post('/programs/{id}/generate-qr', [AdminProgramController::class, 'generateQr']);
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
@@ -514,6 +534,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::put('/projects/{id}/special-modules/kademe-module-enrollments/{enrollment}', [ProjectSpecialModuleController::class, 'updateKademeModuleEnrollment']);
     Route::get('/projects/{id}/content', [ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [ProjectContentController::class, 'update']);
+    Route::patch('/projects/{id}/public-content', [ProjectContentController::class, 'updatePublicContent']);
+    Route::put('/projects/{id}/gallery', [ProjectContentController::class, 'updateGallery']);
     Route::get('/projects/{id}/application-form', [ProjectContentController::class, 'applicationForm']);
     Route::put('/projects/{id}/application-form', [ProjectContentController::class, 'updateApplicationForm']);
 
@@ -618,8 +640,22 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::put('/permissions-matrix/roles/{id}', [PermissionMatrixController::class, 'updateRole']);
     Route::delete('/permissions-matrix/roles/{id}', [PermissionMatrixController::class, 'deleteRole']);
 
+    // Coordination unit management. Structural records are passivated, never deleted.
+    Route::get('/coordination-units/authorization-preview', [CoordinationUnitController::class, 'authorizationPreview']);
+    Route::get('/coordination-units', [CoordinationUnitController::class, 'index']);
+    Route::post('/coordination-units', [CoordinationUnitController::class, 'store']);
+    Route::get('/coordination-units/{coordinationUnit}', [CoordinationUnitController::class, 'show']);
+    Route::put('/coordination-units/{coordinationUnit}', [CoordinationUnitController::class, 'update']);
+    Route::post('/coordination-units/{coordinationUnit}/memberships', [CoordinationUnitController::class, 'upsertMembership']);
+    Route::patch('/coordination-unit-memberships/{membership}/deactivate', [CoordinationUnitController::class, 'deactivateMembership']);
+    Route::post('/coordination-units/{coordinationUnit}/responsibilities', [CoordinationUnitController::class, 'upsertResponsibility']);
+    Route::patch('/coordination-unit-responsibilities/{responsibility}/deactivate', [CoordinationUnitController::class, 'deactivateResponsibility']);
+    Route::post('/coordination-units/{coordinationUnit}/permission-rules', [CoordinationUnitController::class, 'upsertPermissionRule']);
+    Route::patch('/coordination-unit-permission-rules/{permissionRule}/deactivate', [CoordinationUnitController::class, 'deactivatePermissionRule']);
+
     // Support center
     Route::get('/support/tickets', [SupportTicketController::class, 'index']);
+    Route::post('/support/tickets', [SupportTicketController::class, 'store']);
     Route::get('/support/assignable-users', [SupportTicketController::class, 'assignableUsers']);
     Route::get('/support/tickets/export', [SupportTicketController::class, 'export']);
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'reply']);
@@ -627,6 +663,8 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/support/tickets/replies/{id}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
     Route::put('/support/tickets/{id}/assign', [SupportTicketController::class, 'assign']);
     Route::put('/support/tickets/{id}/close', [SupportTicketController::class, 'close']);
+    Route::put('/support/tickets/{id}/reopen', [SupportTicketController::class, 'reopen']);
+    Route::patch('/support/tickets/{id}', [SupportTicketController::class, 'update']);
 
     // Requests
     Route::get('/requests', [RequestController::class, 'index']);
@@ -710,7 +748,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
 });
 
 // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ KOORDÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°NATÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“R ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ZEL (sadece coordinator) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     // KoordinatÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼n mali iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemleri (kendi projesi)
     Route::get('/coordinator/financials', [FinancialTransactionController::class, 'myFinancials']);
     Route::get('/coordinator/financials/export', [FinancialTransactionController::class, 'exportMyFinancials']);
@@ -725,12 +763,12 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
 });
 
 // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PERSONEL / KOORDÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°NATÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“R (ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°zin Talepleri) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     Route::post('/leave-requests', [StaffController::class, 'storeLeaveRequest']);
     Route::get('/my-leave-requests', [StaffController::class, 'myLeaveRequests']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->group(function () {
     Route::get('/staff/announcements', [AnnouncementController::class, 'myAnnouncements']);
     Route::get('/staff/announcements/export', [AnnouncementController::class, 'exportMyAnnouncements']);
     Route::get('/staff/applications', [AdminApplicationController::class, 'staffIndex']);
@@ -742,7 +780,7 @@ Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'a
     Route::get('/staff/projects/export', [StaffController::class, 'exportMyProjects']);
 });
 
-Route::middleware(['auth:sanctum', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('calendar')->group(function () {
+Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('calendar')->group(function () {
     Route::get('/overview', [CalendarController::class, 'overview']);
     Route::get('/assignees', [CalendarController::class, 'assignees']);
     Route::get('/google/status', [CalendarController::class, 'googleStatus']);

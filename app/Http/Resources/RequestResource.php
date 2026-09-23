@@ -19,6 +19,8 @@ class RequestResource extends JsonResource
             'id' => $this->id,
             'type' => $this->type,
             'target_unit' => $this->target_unit,
+            'target_unit_id' => $this->target_unit_id === null ? null : (int) $this->target_unit_id,
+            'target_membership_id' => $this->target_membership_id === null ? null : (int) $this->target_membership_id,
             'description' => $this->description,
             'status' => $this->status,
             'response_file_path' => $this->response_file_path,
@@ -28,6 +30,8 @@ class RequestResource extends JsonResource
                 : null,
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'updated_at' => optional($this->updated_at)?->toIso8601String(),
+            'can_update_status' => (bool) ($this->getAttribute('can_update_status') ?? false),
+            'can_upload_response' => (bool) ($this->getAttribute('can_upload_response') ?? false),
             'requester' => $this->whenLoaded('requester', function () {
                 return [
                     'id' => $this->requester?->id,
@@ -42,6 +46,15 @@ class RequestResource extends JsonResource
                     'name' => $this->targetUser?->name,
                     'surname' => $this->targetUser?->surname,
                     'role' => $this->targetUser?->role,
+                ];
+            }),
+            'target_coordination_unit' => $this->whenLoaded('targetUnit', function () {
+                return [
+                    'id' => $this->targetUnit?->id,
+                    'code' => $this->targetUnit?->code,
+                    'name' => $this->targetUnit?->name,
+                    'kind' => $this->targetUnit?->kind,
+                    'project_id' => $this->targetUnit?->project_id,
                 ];
             }),
             'project' => $this->whenLoaded('project', function () {

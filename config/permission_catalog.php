@@ -27,9 +27,54 @@ return [
         'visitor' => 'Ziyaretci',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Authorization management boundaries
+    |--------------------------------------------------------------------------
+    |
+    | Coordinator/staff icin asagidaki gruplar organizasyon birimi isi sayilir.
+    | Enforce modunda bu izinlerin etkili kaynagi global rol matrisi degil,
+    | coordination_unit_permission_rules tablosudur. Liste tek merkezde tutularak
+    | API korumasi ve admin arayuzu ayni siniflandirmayi kullanir.
+    |
+    */
+    'coordination_unit_business_groups' => [
+        'Dashboard',
+        'Projects',
+        'Project Special Modules',
+        'Digital Bohca',
+        'Assignments',
+        'Periods',
+        'Programs',
+        'Calendar',
+        'Applications',
+        'Volunteer',
+        'Financials',
+        'Requests',
+        'Support',
+        'Staff',
+        'Announcements',
+        'Authority Communication',
+        'Content',
+        'Certificates',
+        'KPD',
+    ],
+
+    'coordination_unit_business_roles' => [
+        'coordinator',
+        'staff',
+    ],
+
+    /*
+     * Varsayilan false degeri mevcut rol izinlerini korur. Sadece bilincli bir
+     * yeniden kurulumda true yapilarak sistem rol varsayilanlari tekrar yazilir.
+     */
+    'reset_default_role_permissions' => env('PERMISSION_SEEDER_RESET_DEFAULTS', false),
+
     'default_role_permissions' => [
         'super_admin' => '*',
         'coordinator' => [
+            'dashboard.coordinator.view',
             'manage projects',
             'manage periods',
             'manage programs',
@@ -38,6 +83,8 @@ return [
             'manage financials',
             'manage requests',
             'manage support',
+            'support.update',
+            'support.reopen',
             'manage staff',
             'manage announcements',
             'manage content',
@@ -46,6 +93,7 @@ return [
             'manage chatbot',
         ],
         'staff' => [
+            'dashboard.staff.view',
             'manage programs',
             'manage requests',
             'manage support',
@@ -139,10 +187,21 @@ return [
             'permissions.user_override.view',
             'permissions.user_override.update',
         ],
+        'Coordination Units' => [
+            'coordination_units.view',
+            'coordination_units.manage',
+            'coordination_units.memberships.manage',
+            'coordination_units.responsibilities.manage',
+            'coordination_units.permissions.view',
+            'coordination_units.permissions.manage',
+            'coordination_units.authorization.preview',
+        ],
         'Projects' => [
             'projects.view',
             'projects.export',
             'projects.content.update',
+            'projects.public_content.view',
+            'projects.public_content.update',
             'projects.gallery.update',
             'projects.application_form.update',
             'projects.participants.view',
@@ -192,6 +251,14 @@ return [
         ],
         'Programs' => [
             'programs.view',
+            'programs.community_event.view',
+            'programs.community_event.create',
+            'programs.community_event.update',
+            'programs.community_event.attendance.view',
+            'programs.community_event.attendance.manage',
+            'programs.community_event.attendance.export',
+            'programs.logistics.view',
+            'programs.logistics.update',
             'programs.attendance.view',
             'programs.attendance.manage',
             'programs.attendance.export',
@@ -248,6 +315,8 @@ return [
             'support.assign',
             'support.reply',
             'support.close',
+            'support.update',
+            'support.reopen',
             'support.export',
         ],
         'Staff' => [
@@ -277,10 +346,18 @@ return [
             'announcements.send_sms',
             'announcements.send_email',
         ],
+        'Authority Communication' => [
+            'inbox.view',
+            'alumni_opportunities.view',
+            'alumni_opportunities.manage',
+            'forum.view',
+            'forum.moderate',
+        ],
         'Content' => [
             'content.view',
             'content.blog.create',
             'content.blog.update',
+            'content.blog.publish',
             'content.blog.delete',
             'content.blog.export',
             'content.faq.create',
@@ -366,6 +443,8 @@ return [
             'projects.view',
             'projects.export',
             'projects.content.update',
+            'projects.public_content.view',
+            'projects.public_content.update',
             'projects.gallery.update',
             'projects.application_form.update',
             'projects.participants.view',
@@ -406,6 +485,14 @@ return [
         ],
         'manage programs' => [
             'programs.view',
+            'programs.community_event.view',
+            'programs.community_event.create',
+            'programs.community_event.update',
+            'programs.community_event.attendance.view',
+            'programs.community_event.attendance.manage',
+            'programs.community_event.attendance.export',
+            'programs.logistics.view',
+            'programs.logistics.update',
             'programs.attendance.view',
             'programs.attendance.manage',
             'programs.attendance.export',
@@ -496,6 +583,7 @@ return [
             'content.view',
             'content.blog.create',
             'content.blog.update',
+            'content.blog.publish',
             'content.blog.delete',
             'content.blog.export',
             'content.faq.create',

@@ -22,6 +22,7 @@ class SupportTicket extends Model
         'project_id',
         'period_id',
         'assigned_to',
+        'assigned_unit_id',
         'status',
     ];
 
@@ -45,6 +46,16 @@ class SupportTicket extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    public function assignedUnit()
+    {
+        return $this->belongsTo(CoordinationUnit::class, 'assigned_unit_id');
+    }
+
+    public function statusHistories()
+    {
+        return $this->morphMany(WorkflowStatusHistory::class, 'subject');
+    }
+
     public function replies()
     {
         return $this->hasMany(SupportReply::class, 'ticket_id');
@@ -58,4 +69,3 @@ class SupportTicket extends Model
             ->dontLogEmptyChanges();
     }
 }
-

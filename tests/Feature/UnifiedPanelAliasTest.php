@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
-use App\Models\RolePermissionScope;
 use App\Models\FinancialTransaction;
+use App\Models\RolePermissionScope;
+use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
@@ -97,7 +97,7 @@ class UnifiedPanelAliasTest extends TestCase
         );
     }
 
-    public function test_custom_role_with_action_can_use_unified_panel_without_system_role(): void
+    public function test_custom_role_with_action_gets_the_same_result_from_admin_and_panel_aliases(): void
     {
         Permission::findOrCreate('periods.view', 'web');
         $role = Role::findOrCreate('period_viewer', 'web');
@@ -120,7 +120,7 @@ class UnifiedPanelAliasTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->getJson('/api/panel/periods')->assertOk();
-        $this->getJson('/api/admin/periods')->assertForbidden();
+        $this->getJson('/api/admin/periods')->assertOk();
     }
 
     public function test_global_scope_is_not_tied_to_super_admin_role(): void
@@ -165,6 +165,7 @@ class UnifiedPanelAliasTest extends TestCase
             ->assertOk()
             ->assertJsonPath('transactions.data.0.payee_name', 'Global Null Project Vendor');
     }
+
     public function test_panel_audit_log_sanitizes_sensitive_query_values(): void
     {
         $this->actingSuperAdmin();
@@ -210,4 +211,5 @@ class UnifiedPanelAliasTest extends TestCase
         $response->assertJsonPath('summary.total', 1);
         $this->assertContains('admin_actions', $response->json('filters.log_names'));
         $this->assertContains('updated', $response->json('filters.events'));
-    }}
+    }
+}

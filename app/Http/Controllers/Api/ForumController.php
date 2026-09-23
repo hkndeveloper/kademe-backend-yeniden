@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
+use App\Http\Controllers\Controller;
 use App\Models\ForumPost;
 use App\Models\Participant;
 use App\Models\Period;
+use App\Services\PermissionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use App\Services\PermissionResolver;
 
 /**
  * @group Forum
@@ -84,10 +84,12 @@ class ForumController extends Controller
      * Requires permission: `participant.forum.view`. Returns posts from projects and periods where the current user participates. Completed period archives can be listed but write endpoints are locked.
      *
      * @group Forum
+     *
      * @authenticated
      *
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 1
+     *
      * @response 200 {"posts":{"data":[{"id":1,"title":"Tanisma","content":"Merhaba","project":{"id":1,"name":"KADEME"},"replies":[]}]}}
      * @response 403 {"message":"Bu proje forumuna erisiminiz yok."}
      */
@@ -149,11 +151,11 @@ class ForumController extends Controller
     /**
      * List forum posts for authority panel users.
      *
-     * Requires permission: `announcements.view`. Returns read-only forum threads from projects visible to the panel user.
+     * Requires permission: `forum.view`. Returns read-only forum threads from projects visible to the panel user.
      */
     public function panelIndex(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'announcements.view');
+        $this->abortUnlessAllowed($request, 'forum.view');
 
         $validated = $request->validate([
             'project_id' => 'nullable|integer|exists:projects,id',
@@ -161,10 +163,10 @@ class ForumController extends Controller
         ]);
 
         $user = $request->user();
-        $hasGlobalScope = $this->permissionResolver->hasGlobalScope($user, 'announcements.view');
+        $hasGlobalScope = $this->permissionResolver->hasGlobalScope($user, 'forum.view');
         $projectIds = $hasGlobalScope
             ? []
-            : $this->permissionResolver->projectIdsForPermission($user, 'announcements.view');
+            : $this->permissionResolver->projectIdsForPermission($user, 'forum.view');
 
         $query = ForumPost::query()
             ->with([
@@ -186,7 +188,7 @@ class ForumController extends Controller
 
         if (! empty($validated['project_id'])) {
             $projectId = (int) $validated['project_id'];
-            $this->abortUnlessProjectAllowed($request, 'announcements.view', $projectId);
+            $this->abortUnlessProjectAllowed($request, 'forum.view', $projectId);
             $query->where('project_id', $projectId);
         }
 
@@ -197,7 +199,7 @@ class ForumController extends Controller
                     'period_id' => ['Secilen donem bu projeye ait degil.'],
                 ]);
             }
-            $this->abortUnlessProjectAllowed($request, 'announcements.view', (int) $period->project_id);
+            $this->abortUnlessProjectAllowed($request, 'forum.view', (int) $period->project_id);
             $query->where('project_id', (int) $period->project_id)
                 ->where(function ($builder) use ($period) {
                     $builder->whereNull('period_id')->orWhere('period_id', (int) $period->id);
@@ -208,18 +210,21 @@ class ForumController extends Controller
             'posts' => $query->paginate(20),
         ]);
     }
+
     /**
      * Create a forum post.
      *
      * Requires permission: `participant.forum.view`. The current user must participate in the selected project and, when `period_id` is given, that period. Completed period archives cannot receive new posts.
      *
      * @group Forum
+     *
      * @authenticated
      *
      * @bodyParam project_id integer required Project id. Example: 1
      * @bodyParam period_id integer Optional period id. Example: 1
      * @bodyParam title string required Post title. Example: Tanisma
      * @bodyParam content string required Post content, max 8000 characters. Example: Merhaba herkese.
+     *
      * @response 201 {"message":"Forum konusu olusturuldu.","post":{"id":1,"title":"Tanisma","content":"Merhaba herkese."}}
      * @response 403 {"message":"Bu proje forumuna erisiminiz yok."}
      * @response 423 {"message":"Tamamlanmis donem arsiv modundadir. Forum arsivine yeni konu veya yanit eklenemez."}
@@ -264,10 +269,13 @@ class ForumController extends Controller
      * Requires permission: `participant.forum.view`. The parent post project/period must be accessible to the current participant. Completed period archives cannot receive replies.
      *
      * @group Forum
+     *
      * @authenticated
      *
      * @urlParam postId integer required Forum post id. Example: 1
+     *
      * @bodyParam content string required Reply content, max 5000 characters. Example: Ben de katiliyorum.
+     *
      * @response 201 {"message":"Yanit eklendi.","reply":{"id":1,"content":"Ben de katiliyorum."}}
      * @response 403 {"message":"Bu proje forumuna erisiminiz yok."}
      * @response 422 {"message":"The content field is required.","errors":{"content":["The content field is required."]}}

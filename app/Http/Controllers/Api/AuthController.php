@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\CoordinationOrganizationContextService;
+use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -18,7 +21,9 @@ class AuthController extends Controller
     private function authenticatedUserPayload(User $user): array
     {
         $user->loadMissing('profile', 'roles', 'staffProfile');
-        $authorization = app(\App\Services\PermissionResolver::class)->resolve($user);
+        $authorization = app(PermissionResolver::class)->resolve($user);
+        $organizationContext = app(CoordinationOrganizationContextService::class)
+            ->forUser($user, $authorization);
 
         return [
             'id' => $user->id,
@@ -44,6 +49,7 @@ class AuthController extends Controller
             'permission_scopes' => $authorization['scopes'] ?? [],
             'permission_overrides' => $authorization['direct_overrides'] ?? [],
             'authorization_context' => $authorization['contexts'] ?? [],
+            'organization_context' => $organizationContext,
         ];
     }
 
@@ -90,6 +96,7 @@ class AuthController extends Controller
      * Register a new student user.
      *
      * @group Auth
+     *
      * @unauthenticated
      *
      * Creates an active student account, assigns the `student` role, creates an empty profile, and returns a Sanctum bearer token.
@@ -101,6 +108,7 @@ class AuthController extends Controller
      * @bodyParam password_confirmation string required Password confirmation. Example: secret123
      * @bodyParam tc_no string required Turkish identity number, 11 characters. Example: 12345678901
      * @bodyParam phone string required Phone number. Example: 05551234567
+     *
      * @response 201 {"message":"Kayit basarili.","access_token":"1|plainTextToken","token_type":"Bearer","user":{"id":1,"name":"Hakan","surname":"Kekec","email":"hakan@example.com","role":"student","status":"active","effective_permissions":[],"permission_scopes":{}}}
      * @response 422 {"message":"The email has already been taken.","errors":{"email":["The email has already been taken."],"password":["The password field confirmation does not match."]}}
      */
@@ -145,7 +153,7 @@ class AuthController extends Controller
             'message' => 'Kayıt başarılı.',
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => $this->authenticatedUserPayload($user)
+            'user' => $this->authenticatedUserPayload($user),
         ], 201);
     }
 
@@ -153,12 +161,14 @@ class AuthController extends Controller
      * Login and receive an access token.
      *
      * @group Auth
+     *
      * @unauthenticated
      *
      * Returns the bearer token and the resolved authorization payload. The returned `effective_permissions`, `permission_scopes`, and `authorization_context` fields help clients decide which panel/mobile features to show; backend authorization is still enforced on every protected endpoint.
      *
      * @bodyParam email string required User email. Example: hakan@example.com
      * @bodyParam password string required User password. Example: secret123
+     *
      * @response 200 {"message":"Giris basarili.","access_token":"1|plainTextToken","token_type":"Bearer","user":{"id":1,"name":"Hakan","surname":"Kekec","email":"hakan@example.com","role":"student","status":"active","effective_permissions":["participant.dashboard.view"],"permission_scopes":{"participant.dashboard.view":{"scope_type":"self","scope_payload":[]}},"authorization_context":{"manageable_project_ids":[]}}}
      * @response 403 {"message":"Hesabiniz aktif degil veya pasif duruma alinmis."}
      * @response 403 {"message":"Sifrenizi henuz belirlemediniz. E-postaniza gonderilen baglanti ile sifre olusturun; gelmediyse \"Sifremi unuttum\" ile yeni baglanti isteyin.","must_change_password":true,"error":"password_setup_required"}
@@ -174,7 +184,7 @@ class AuthController extends Controller
         $email = Str::lower(trim($validated['email']));
         $user = User::where('email', $email)->first();
 
-        if (!$user || !Hash::check($validated['password'], $user->password)) {
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
             $this->logAuthActivity($request, 'login_failed', 'auth.login.failed', $user, [
                 'status_code' => 422,
                 'reason' => 'invalid_credentials',
@@ -223,7 +233,7 @@ class AuthController extends Controller
             'message' => 'Giriş başarılı.',
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => $this->authenticatedUserPayload($user)
+            'user' => $this->authenticatedUserPayload($user),
         ]);
     }
 
@@ -231,6 +241,7 @@ class AuthController extends Controller
      * Logout the current token.
      *
      * @group Auth
+     *
      * @authenticated
      *
      * Deletes only the current Sanctum token.
@@ -244,7 +255,7 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
-            'message' => 'Çıkış yapıldı.'
+            'message' => 'Çıkış yapıldı.',
         ]);
     }
 
@@ -252,6 +263,7 @@ class AuthController extends Controller
      * Get the authenticated user.
      *
      * @group Auth
+     *
      * @authenticated
      *
      * Returns the current user with profile, roles, and staff profile relations where available.
@@ -266,7 +278,7 @@ class AuthController extends Controller
         $this->ensureRoleSync($user);
 
         return response()->json([
-            'user' => new \App\Http\Resources\UserResource($user->load('profile', 'roles', 'staffProfile'))
+            'user' => new UserResource($user->load('profile', 'roles', 'staffProfile')),
         ]);
     }
 
@@ -274,11 +286,13 @@ class AuthController extends Controller
      * Send a password reset link.
      *
      * @group Auth
+     *
      * @unauthenticated
      *
      * Sends a Laravel password reset email when the address is known. The endpoint responds generically for the public flow.
      *
      * @bodyParam email string required User email. Example: hakan@example.com
+     *
      * @response 200 {"message":"E-posta adresinize sifre belirleme baglantisi gonderdik. Gelmiyorsa spam klasorunu kontrol edin."}
      * @response 422 {"message":"The email field must be a valid email address.","errors":{"email":["The email field must be a valid email address."]}}
      */
@@ -304,6 +318,7 @@ class AuthController extends Controller
      * Reset password with email token.
      *
      * @group Auth
+     *
      * @unauthenticated
      *
      * Resets the password, clears `must_change_password`, and invalidates existing tokens.
@@ -312,6 +327,7 @@ class AuthController extends Controller
      * @bodyParam email string required User email. Example: hakan@example.com
      * @bodyParam password string required Minimum 8 characters, must be confirmed. Example: newsecret123
      * @bodyParam password_confirmation string required Password confirmation. Example: newsecret123
+     *
      * @response 200 {"message":"Sifreniz guncellendi. Giris yapabilirsiniz."}
      * @response 422 {"message":"Baglanti gecersiz veya suresi dolmus. Yeni baglanti icin sifremi unuttum kullanin."}
      * @response 422 {"message":"The password field confirmation does not match.","errors":{"password":["The password field confirmation does not match."]}}

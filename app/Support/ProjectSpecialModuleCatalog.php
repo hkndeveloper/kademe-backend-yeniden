@@ -9,6 +9,34 @@ use App\Models\Project;
  */
 final class ProjectSpecialModuleCatalog
 {
+    /**
+     * @return array<string, string>
+     */
+    public static function options(): array
+    {
+        return [
+            'digital_bohca' => 'Dijital Bohca',
+            'internships' => 'Diplomasi360 Stajlari',
+            'uploaded_files' => 'Diplomasi360 Dosyalari',
+            'mentors' => 'Pergel Mentorlari',
+            'assignments' => 'Pergel Odevleri',
+            'eurodesk_projects' => 'Eurodesk Projeleri',
+            'badges' => 'Rozetler',
+            'reward_tiers' => 'Odul Kademeleri',
+            'participants_by_module' => 'Modul Katilimcilari',
+            'kpd_appointments' => 'KPD Randevulari',
+            'kpd_reports' => 'KPD Raporlari',
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function supportedKeys(): array
+    {
+        return array_keys(self::options());
+    }
+
     public static function normalizeHaystack(?string $type, ?string $name, ?string $slug): string
     {
         return mb_strtolower(trim(implode(' ', array_filter([$type, $name, $slug]))));
@@ -63,15 +91,17 @@ final class ProjectSpecialModuleCatalog
     private static function modulesByType(?string $type): ?array
     {
         return match ($type) {
-            'diplomasi360'     => ['digital_bohca', 'internships', 'uploaded_files'],
+            'diplomasi360' => ['digital_bohca', 'internships', 'uploaded_files'],
             'pergel_fellowship' => ['digital_bohca', 'mentors', 'assignments'],
-            'kpd'              => ['digital_bohca', 'kpd_appointments', 'kpd_reports'],
-            'zirve_kademe'     => ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'],
-            'kademe_plus'      => ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'],
-            'eurodesk'         => ['digital_bohca', 'eurodesk_projects'],
-            'other'            => ['digital_bohca', 'internships', 'mentors', 'eurodesk_projects', 'reward_tiers'],
-            null               => null, // fallback'e bırak
-            default            => null,
+            'kpd' => ['digital_bohca', 'kpd_appointments', 'kpd_reports'],
+            'zirve_kademe' => ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'],
+            'kademe_plus' => ['digital_bohca', 'badges', 'reward_tiers', 'participants_by_module'],
+            'eurodesk' => ['digital_bohca', 'eurodesk_projects'],
+            // "other" eski kayitlarda isim/slug fallback'ine birakilir. Bilinmeyen
+            // bir projeye tum aile modullerini vermek guvenli degildir.
+            'other' => null,
+            null => null, // fallback'e bırak
+            default => null,
         };
     }
 
@@ -80,6 +110,14 @@ final class ProjectSpecialModuleCatalog
      */
     public static function forProject(Project $project): array
     {
+        if ($project->special_modules !== null) {
+            return collect($project->special_modules)
+                ->filter(fn ($key) => is_string($key) && in_array($key, self::supportedKeys(), true))
+                ->unique()
+                ->values()
+                ->all();
+        }
+
         return self::moduleKeys($project->type, $project->name, $project->slug);
     }
 

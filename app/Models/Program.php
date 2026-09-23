@@ -10,9 +10,15 @@ class Program extends Model
 {
     use HasFactory, SoftDeletes;
 
+    public const KIND_CORE_PROGRAM = 'core_program';
+
+    public const KIND_COMMUNITY_EVENT = 'community_event';
+
     protected $fillable = [
         'project_id',
         'period_id',
+        'program_kind',
+        'managing_unit_id',
         'title',
         'description',
         'location',
@@ -90,6 +96,16 @@ class Program extends Model
     public function period()
     {
         return $this->belongsTo(Period::class);
+    }
+
+    public function managingUnit()
+    {
+        return $this->belongsTo(CoordinationUnit::class, 'managing_unit_id');
+    }
+
+    public function isCommunityEvent(): bool
+    {
+        return $this->program_kind === self::KIND_COMMUNITY_EVENT;
     }
 
     public function creator()

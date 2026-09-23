@@ -2990,6 +2990,10 @@ class PanelRegressionFixTest extends TestCase
     {
         $this->actingSuperAdmin();
         $project = $this->project();
+        $project->update(['special_modules' => [
+            'internships', 'uploaded_files', 'mentors', 'eurodesk_projects',
+            'badges', 'reward_tiers', 'participants_by_module',
+        ]]);
         $student = User::factory()->create(['surname' => 'Intern', 'role' => 'student']);
         $period = Period::query()->create([
             'project_id' => $project->id,
@@ -3073,6 +3077,7 @@ class PanelRegressionFixTest extends TestCase
     public function test_panel_project_special_modules_accept_manage_scope_without_view_scope(): void
     {
         $project = $this->project();
+        $project->update(['special_modules' => ['mentors']]);
         $role = Role::findOrCreate('mentor_manager_only', 'web');
         Permission::findOrCreate('projects.mentors.manage', 'web');
         $role->givePermissionTo('projects.mentors.manage');

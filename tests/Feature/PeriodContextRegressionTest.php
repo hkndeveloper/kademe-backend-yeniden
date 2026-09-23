@@ -756,6 +756,7 @@ class PeriodContextRegressionTest extends TestCase
     {
         $this->actorWithAllScope('projects.internships.view', 'special_module_period_viewer');
         $project = $this->project('special-module-project');
+        $project->update(['special_modules' => ['internships']]);
         $otherProject = $this->project('other-special-module-project');
         [, $completedPeriod] = $this->periodsFor($project);
         $otherPeriod = Period::query()->create([

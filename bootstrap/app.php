@@ -38,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'audit.action' => \App\Http\Middleware\AuditAdminActions::class,
             'password.not_pending_setup' => \App\Http\Middleware\DenyIfPasswordSetupPending::class,
             'scoped.permission' => \App\Http\Middleware\EnsureScopedPermission::class,
+            'coordination.context' => \App\Http\Middleware\ResolveActiveCoordinationUnitContext::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

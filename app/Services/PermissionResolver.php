@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\RolePermissionScope;
 use App\Models\User;
+use App\Support\AuthorizationManagementCatalog;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +14,9 @@ use Illuminate\Support\Str;
 
 class PermissionResolver
 {
+    /** @var array<string, array<string, mixed>> */
+    private array $requestResolutionCache = [];
+
     private const TARGET_UNIT_ALIASES = [
         'media' => ['media', 'medya', 'icerik', 'content', 'tasarim', 'design'],
         'operations' => ['operations', 'operasyon', 'lojistik', 'logistics'],
@@ -22,11 +26,21 @@ class PermissionResolver
         'general' => ['general', 'genel'],
     ];
 
+    public function __construct(
+        private readonly CoordinationUnitAuthorizationResolver $coordinationUnitAuthorizationResolver,
+        private readonly ActiveCoordinationUnitContext $activeCoordinationUnitContext
+    ) {}
+
     public function hasPermission(User $user, string $permissionName): bool
     {
         $resolved = $this->resolve($user);
 
         return in_array($permissionName, $resolved['effective_permissions']->all(), true);
+    }
+
+    public function flushRequestCache(): void
+    {
+        $this->requestResolutionCache = [];
     }
 
     public function scopeFor(User $user, string $permissionName): array
@@ -84,11 +98,42 @@ class PermissionResolver
 
         return match ($scopeType) {
             'all' => true,
-            'own_unit' => $this->normalizeUnit($unit) !== null
-                && $this->normalizeUnit($scopePayload['unit'] ?? null) === $this->normalizeUnit($unit),
+            'own_unit' => $this->scopeMatchesUnit($scopePayload, $unit),
             'none' => false,
             default => $this->denyUnitScopeWithOptionalLog($permissionName, $scopeType, $unit),
         };
+    }
+
+    public function canAccessCoordinationUnit(User $user, string $permissionName, ?int $unitId): bool
+    {
+        if ($unitId === null || ! $this->hasPermission($user, $permissionName)) {
+            return false;
+        }
+
+        if ($this->hasGlobalScope($user, $permissionName)) {
+            return true;
+        }
+
+        $scope = $this->scopeFor($user, $permissionName);
+        $unitIds = collect($scope['scope_payload']['unit_ids'] ?? [])
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (in_array($unitId, $unitIds, true)) {
+            return true;
+        }
+
+        if ($this->coordinationUnitsAreAuthoritative($user)) {
+            return false;
+        }
+
+        // Legacy/shadow rollback kipinde eski kayit policy'si korunur; enforce/pilot bunu kullanmaz.
+        return $user->coordinationUnitMemberships()
+            ->active()
+            ->where('unit_id', $unitId)
+            ->whereHas('unit', fn ($query) => $query->where('status', 'active'))
+            ->exists();
     }
 
     public function matchesTargetUnit(?string $staffUnit, ?string $targetUnit): bool
@@ -122,22 +167,256 @@ class PermissionResolver
             return true;
         }
 
-        return $this->matchesTargetUnit($user->staffProfile?->unit, $targetUnit);
+        return $this->canAccessTargetUnitWithoutPermission($user, $targetUnit);
     }
 
     /**
-     * @param list<string> $candidateTargetUnits
+     * @param  list<string>  $candidateTargetUnits
      * @return list<string>
      */
-    public function targetUnitsForUser(User $user, array $candidateTargetUnits): array
+    public function targetUnitsForUser(User $user, array $candidateTargetUnits, ?string $permissionName = null): array
     {
+        if ($permissionName !== null && $this->hasGlobalScope($user, $permissionName)) {
+            return array_values($candidateTargetUnits);
+        }
+
         return collect($candidateTargetUnits)
-            ->filter(fn (string $targetUnit) => $this->matchesTargetUnit($user->staffProfile?->unit, $targetUnit))
+            ->filter(fn (string $targetUnit) => $permissionName === null
+                ? $this->canAccessTargetUnitWithoutPermission($user, $targetUnit)
+                : $this->canAccessTargetUnit($user, $permissionName, $targetUnit))
             ->values()
             ->all();
     }
 
+    /**
+     * Duyuru gibi bir hedef-kitle hesabinda kullanicinin secili oturum biriminden
+     * bagimsiz olarak tum aktif birim uyeliklerini dikkate alir. Aktif uyeligi
+     * bulunan kullanicida eski staff_profiles.unit alani yetki kaynagi olmaz.
+     */
+    public function userHasActiveMembershipForTargetUnit(User $user, ?string $targetUnit): bool
+    {
+        $memberships = $user->coordinationUnitMemberships()
+            ->active()
+            ->whereHas('unit', fn ($query) => $query->where('status', 'active'))
+            ->with('unit')
+            ->get();
+
+        if ($memberships->isNotEmpty()) {
+            return $memberships->contains(
+                fn ($membership) => $this->coordinationUnitMatchesTarget($membership->unit, $targetUnit)
+            );
+        }
+
+        return $this->matchesTargetUnit($user->staffProfile?->unit, $targetUnit);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function coordinationUnitIdsForPermission(User $user, string $permissionName): array
+    {
+        if (! $this->hasPermission($user, $permissionName)) {
+            return [];
+        }
+
+        return collect($this->scopeFor($user, $permissionName)['scope_payload']['unit_ids'] ?? [])
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function unitNameForPermission(User $user, string $permissionName): ?string
+    {
+        if (! $this->hasPermission($user, $permissionName)) {
+            return null;
+        }
+
+        $payload = $this->scopeFor($user, $permissionName)['scope_payload'] ?? [];
+        $unit = trim((string) ($payload['unit'] ?? ''));
+        if ($unit !== '') {
+            return $unit;
+        }
+
+        $first = collect($payload['units'] ?? [])->first(fn ($value) => is_string($value) && trim($value) !== '');
+        if (is_string($first)) {
+            return $first;
+        }
+
+        return $this->activeCoordinationUnitContext->membershipFor($user)?->unit?->name;
+    }
+
+    private function canAccessTargetUnitWithoutPermission(User $user, ?string $targetUnit): bool
+    {
+        $activeMembership = $this->activeCoordinationUnitContext->membershipFor($user);
+        if ($this->coordinationUnitsAreAuthoritative($user)) {
+            if (! $activeMembership?->unit) {
+                return false;
+            }
+
+            return $this->coordinationUnitMatchesTarget($activeMembership->unit, $targetUnit);
+        }
+
+        return $this->matchesTargetUnit($user->staffProfile?->unit, $targetUnit);
+    }
+
+    private function coordinationUnitMatchesTarget($unit, ?string $targetUnit): bool
+    {
+        if (! $unit) {
+            return false;
+        }
+
+        $legacyTargetsByUnitCode = [
+            'service_media' => ['media'],
+            'service_purchase_organization' => ['operations', 'finance', 'official_affairs'],
+            'service_community_culture' => ['general', 'program'],
+        ];
+        $targets = $legacyTargetsByUnitCode[$unit->code] ?? [];
+        if (str_starts_with((string) $unit->code, 'project_')) {
+            $targets[] = 'program';
+        }
+
+        return in_array($targetUnit, $targets, true)
+            || $this->matchesTargetUnit($unit->name, $targetUnit)
+            || $this->matchesTargetUnit($unit->code, $targetUnit);
+    }
+
     public function resolve(User $user): array
+    {
+        $requestContext = app()->bound('request')
+            ? request()->attributes->get(ActiveCoordinationUnitContext::ATTRIBUTE)
+            : null;
+        $activeMembershipId = is_array($requestContext)
+            && (int) ($requestContext['user_id'] ?? 0) === (int) $user->id
+                ? $requestContext['membership_id'] ?? null
+                : null;
+        $cacheKey = implode(':', [
+            spl_object_id($user),
+            (int) $user->id,
+            (string) $user->role,
+            $this->coordinationAuthorizationMode(),
+            $activeMembershipId === null ? 'fallback' : (int) $activeMembershipId,
+        ]);
+
+        return $this->requestResolutionCache[$cacheKey] ??= $this->resolveUncached($user);
+    }
+
+    private function resolveUncached(User $user): array
+    {
+        $legacy = $this->resolveLegacy($user);
+        $mode = $this->coordinationAuthorizationMode();
+
+        if ($mode === 'legacy' || in_array($user->role, ['super_admin', 'student', 'alumni'], true)) {
+            return $legacy;
+        }
+
+        if ($mode === 'pilot' && ! $this->isPilotUser($user)) {
+            $legacy['authorization_meta'] = [
+                'mode' => 'pilot',
+                'authoritative_source' => 'legacy',
+                'unit_result_available' => false,
+                'pilot_selected' => false,
+            ];
+
+            return $legacy;
+        }
+
+        if ($mode === 'shadow') {
+            $unit = $this->coordinationUnitAuthorizationResolver->resolve(
+                $user,
+                collect($legacy['direct_overrides'] ?? [])
+            );
+            $diff = $this->coordinationAuthorizationDiff($legacy, $unit);
+            if (config('coordination_authorization.shadow_log_differences', true) && $diff['has_difference']) {
+                Log::info('coordination_authorization.shadow_diff', [
+                    'user_id' => (int) $user->id,
+                    'legacy_role' => $user->role,
+                    'diff' => $diff,
+                ]);
+            }
+
+            $legacy['contexts'] = array_merge($legacy['contexts'], [
+                'unit_memberships' => $unit['contexts']['unit_memberships'],
+                'primary_unit_id' => $unit['contexts']['primary_unit_id'],
+                'coordinated_unit_ids' => $unit['contexts']['coordinated_unit_ids'],
+                'staffed_unit_ids' => $unit['contexts']['staffed_unit_ids'],
+                'unit_project_ids_by_permission' => $unit['contexts']['project_ids_by_permission'],
+                'unit_manageable_project_ids' => $unit['contexts']['manageable_project_ids'],
+            ]);
+            $legacy['authorization_meta'] = [
+                'mode' => 'shadow',
+                'authoritative_source' => 'legacy',
+                'unit_result_available' => true,
+                'diff' => $diff,
+            ];
+
+            return $legacy;
+        }
+
+        $activeMembership = $this->activeCoordinationUnitContext->membershipFor($user);
+        $globalOverrides = collect($legacy['direct_overrides'] ?? [])
+            ->reject(fn ($override) => ($override['effect'] ?? null) === 'allow'
+                && AuthorizationManagementCatalog::isUnitBusinessPermission(
+                    (string) ($override['permission_name'] ?? '')
+                ))
+            ->values();
+        $membershipOverrides = $activeMembership?->permissionOverrides
+            ?->where('status', 'active')
+            ->map(fn ($override) => [
+                'permission_name' => $override->permission_name,
+                'effect' => $override->effect,
+                'scope_type' => $override->scope_type,
+                'scope_payload' => $override->scope_payload ?? [],
+            ])
+            ->values() ?? collect();
+        $unit = $this->coordinationUnitAuthorizationResolver->resolveForMembership(
+            $user,
+            $activeMembership,
+            $globalOverrides,
+            $membershipOverrides
+        );
+        $activeContext = $this->activeCoordinationUnitContext->metadataFor($user);
+
+        return [
+            'role_permissions' => $legacy['role_permissions'],
+            'effective_permissions' => $unit['effective_permissions'],
+            'direct_overrides' => $legacy['direct_overrides'],
+            'scopes' => $unit['scopes'],
+            'contexts' => array_merge($legacy['contexts'], $unit['contexts'], [
+                'active_coordination_context' => $activeContext,
+            ]),
+            'authorization_meta' => [
+                'mode' => $mode,
+                'authoritative_source' => 'coordination_units',
+                'unit_result_available' => true,
+                'pilot_selected' => $mode === 'pilot',
+                'active_coordination_context' => $activeContext,
+            ],
+        ];
+    }
+
+    public function coordinationUnitsAreAuthoritative(User $user): bool
+    {
+        return $this->activeCoordinationUnitContext->isAuthoritativeFor($user);
+    }
+
+    public function resolveCoordinationUnionSnapshot(User $user): array
+    {
+        $legacy = $this->resolveLegacy($user);
+
+        return $this->coordinationUnitAuthorizationResolver->resolve(
+            $user,
+            collect($legacy['direct_overrides'] ?? [])
+        );
+    }
+
+    public function resolveLegacySnapshot(User $user): array
+    {
+        return $this->resolveLegacy($user);
+    }
+
+    private function resolveLegacy(User $user): array
     {
         $user->loadMissing([
             'roles:id,name',
@@ -183,7 +462,7 @@ class PermissionResolver
                 foreach ($deniedPermissions as $deniedPermission) {
                     if (Str::endsWith($deniedPermission, '.*')) {
                         $prefix = Str::beforeLast($deniedPermission, '.*');
-                        if (Str::startsWith($permission, $prefix . '.')) {
+                        if (Str::startsWith($permission, $prefix.'.')) {
                             return true;
                         }
                     }
@@ -400,6 +679,7 @@ class PermissionResolver
 
         if ($user->role === 'coordinator') {
             if ($this->matchesAny($permissionName, [
+                'dashboard.',
                 'projects.',
                 'periods.',
                 'programs.',
@@ -410,6 +690,9 @@ class PermissionResolver
                 'support.',
                 'requests.',
                 'announcements.',
+                'inbox.',
+                'alumni_opportunities.',
+                'forum.',
                 'content.view',
                 'content.blog.',
                 'certificates.',
@@ -432,7 +715,7 @@ class PermissionResolver
         }
 
         if ($user->role === 'staff') {
-            if ($this->matchesAny($permissionName, ['requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'certificates.', 'digital_bohca.', 'assignments.', 'kpd.'])) {
+            if ($this->matchesAny($permissionName, ['dashboard.', 'requests.', 'support.', 'applications.', 'volunteer.', 'projects.', 'programs.', 'periods.', 'calendar.', 'announcements.', 'inbox.', 'alumni_opportunities.', 'forum.', 'certificates.', 'digital_bohca.', 'assignments.', 'kpd.'])) {
                 return [
                     'scope_type' => 'assigned_projects',
                     'scope_payload' => ['project_ids' => $manageableProjectIds],
@@ -573,7 +856,7 @@ class PermissionResolver
 
         return match ($scopeType) {
             'all' => true,
-            'own_unit' => $this->canAccessUnit($actor, $permissionName, $target->staffProfile?->unit),
+            'own_unit' => $this->canAccessUserThroughUnitMembership($actor, $permissionName, $target),
             'self' => $actor->id === $target->id,
             'none' => false,
             default => false,
@@ -596,15 +879,31 @@ class PermissionResolver
         }
 
         if ($scopeType === 'own_unit') {
-            $unit = $this->normalizeUnit(($scope['scope_payload'] ?? [])['unit'] ?? null);
-            if ($unit === null) {
+            $unitIds = $this->coordinationUnitIdsForPermission($actor, $permissionName);
+            $unit = $this->normalizeUnit($this->unitNameForPermission($actor, $permissionName));
+            if ($unitIds === [] && $unit === null) {
                 $query->whereRaw('1 = 0');
 
                 return;
             }
 
-            $query->whereHas('staffProfile', function ($builder) use ($unit) {
-                $builder->whereRaw('LOWER(TRIM(unit)) = ?', [$unit]);
+            $query->where(function ($builder) use ($unitIds, $unit) {
+                if ($unitIds !== []) {
+                    $builder->whereHas('coordinationUnitMemberships', fn ($membershipQuery) => $membershipQuery
+                        ->active()
+                        ->whereIn('unit_id', $unitIds)
+                        ->whereHas('unit', fn ($unitQuery) => $unitQuery->where('status', 'active')));
+                }
+
+                if ($unit !== null) {
+                    $method = $unitIds === [] ? 'where' : 'orWhere';
+                    $builder->{$method}(function ($legacyQuery) use ($unit) {
+                        $legacyQuery
+                            ->whereDoesntHave('coordinationUnitMemberships', fn ($membershipQuery) => $membershipQuery->active())
+                            ->whereHas('staffProfile', fn ($profileQuery) => $profileQuery
+                                ->whereRaw('LOWER(TRIM(unit)) = ?', [$unit]));
+                    });
+                }
             });
 
             return;
@@ -619,12 +918,31 @@ class PermissionResolver
         $query->whereRaw('1 = 0');
     }
 
+    private function canAccessUserThroughUnitMembership(User $actor, string $permissionName, User $target): bool
+    {
+        $unitIds = $this->coordinationUnitIdsForPermission($actor, $permissionName);
+        $targetUnitIds = $target->coordinationUnitMemberships()
+            ->active()
+            ->whereHas('unit', fn ($query) => $query->where('status', 'active'))
+            ->pluck('unit_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($targetUnitIds !== []) {
+            return array_intersect($unitIds, $targetUnitIds) !== [];
+        }
+
+        $target->loadMissing('staffProfile');
+
+        return $this->canAccessUnit($actor, $permissionName, $target->staffProfile?->unit);
+    }
+
     /**
      * canAccessProject: birim / diger proje-disi scope tipleri burada false doner; yalnizca beklenmeyen scope_type loglanir.
      */
     private function denyProjectScopeWithOptionalLog(string $permissionName, string $scopeType, ?int $projectId): bool
     {
-        $knownNonProject = ['own_unit'];
+        $knownNonProject = ['own_unit', 'own_record'];
 
         if ($scopeType !== '' && ! in_array($scopeType, $knownNonProject, true)) {
             Log::debug('permission_resolver.unhandled_project_scope', [
@@ -639,7 +957,7 @@ class PermissionResolver
 
     private function denyUnitScopeWithOptionalLog(string $permissionName, string $scopeType, ?string $unit): bool
     {
-        $knownNonUnit = ['own_projects', 'assigned_projects', 'selected_projects', 'self'];
+        $knownNonUnit = ['own_projects', 'assigned_projects', 'selected_projects', 'own_record', 'self'];
 
         if ($scopeType !== '' && ! in_array($scopeType, $knownNonUnit, true)) {
             Log::debug('permission_resolver.unhandled_unit_scope', [
@@ -650,6 +968,58 @@ class PermissionResolver
         }
 
         return false;
+    }
+
+    private function scopeMatchesUnit(array $scopePayload, ?string $unit): bool
+    {
+        $normalizedTarget = $this->normalizeUnit($unit);
+        if ($normalizedTarget === null) {
+            return false;
+        }
+
+        return collect([
+            $scopePayload['unit'] ?? null,
+            ...($scopePayload['units'] ?? []),
+            ...($scopePayload['unit_codes'] ?? []),
+        ])->contains(fn ($candidate) => $this->normalizeUnit($candidate) === $normalizedTarget);
+    }
+
+    private function coordinationAuthorizationMode(): string
+    {
+        $mode = strtolower((string) config('coordination_authorization.mode', 'legacy'));
+
+        return in_array($mode, ['legacy', 'shadow', 'pilot', 'enforce'], true) ? $mode : 'legacy';
+    }
+
+    private function isPilotUser(User $user): bool
+    {
+        return collect(config('coordination_authorization.pilot_user_ids', []))
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->contains((int) $user->id);
+    }
+
+    private function coordinationAuthorizationDiff(array $legacy, array $unit): array
+    {
+        $legacyPermissions = collect($legacy['effective_permissions'] ?? [])->map(fn ($item) => (string) $item);
+        $unitPermissions = collect($unit['effective_permissions'] ?? [])->map(fn ($item) => (string) $item);
+        $legacyOnly = $legacyPermissions->diff($unitPermissions)->sort()->values()->all();
+        $unitOnly = $unitPermissions->diff($legacyPermissions)->sort()->values()->all();
+        $commonPermissions = $legacyPermissions->intersect($unitPermissions)->unique();
+        $scopeDifferences = $commonPermissions
+            ->filter(function (string $permission) use ($legacy, $unit) {
+                return ($legacy['scopes'][$permission] ?? null) !== ($unit['scopes'][$permission] ?? null);
+            })
+            ->sort()
+            ->values()
+            ->all();
+
+        return [
+            'has_difference' => $legacyOnly !== [] || $unitOnly !== [] || $scopeDifferences !== [],
+            'legacy_only_permissions' => $legacyOnly,
+            'unit_only_permissions' => $unitOnly,
+            'scope_differences' => $scopeDifferences,
+        ];
     }
 
     private function normalizeUnit(mixed $unit): ?string

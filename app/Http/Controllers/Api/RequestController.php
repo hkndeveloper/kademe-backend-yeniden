@@ -6,12 +6,15 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RequestResource;
+use App\Models\CoordinationUnit;
+use App\Models\CoordinationUnitMembership;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\Request as WorkflowRequest;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Services\PermissionResolver;
+use App\Services\WorkflowStatusHistoryRecorder;
 use App\Support\AdminExportResponder;
 use App\Support\MediaStorage;
 use Illuminate\Http\JsonResponse;
@@ -28,7 +31,8 @@ class RequestController extends Controller
     use ResolvesProjectPeriodContext;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly WorkflowStatusHistoryRecorder $statusHistoryRecorder,
     ) {}
 
     private const REQUEST_TYPES = [
@@ -80,8 +84,7 @@ class RequestController extends Controller
         array &$validated,
         string $permission,
         bool $forWrite = false,
-    ): ?int
-    {
+    ): ?int {
         if (empty($validated['period_id'])) {
             return null;
         }
@@ -138,6 +141,15 @@ class RequestController extends Controller
 
     private function canAccessRequestUnit(User $user, string $permission, WorkflowRequest $workflowRequest): bool
     {
+        if ($workflowRequest->target_unit_id !== null) {
+            return $this->permissionResolver->canAccessCoordinationUnit(
+                $user,
+                $permission,
+                (int) $workflowRequest->target_unit_id
+            );
+        }
+
+        // Metin tabanli birim eslesmesi yalniz FK'si olmayan legacy kayitlarda kullanilir.
         return $this->permissionResolver->canAccessTargetUnit($user, $permission, $workflowRequest->target_unit);
     }
 
@@ -147,8 +159,13 @@ class RequestController extends Controller
             return false;
         }
 
-        if ($this->permissionResolver->hasGlobalScope($user, $permission) || $workflowRequest->target_user_id === $user->id) {
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
             return true;
+        }
+
+        if ((int) $workflowRequest->target_user_id === (int) $user->id) {
+            return $workflowRequest->target_unit_id === null
+                || $this->canAccessRequestUnit($user, $permission, $workflowRequest);
         }
 
         if ($this->canAccessRequestUnit($user, $permission, $workflowRequest)) {
@@ -158,20 +175,120 @@ class RequestController extends Controller
         return $this->canAccessRequestProject($user, $permission, $workflowRequest->project_id);
     }
 
+    private function canRespondToRequest(User $user, WorkflowRequest $workflowRequest, string $permission): bool
+    {
+        if (! $this->permissionResolver->hasPermission($user, $permission)) {
+            return false;
+        }
+
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
+            return true;
+        }
+
+        if ($workflowRequest->target_user_id !== null) {
+            if ((int) $workflowRequest->target_user_id !== (int) $user->id) {
+                return false;
+            }
+
+            return $workflowRequest->target_unit_id === null
+                || $this->canAccessRequestUnit($user, $permission, $workflowRequest);
+        }
+
+        // Hedef kisi icermeyen eski kayitlar, gecis tamamlanana kadar eski record policy ile yonetilebilir.
+        return $this->canManageRequest($user, $workflowRequest, $permission);
+    }
+
+    private function decorateRequestCapabilities(WorkflowRequest $workflowRequest, User $user): WorkflowRequest
+    {
+        $workflowRequest->setAttribute(
+            'can_update_status',
+            $this->canRespondToRequest($user, $workflowRequest, 'requests.update_status')
+        );
+        $workflowRequest->setAttribute(
+            'can_upload_response',
+            $this->canRespondToRequest($user, $workflowRequest, 'requests.upload_response')
+        );
+
+        return $workflowRequest;
+    }
+
+    private function targetCoordinationUnits(): array
+    {
+        return CoordinationUnit::query()
+            ->active()
+            ->whereHas('memberships', function ($query) {
+                $query->active()
+                    ->whereHas('user', fn ($userQuery) => $userQuery
+                        ->where('status', 'active')
+                        ->whereIn('role', ['coordinator', 'staff']));
+            })
+            ->with([
+                'memberships' => fn ($query) => $query
+                    ->active()
+                    ->whereHas('user', fn ($userQuery) => $userQuery
+                        ->where('status', 'active')
+                        ->whereIn('role', ['coordinator', 'staff']))
+                    ->with('user:id,name,surname,role,status')
+                    ->orderByRaw("CASE WHEN position = 'coordinator' THEN 0 ELSE 1 END")
+                    ->orderBy('id'),
+                'project:id,name',
+            ])
+            ->orderBy('kind')
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'kind', 'project_id'])
+            ->map(fn (CoordinationUnit $unit) => [
+                'id' => (int) $unit->id,
+                'code' => $unit->code,
+                'name' => $unit->name,
+                'kind' => $unit->kind,
+                'project_id' => $unit->project_id === null ? null : (int) $unit->project_id,
+                'project_name' => $unit->project?->name,
+                'members' => $unit->memberships
+                    ->map(fn (CoordinationUnitMembership $membership) => [
+                        'membership_id' => (int) $membership->id,
+                        'user_id' => (int) $membership->user_id,
+                        'name' => $membership->user?->name,
+                        'surname' => $membership->user?->surname,
+                        'role' => $membership->user?->role,
+                        'position' => $membership->position,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
     private function requestVisibilityFilter($builder, User $user, string $permission): void
     {
         $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, $permission);
 
+        $unitIds = $this->permissionResolver->coordinationUnitIdsForPermission($user, $permission);
+
         $builder->where('requester_id', $user->id)
-            ->orWhere('target_user_id', $user->id);
+            ->orWhere(function ($targetQuery) use ($user, $unitIds) {
+                $targetQuery->where('target_user_id', $user->id)
+                    ->where(function ($unitQuery) use ($unitIds) {
+                        $unitQuery->whereNull('target_unit_id');
+                        if ($unitIds !== []) {
+                            $unitQuery->orWhereIn('target_unit_id', $unitIds);
+                        }
+                    });
+            });
 
         if (! empty($manageableProjectIds)) {
             $builder->orWhereIn('project_id', $manageableProjectIds);
         }
 
-        $targetUnits = $this->permissionResolver->targetUnitsForUser($user, self::TARGET_UNITS);
+        $targetUnits = $this->permissionResolver->targetUnitsForUser($user, self::TARGET_UNITS, $permission);
         if (! empty($targetUnits)) {
-            $builder->orWhereIn('target_unit', $targetUnits);
+            $builder->orWhere(function ($legacyQuery) use ($targetUnits) {
+                $legacyQuery->whereNull('target_unit_id')->whereIn('target_unit', $targetUnits);
+            });
+        }
+
+        if ($unitIds !== []) {
+            $builder->orWhereIn('target_unit_id', $unitIds);
         }
     }
 
@@ -195,7 +312,7 @@ class RequestController extends Controller
                     return true;
                 }
 
-                return $this->permissionResolver->canAccessTargetUnit($user, 'requests.view', $workflowRequest->target_unit);
+                return $this->canAccessRequestUnit($user, 'requests.view', $workflowRequest);
             })
             ->pluck('id')
             ->push($workflowRequest->target_user_id)
@@ -300,6 +417,7 @@ class RequestController extends Controller
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
                 'period:id,name,status,start_date,end_date',
+                'targetUnit:id,code,name,kind,project_id',
             ])
             ->orderByDesc('created_at');
 
@@ -326,6 +444,7 @@ class RequestController extends Controller
         }
 
         $requests = $query->get();
+        $requests->each(fn (WorkflowRequest $workflowRequest) => $this->decorateRequestCapabilities($workflowRequest, $user));
 
         $projectScopeIds = collect([
             ...$this->permissionResolver->projectIdsForPermission($user, 'requests.view'),
@@ -361,12 +480,15 @@ class RequestController extends Controller
             ->orderBy('name');
 
         if (! $this->permissionResolver->hasGlobalScope($user, 'requests.create')) {
-            $unit = $user->staffProfile?->unit;
-            $targetUserQuery->where(function ($builder) use ($unit) {
+            $unitIds = $this->permissionResolver->coordinationUnitIdsForPermission($user, 'requests.create');
+            $targetUserQuery->where(function ($builder) use ($unitIds) {
                 $builder->where('role', 'super_admin');
 
-                if ($unit) {
-                    $builder->orWhereHas('staffProfile', fn ($q) => $q->where('unit', $unit));
+                if ($unitIds !== []) {
+                    $builder->orWhereHas('coordinationUnitMemberships', fn ($query) => $query
+                        ->active()
+                        ->whereIn('unit_id', $unitIds)
+                        ->whereHas('unit', fn ($unitQuery) => $unitQuery->where('status', 'active')));
                 }
             });
         }
@@ -388,6 +510,7 @@ class RequestController extends Controller
             'request_types' => self::REQUEST_TYPES,
             'status_options' => self::STATUS_OPTIONS,
             'target_units' => self::TARGET_UNITS,
+            'coordination_units' => $this->targetCoordinationUnits(),
         ]);
     }
 
@@ -506,13 +629,14 @@ class RequestController extends Controller
             'type' => 'required|in:'.implode(',', self::REQUEST_TYPES),
             'target_unit' => 'nullable|in:'.implode(',', self::TARGET_UNITS),
             'target_user_id' => 'nullable|exists:users,id',
+            'target_unit_id' => 'nullable|integer|exists:coordination_units,id',
             'description' => 'required|string|min:10|max:3000',
             'project_id' => 'nullable|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
         ]);
         $periodId = $this->resolveWorkflowRequestPeriod($request, $validated, 'requests.create', true);
 
-        if (empty($validated['target_unit']) && empty($validated['target_user_id'])) {
+        if (empty($validated['target_unit']) && empty($validated['target_user_id']) && empty($validated['target_unit_id'])) {
             return response()->json([
                 'message' => 'Talep icin hedef birim veya hedef kisi secmelisin.',
             ], 422);
@@ -531,6 +655,45 @@ class RequestController extends Controller
             $validated['target_unit'] = 'official_affairs';
         }
 
+        $targetMembership = null;
+        $targetCoordinationUnit = null;
+        if (! empty($validated['target_unit_id'])) {
+            $targetCoordinationUnit = CoordinationUnit::query()
+                ->active()
+                ->findOrFail((int) $validated['target_unit_id']);
+
+            if (empty($validated['target_user_id'])) {
+                throw ValidationException::withMessages([
+                    'target_user_id' => ['Hedef koordinatörlük seçildiğinde o birimden hedef kişi seçilmelidir.'],
+                ]);
+            }
+
+            $targetMembership = CoordinationUnitMembership::query()
+                ->active()
+                ->where('unit_id', $targetCoordinationUnit->id)
+                ->where('user_id', (int) $validated['target_user_id'])
+                ->whereIn('position', [CoordinationUnitMembership::POSITION_COORDINATOR, CoordinationUnitMembership::POSITION_STAFF])
+                ->whereHas('user', fn ($query) => $query
+                    ->where('status', 'active')
+                    ->whereIn('role', ['coordinator', 'staff']))
+                ->first();
+
+            if (! $targetMembership) {
+                throw ValidationException::withMessages([
+                    'target_user_id' => ['Seçilen kişi hedef koordinatörlüğün aktif koordinatör veya personeli değildir.'],
+                ]);
+            }
+
+            if ((int) $validated['target_user_id'] === (int) $request->user()->id) {
+                throw ValidationException::withMessages([
+                    'target_user_id' => ['Kendinize talep gönderemezsiniz.'],
+                ]);
+            }
+
+            // Yeni kayitlarda legacy alan okunabilir bir yedek olarak korunur.
+            $validated['target_unit'] = $targetCoordinationUnit->code;
+        }
+
         if (! empty($validated['project_id'])) {
             abort_unless(
                 $this->canAccessRequestProject($request->user(), 'requests.create', (int) $validated['project_id']),
@@ -539,19 +702,30 @@ class RequestController extends Controller
             );
         }
 
-        if (! empty($validated['target_user_id']) && ! $this->permissionResolver->hasGlobalScope($request->user(), 'requests.create')) {
+        if (! empty($validated['target_user_id']) && empty($validated['target_unit_id']) && ! $this->permissionResolver->hasGlobalScope($request->user(), 'requests.create')) {
             $targetUser = User::query()->with('staffProfile')->findOrFail((int) $validated['target_user_id']);
-            $actorUnit = $request->user()->staffProfile?->unit;
-            $sameUnit = $actorUnit && $targetUser->staffProfile?->unit === $actorUnit;
+            if ($targetUser->role !== 'super_admin' && $this->permissionResolver->coordinationUnitsAreAuthoritative($request->user())) {
+                throw ValidationException::withMessages([
+                    'target_unit_id' => ['Hedef kişi için koordinatörlük seçilmelidir.'],
+                ]);
+            }
 
-            abort_unless($targetUser->role === 'super_admin' || $sameUnit, 403, 'Bu kisiye talep gonderme yetkiniz bulunmuyor.');
+            $actorUnit = $request->user()->staffProfile?->unit;
+            $sameLegacyUnit = $actorUnit && $targetUser->staffProfile?->unit === $actorUnit;
+            abort_unless(
+                $targetUser->role === 'super_admin' || $sameLegacyUnit,
+                403,
+                'Bu kisiye talep gonderme yetkiniz bulunmuyor.'
+            );
         }
 
         $workflowRequest = WorkflowRequest::create([
             'requester_id' => $request->user()->id,
             'type' => $validated['type'],
             'target_unit' => $validated['target_unit'] ?? null,
+            'target_unit_id' => $targetCoordinationUnit?->id,
             'target_user_id' => $validated['target_user_id'] ?? null,
+            'target_membership_id' => $targetMembership?->id,
             'description' => $validated['description'],
             'status' => 'pending',
             'project_id' => $validated['project_id'] ?? null,
@@ -561,7 +735,10 @@ class RequestController extends Controller
             'targetUser:id,name,surname,role',
             'project:id,name,slug,type',
             'period:id,name,status,start_date,end_date',
+            'targetUnit:id,code,name,kind,project_id',
         ]);
+
+        $this->decorateRequestCapabilities($workflowRequest, $request->user());
 
         $this->notifyRequestTargets($workflowRequest);
 
@@ -604,7 +781,7 @@ class RequestController extends Controller
             ])
             ->findOrFail($id);
 
-        if (! $this->canManageRequest($request->user(), $workflowRequest, 'requests.update_status')) {
+        if (! $this->canRespondToRequest($request->user(), $workflowRequest, 'requests.update_status')) {
             return response()->json([
                 'message' => 'Bu talebin durumunu guncelleme yetkin yok.',
             ], 403);
@@ -617,6 +794,14 @@ class RequestController extends Controller
         $workflowRequest->update([
             'status' => $validated['status'],
         ]);
+        $this->statusHistoryRecorder->record(
+            $workflowRequest,
+            $before['status'],
+            $validated['status'],
+            $request->user()->id,
+            $workflowRequest->target_unit_id,
+            ['action' => 'requests.update_status']
+        );
         $request->attributes->set('audit.subject', $workflowRequest);
         $request->attributes->set('audit.event', 'requests.status.updated');
         $request->attributes->set('audit.description', 'requests.status.updated');
@@ -629,12 +814,13 @@ class RequestController extends Controller
 
         return response()->json([
             'message' => 'Talep durumu guncellendi.',
-            'request_item' => new RequestResource($workflowRequest->fresh([
+            'request_item' => new RequestResource($this->decorateRequestCapabilities($workflowRequest->fresh([
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
                 'period:id,name,status,start_date,end_date',
-            ])),
+                'targetUnit:id,code,name,kind,project_id',
+            ]), $request->user())),
         ]);
     }
 
@@ -671,7 +857,7 @@ class RequestController extends Controller
             ])
             ->findOrFail($id);
 
-        if (! $this->canManageRequest($request->user(), $workflowRequest, 'requests.upload_response')) {
+        if (! $this->canRespondToRequest($request->user(), $workflowRequest, 'requests.upload_response')) {
             return response()->json([
                 'message' => 'Bu talebe dosya yukleme yetkin yok.',
             ], 403);
@@ -686,6 +872,14 @@ class RequestController extends Controller
             'response_file_path' => $path,
             'status' => 'completed',
         ]);
+        $this->statusHistoryRecorder->record(
+            $workflowRequest,
+            $oldStatus,
+            'completed',
+            $request->user()->id,
+            $workflowRequest->target_unit_id,
+            ['action' => 'requests.upload_response']
+        );
 
         if ($oldPath && $oldPath !== $path) {
             MediaStorage::delete($oldPath);
@@ -706,12 +900,13 @@ class RequestController extends Controller
 
         return response()->json([
             'message' => 'Dosya basariyla yuklendi ve talep tamamlandi.',
-            'request_item' => new RequestResource($workflowRequest->fresh([
+            'request_item' => new RequestResource($this->decorateRequestCapabilities($workflowRequest->fresh([
                 'requester:id,name,surname,role',
                 'targetUser:id,name,surname,role',
                 'project:id,name,slug,type',
                 'period:id,name,status,start_date,end_date',
-            ])),
+                'targetUnit:id,code,name,kind,project_id',
+            ]), $request->user())),
         ]);
     }
 

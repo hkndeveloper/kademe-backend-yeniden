@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Services\PeriodLifecycleService;
 use App\Support\MediaStorage;
+use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -168,6 +169,9 @@ class ProjectResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'type' => $this->type,
+            'special_modules' => $this->special_modules,
+            'applicable_special_modules' => ProjectSpecialModuleCatalog::forProject($this->resource),
+            'special_modules_inherited' => $this->special_modules === null,
             'short_description' => $this->short_description,
             'cover_image' => $this->mediaUrl($this->cover_image_path),
             'status' => $this->status,

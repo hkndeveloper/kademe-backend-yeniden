@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\RolePermissionScope;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
+use App\Support\PanelModuleCatalog;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -47,11 +48,21 @@ class PanelModuleCatalogTest extends TestCase
 
         $response = $this->getJson('/api/panel/modules')->assertOk();
         $periods = collect($response->json('modules'))->firstWhere('id', 'periods');
+        $profile = collect($response->json('modules'))->firstWhere('id', 'profile');
 
         $this->assertNotNull($periods);
         $this->assertSame('authority', $periods['panel_type']);
+        $this->assertSame(['periods.view'], $periods['entry_permissions']);
+        $this->assertSame($periods['entry_permissions'], $periods['view_permissions']);
+        $this->assertSame('organization', $periods['context_mode']);
+        $this->assertSame('standard', $periods['navigation_mode']);
+        $this->assertSame(['all'], $periods['scope_modes']);
         $this->assertContains('periods.view', $periods['enabled_actions']);
         $this->assertSame('all', $periods['scopes']['periods.view']['scope_type']);
+        $this->assertNotNull($profile);
+        $this->assertTrue($profile['always_visible']);
+        $this->assertSame('self_service', $profile['context_mode']);
+        $this->assertSame([], $profile['entry_permissions']);
     }
 
     public function test_permission_without_usable_scope_does_not_expose_module(): void
@@ -73,6 +84,30 @@ class PanelModuleCatalogTest extends TestCase
         $this->assertFalse(
             collect($response->json('modules'))->contains(fn (array $module) => $module['id'] === 'periods')
         );
+    }
+
+    public function test_action_without_entry_permission_does_not_expose_module(): void
+    {
+        Permission::findOrCreate('periods.create', 'web');
+        $role = Role::findOrCreate('period_action_only', 'web');
+        $role->givePermissionTo('periods.create');
+        RolePermissionScope::query()->create([
+            'role_name' => $role->name,
+            'permission_name' => 'periods.create',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ]);
+        $user = User::factory()->create([
+            'role' => 'visitor',
+            'surname' => 'ActionOnly',
+            'email' => 'period-action-only@test.local',
+        ]);
+        $user->assignRole($role);
+        Sanctum::actingAs($user);
+
+        $modules = collect($this->getJson('/api/panel/modules')->assertOk()->json('modules'));
+
+        $this->assertFalse($modules->contains(fn (array $module) => $module['id'] === 'periods'));
     }
 
     public function test_operational_view_permission_exposes_dashboard_module_without_dashboard_specific_permission(): void
@@ -184,6 +219,46 @@ class PanelModuleCatalogTest extends TestCase
         $this->assertContains('participant.programs.view', $programs['enabled_actions']);
         $this->assertSame('self', $programs['scopes']['participant.programs.view']['scope_type']);
     }
+
+    public function test_staff_and_unit_members_navigation_is_decided_by_manifest_scope(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Staff Scope Project',
+            'slug' => 'staff-scope-project',
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        Permission::findOrCreate('staff.view', 'web');
+
+        $globalRole = Role::findOrCreate('global_staff_viewer', 'web');
+        $globalRole->givePermissionTo('staff.view');
+        RolePermissionScope::query()->create([
+            'role_name' => $globalRole->name,
+            'permission_name' => 'staff.view',
+            'scope_type' => 'all',
+            'scope_payload' => [],
+        ]);
+        $globalUser = User::factory()->create(['role' => 'visitor', 'surname' => 'GlobalStaff']);
+        $globalUser->assignRole($globalRole);
+        $globalModules = collect(app(PanelModuleCatalog::class)->visibleFor($globalUser)['modules']);
+        $this->assertNotNull($globalModules->firstWhere('id', 'staff'));
+        $this->assertNull($globalModules->firstWhere('id', 'members'));
+
+        $unitRole = Role::findOrCreate('unit_staff_viewer', 'web');
+        $unitRole->givePermissionTo('staff.view');
+        RolePermissionScope::query()->create([
+            'role_name' => $unitRole->name,
+            'permission_name' => 'staff.view',
+            'scope_type' => 'selected_projects',
+            'scope_payload' => ['project_ids' => [$project->id]],
+        ]);
+        $unitUser = User::factory()->create(['role' => 'visitor', 'surname' => 'UnitStaff']);
+        $unitUser->assignRole($unitRole);
+        $unitModules = collect(app(PanelModuleCatalog::class)->visibleFor($unitUser)['modules']);
+        $this->assertNull($unitModules->firstWhere('id', 'staff'));
+        $this->assertNotNull($unitModules->firstWhere('id', 'members'));
+    }
+
     public function test_project_family_module_is_visible_only_when_scope_matches_required_project_type(): void
     {
         $project = Project::query()->create([
@@ -289,6 +364,18 @@ class PanelModuleCatalogTest extends TestCase
 
         foreach (['diplomasi360', 'pergel', 'eurodesk', 'kademe_plus', 'zirve_kademe', 'kpd'] as $moduleId) {
             $this->assertSame('project_special_modules', $modules->get($moduleId)['section'] ?? null, $moduleId);
+        }
+    }
+
+    public function test_config_exports_only_the_canonical_entry_permission_contract(): void
+    {
+        $modules = collect(config('panel_modules.modules'));
+
+        $this->assertNotEmpty($modules);
+        foreach ($modules as $module) {
+            $this->assertArrayHasKey('entry_permissions', $module, $module['id'] ?? 'unknown');
+            $this->assertArrayNotHasKey('view_permissions', $module, $module['id'] ?? 'unknown');
+            $this->assertArrayHasKey('context_mode', $module, $module['id'] ?? 'unknown');
         }
     }
 }

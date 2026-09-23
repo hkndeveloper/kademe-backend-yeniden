@@ -4,14 +4,18 @@ namespace App\Policies;
 
 use App\Models\Project;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
+use App\Services\PermissionResolver;
 
 class ProjectPolicy
 {
+    public function __construct(
+        private readonly PermissionResolver $permissionResolver
+    ) {}
+
     /**
      * Tüm kurallardan önce çalışır (Super Admin her şeye yetkilidir)
      */
-    public function before(User $user, string $ability): bool|null
+    public function before(User $user, string $ability): ?bool
     {
         if ($user->hasRole('super_admin')) {
             return true;
@@ -33,7 +37,11 @@ class ProjectPolicy
      */
     public function update(User $user, Project $project): bool
     {
-        return $user->hasRole('coordinator') && $project->coordinators()->where('user_id', $user->id)->exists();
+        return $this->permissionResolver->canAccessProject(
+            $user,
+            'projects.application_form.update',
+            $project->id
+        );
     }
 
     /**

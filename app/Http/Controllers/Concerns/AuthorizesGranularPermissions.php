@@ -12,6 +12,20 @@ use Illuminate\Http\Request;
  */
 trait AuthorizesGranularPermissions
 {
+    protected function abortUnlessGloballyAllowed(Request $request, string $permission): void
+    {
+        $request->attributes->set('audit.permission_checked', $permission);
+        $request->attributes->set('audit.permission_scope', [
+            'scope_type' => 'all',
+        ]);
+
+        abort_unless(
+            $this->permissionResolver->hasGlobalScope($request->user(), $permission),
+            403,
+            'Bu islem icin tum sistem kapsami gerekir.'
+        );
+    }
+
     protected function abortUnlessAllowed(Request $request, string $permission): void
     {
         $request->attributes->set('audit.permission_checked', $permission);
@@ -54,7 +68,7 @@ trait AuthorizesGranularPermissions
     }
 
     /**
-     * Proje icerigi: proje yoksa yalnizca genel izin; varsa canAccessProject.
+     * Kayit bir projeye bagliysa proje scope'u, proje yoksa acik global scope gerekir.
      */
     protected function abortUnlessAllowedForProject(Request $request, string $permission, ?Project $project = null): void
     {
@@ -66,7 +80,7 @@ trait AuthorizesGranularPermissions
 
         $allowed = $project !== null
             ? $this->permissionResolver->canAccessProject($request->user(), $permission, $project->id)
-            : $this->permissionResolver->hasPermission($request->user(), $permission);
+            : $this->permissionResolver->hasGlobalScope($request->user(), $permission);
 
         abort_unless($allowed, 403, 'Bu islem icin yetkiniz bulunmuyor.');
     }
@@ -80,6 +94,7 @@ trait AuthorizesGranularPermissions
         foreach ($permissions as $permission) {
             if ($this->permissionResolver->hasPermission($user, $permission)) {
                 $request->attributes->set('audit.permission_checked', $permission);
+
                 return;
             }
         }

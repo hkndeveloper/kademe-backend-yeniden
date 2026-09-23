@@ -52,9 +52,7 @@ class InboxController extends Controller
     {
         return collect([
             ...$this->participantProjectIds((int) $user->id),
-            ...$this->permissionResolver->projectIdsForPermission($user, 'announcements.view'),
-            ...$this->permissionResolver->projectIdsForPermission($user, 'projects.participants.view'),
-            ...$this->permissionResolver->projectIdsForPermission($user, 'projects.view'),
+            ...$this->permissionResolver->projectIdsForPermission($user, 'inbox.view'),
         ])
             ->filter(fn ($id) => is_numeric($id))
             ->map(fn ($id) => (int) $id)
@@ -63,23 +61,36 @@ class InboxController extends Controller
             ->all();
     }
 
-    private function userHasPanelAnnouncementView(User $user): bool
+    private function userHasAuthorityInboxView(User $user): bool
     {
-        return $this->permissionResolver->hasPermission($user, 'announcements.view');
+        return $this->permissionResolver->hasPermission($user, 'inbox.view');
+    }
+
+    private function authorizeInboxRoute(Request $request): void
+    {
+        if ($request->is('api/panel/*', 'api/admin/*')) {
+            abort_unless($this->userHasAuthorityInboxView($request->user()), 403, 'Mesaj kutusunu goruntuleme yetkiniz bulunmuyor.');
+        }
     }
 
     private function announcementVisibleToUser(User $user, Announcement $announcement): bool
     {
-        if ($this->userHasPanelAnnouncementView($user)) {
-            if ($this->permissionResolver->hasGlobalScope($user, 'announcements.view')) {
+        if ($this->userHasAuthorityInboxView($user)) {
+            $timeAllowed = ($announcement->published_at === null || $announcement->published_at->lte(now()))
+                && ($announcement->expires_at === null || $announcement->expires_at->gte(now()));
+            if (! $timeAllowed) {
+                return false;
+            }
+
+            if ($this->permissionResolver->hasGlobalScope($user, 'inbox.view')) {
                 return true;
             }
 
             if ($announcement->project_id !== null) {
-                return in_array((int) $announcement->project_id, $this->permissionResolver->projectIdsForPermission($user, 'announcements.view'), true);
+                return in_array((int) $announcement->project_id, $this->permissionResolver->projectIdsForPermission($user, 'inbox.view'), true);
             }
 
-            return (int) $announcement->created_by === (int) $user->id;
+            return true;
         }
 
         $projectIds = $this->participantProjectIds((int) $user->id);
@@ -96,16 +107,22 @@ class InboxController extends Controller
 
     private function opportunityVisibleToUser(User $user, AlumniOpportunity $opportunity): bool
     {
-        if ($this->userHasPanelAnnouncementView($user)) {
-            if ($this->permissionResolver->hasGlobalScope($user, 'announcements.view')) {
+        if ($this->userHasAuthorityInboxView($user)) {
+            $timeAllowed = ($opportunity->published_at === null || $opportunity->published_at->lte(now()))
+                && ($opportunity->expires_at === null || $opportunity->expires_at->gte(now()));
+            if (! $timeAllowed) {
+                return false;
+            }
+
+            if ($this->permissionResolver->hasGlobalScope($user, 'inbox.view')) {
                 return true;
             }
 
             if ($opportunity->project_id !== null) {
-                return in_array((int) $opportunity->project_id, $this->permissionResolver->projectIdsForPermission($user, 'announcements.view'), true);
+                return in_array((int) $opportunity->project_id, $this->permissionResolver->projectIdsForPermission($user, 'inbox.view'), true);
             }
 
-            return (int) $opportunity->created_by === (int) $user->id;
+            return true;
         }
 
         $projectIds = $this->participantProjectIds((int) $user->id);
@@ -126,12 +143,13 @@ class InboxController extends Controller
             return false;
         }
 
-        if ($post->period_id === null || $this->userHasPanelAnnouncementView($user)) {
+        if ($post->period_id === null || $this->userHasAuthorityInboxView($user)) {
             return true;
         }
 
         return in_array((int) $post->period_id, $this->participantPeriodIds((int) $user->id), true);
     }
+
     /** @param string[] $keys */
     private function normalizeBooleanQueryParameters(Request $request, array $keys): void
     {
@@ -145,6 +163,7 @@ class InboxController extends Controller
             $value = $request->query($key);
             if (is_bool($value)) {
                 $normalized[$key] = $value;
+
                 continue;
             }
 
@@ -171,10 +190,12 @@ class InboxController extends Controller
     /**
      * List unified inbox messages.
      *
-     * Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes can also surface records for users with `announcements.view` project/global scope. Project filters must be inside the merged participant/project permission scope.
+     * Combines announcements, alumni opportunities and forum posts visible to the current user. Participant routes require `participant.inbox.view`; panel routes require the separate authority `inbox.view` permission. Project filters must be inside the merged participant/project permission scope.
      *
      * @group Announcements & Inbox
+     *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam category string Optional category filter for announcements. Example: general
      * @queryParam from date Optional start date filter. Example: 2026-01-01
@@ -183,12 +204,13 @@ class InboxController extends Controller
      * @queryParam unread_only boolean Optional only unread messages. Example: true
      * @queryParam starred_only boolean Optional only starred messages. Example: false
      * @queryParam pinned_only boolean Optional only pinned messages. Example: false
+     *
      * @response 200 {"messages":[{"type":"announcement","source_id":1,"title":"Duyuru","content":"Metin","state":{"is_read":false,"is_starred":false,"is_pinned":false}}]}
      * @response 403 {"message":"Bu proje inbox filtresi icin yetkiniz yok."}
      */
-
     public function recipientMessages(Request $request): JsonResponse
     {
+        $this->authorizeInboxRoute($request);
         $this->normalizeBooleanQueryParameters($request, [
             'unread_only',
             'starred_only',
@@ -216,7 +238,7 @@ class InboxController extends Controller
         }
 
         $messages = collect();
-        $panelCanViewAnnouncements = $this->userHasPanelAnnouncementView($user);
+        $authorityInbox = $this->userHasAuthorityInboxView($user);
 
         if (($validated['type'] ?? null) === null || $validated['type'] === 'announcement') {
             $announcementQuery = Announcement::query()
@@ -245,27 +267,29 @@ class InboxController extends Controller
                 $announcementQuery->whereDate('published_at', '<=', $validated['to']);
             }
 
-            if (! $panelCanViewAnnouncements) {
+            if (! $authorityInbox) {
                 $announcementQuery->where(function ($q) use ($user) {
                     $q->whereNull('target_roles')
                         ->orWhereJsonLength('target_roles', 0)
                         ->orWhereJsonContains('target_roles', $user->role);
                 });
-            } elseif (! $this->permissionResolver->hasGlobalScope($user, 'announcements.view')) {
-                $allowedProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'announcements.view');
-                $announcementQuery->where(function ($q) use ($allowedProjectIds, $user) {
+            } elseif (! $this->permissionResolver->hasGlobalScope($user, 'inbox.view')) {
+                $allowedProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'inbox.view');
+                $announcementQuery->where(function ($q) use ($allowedProjectIds) {
                     $q->whereIn('project_id', $allowedProjectIds)
-                        ->orWhere('created_by', $user->id);
+                        ->orWhereNull('project_id');
                 });
             }
 
             $messages = $messages->concat(
-                $announcementQuery->get()->map(function (Announcement $item) {
+                $announcementQuery->get()->map(function (Announcement $item) use ($user) {
                     return [
                         'type' => 'announcement',
                         'source_label' => 'Duyuru',
                         'source_action_label' => 'Duyurular',
-                        'source_action_url' => '/panel/announcements',
+                        'source_action_url' => $this->permissionResolver->hasPermission($user, 'announcements.view')
+                            ? '/panel/announcements'
+                            : null,
                         'source_type' => Announcement::class,
                         'source_id' => $item->id,
                         'title' => $item->title,
@@ -303,27 +327,29 @@ class InboxController extends Controller
                 $opportunityQuery->whereDate('published_at', '<=', $validated['to']);
             }
 
-            if (! $panelCanViewAnnouncements) {
+            if (! $authorityInbox) {
                 $opportunityQuery->where(function ($q) use ($role) {
                     $q->whereNull('target_audience')
                         ->orWhereJsonLength('target_audience', 0)
                         ->orWhereJsonContains('target_audience', $role);
                 });
-            } elseif (! $this->permissionResolver->hasGlobalScope($user, 'announcements.view')) {
-                $allowedProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'announcements.view');
-                $opportunityQuery->where(function ($q) use ($allowedProjectIds, $user) {
+            } elseif (! $this->permissionResolver->hasGlobalScope($user, 'inbox.view')) {
+                $allowedProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'inbox.view');
+                $opportunityQuery->where(function ($q) use ($allowedProjectIds) {
                     $q->whereIn('project_id', $allowedProjectIds)
-                        ->orWhere('created_by', $user->id);
+                        ->orWhereNull('project_id');
                 });
             }
 
             $messages = $messages->concat(
-                $opportunityQuery->get()->map(function (AlumniOpportunity $item) {
+                $opportunityQuery->get()->map(function (AlumniOpportunity $item) use ($user) {
                     return [
                         'type' => 'opportunity',
                         'source_label' => 'Kariyer Firsati',
                         'source_action_label' => 'Kariyer Firsatlari',
-                        'source_action_url' => '/panel/alumni-opportunities',
+                        'source_action_url' => $this->permissionResolver->hasPermission($user, 'alumni_opportunities.view')
+                            ? '/panel/alumni-opportunities'
+                            : null,
                         'source_type' => AlumniOpportunity::class,
                         'source_id' => $item->id,
                         'title' => $item->title,
@@ -347,7 +373,7 @@ class InboxController extends Controller
                 ->whereIn('project_id', $projectFilter !== null ? [$projectFilter] : $projectIds)
                 ->where('user_id', '!=', $userId);
 
-            if (! $panelCanViewAnnouncements) {
+            if (! $authorityInbox) {
                 $forumQuery->where(function ($query) use ($participantPeriodIds) {
                     $query->whereNull('period_id');
                     if ($participantPeriodIds !== []) {
@@ -441,22 +467,25 @@ class InboxController extends Controller
     /**
      * Update unified inbox message state.
      *
-     * Updates read, starred and pinned state for a visible announcement, alumni opportunity or forum post. Visibility is rechecked server-side using participant project/period rules or panel `announcements.view` scope before creating/updating the state row.
+     * Updates read, starred and pinned state for a visible announcement, alumni opportunity or forum post. Visibility is rechecked server-side using participant project/period rules or panel `inbox.view` scope before creating/updating the state row.
      *
      * @group Announcements & Inbox
+     *
      * @authenticated
+     *
      * @bodyParam source_type string required Fully qualified source model class. Allowed: App\\Models\\Announcement, App\\Models\\AlumniOpportunity, App\\Models\\ForumPost. Example: App\\Models\\Announcement
      * @bodyParam source_id integer required Source record id. Example: 1
      * @bodyParam is_read boolean Optional read state. Example: true
      * @bodyParam is_starred boolean Optional starred state. Example: false
      * @bodyParam is_pinned boolean Optional pinned state. Example: true
+     *
      * @response 200 {"message":"Inbox durumu guncellendi.","state":{"source_type":"App\\Models\\Announcement","source_id":1,"is_read":true,"is_starred":false,"is_pinned":true}}
      * @response 403 {"message":"Bu mesaj kaydi icin islem yetkiniz bulunmuyor."}
      * @response 422 {"message":"Desteklenmeyen source_type."}
      */
-
     public function upsertState(Request $request): JsonResponse
     {
+        $this->authorizeInboxRoute($request);
         $validated = $request->validate([
             'source_type' => 'required|string|max:128',
             'source_id' => 'required|integer|min:1',

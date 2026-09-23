@@ -17,6 +17,7 @@ class Project extends Model
         'name',
         'slug',
         'type',
+        'special_modules',
         'description',
         'short_description',
         'cover_image_path',
@@ -33,6 +34,7 @@ class Project extends Model
 
     protected $casts = [
         'gallery_paths' => 'array',
+        'special_modules' => 'array',
         'application_start_at' => 'datetime',
         'application_end_at' => 'datetime',
         'next_application_date' => 'date',
@@ -53,6 +55,16 @@ class Project extends Model
     public function assignedStaff()
     {
         return $this->belongsToMany(User::class, 'project_staff_assignments');
+    }
+
+    public function coordinationUnit()
+    {
+        return $this->hasOne(CoordinationUnit::class);
+    }
+
+    public function coordinationUnitResponsibilities()
+    {
+        return $this->hasMany(CoordinationUnitProjectResponsibility::class);
     }
 
     public function periods()

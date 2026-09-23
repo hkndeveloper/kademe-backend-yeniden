@@ -22,9 +22,12 @@ class RolePermissionSeeder extends Seeder
             ->all();
         $defaultRolePermissions = config('permission_catalog.default_role_permissions', []);
         $legacyMap = config('permission_catalog.legacy_map', []);
+        $resetDefaults = (bool) config('permission_catalog.reset_default_role_permissions', false);
+        $bootstrapRoles = [];
 
         foreach ($roles as $roleName) {
-            Role::findOrCreate($roleName, 'web');
+            $role = Role::findOrCreate($roleName, 'web');
+            $bootstrapRoles[$roleName] = $role->wasRecentlyCreated;
         }
 
         foreach ($permissions as $permissionName) {
@@ -36,6 +39,11 @@ class RolePermissionSeeder extends Seeder
 
             if ($assignedPermissions === '*') {
                 $role->syncPermissions(Permission::query()->pluck('name')->all());
+
+                continue;
+            }
+
+            if (! $resetDefaults && ! ($bootstrapRoles[$roleName] ?? false)) {
                 continue;
             }
 

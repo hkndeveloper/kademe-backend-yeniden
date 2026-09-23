@@ -29,4 +29,31 @@ class ProjectSpecialModuleCatalogTest extends TestCase
 
         $this->assertSame(['digital_bohca', 'internships', 'uploaded_files'], $keys);
     }
+
+    public function test_explicit_metadata_overrides_type_defaults_and_empty_list_disables_special_modules(): void
+    {
+        $custom = new Project([
+            'type' => 'diplomasi360',
+            'name' => 'Custom',
+            'slug' => 'custom',
+            'special_modules' => ['digital_bohca', 'assignments', 'unknown'],
+        ]);
+        $disabled = new Project([
+            'type' => 'pergel_fellowship',
+            'name' => 'Disabled',
+            'slug' => 'disabled',
+            'special_modules' => [],
+        ]);
+
+        $this->assertSame(['digital_bohca', 'assignments'], ProjectSpecialModuleCatalog::forProject($custom));
+        $this->assertSame([], ProjectSpecialModuleCatalog::forProject($disabled));
+    }
+
+    public function test_unknown_other_project_does_not_inherit_every_project_family(): void
+    {
+        $this->assertSame(
+            ['digital_bohca'],
+            ProjectSpecialModuleCatalog::moduleKeys('other', 'Yeni Proje', 'yeni-proje')
+        );
+    }
 }

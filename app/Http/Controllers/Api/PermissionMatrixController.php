@@ -4,19 +4,24 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Controller;
+use App\Models\CoordinationUnitMembership;
+use App\Models\CoordinationUnitMembershipPermissionOverride;
 use App\Models\RolePermissionScope;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
 use App\Services\PermissionResolver;
+use App\Support\AuthorizationManagementCatalog;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
-use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 /**
  * @group Permissions Matrix
@@ -37,8 +42,7 @@ class PermissionMatrixController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     /**
      * Get the permissions matrix workspace.
@@ -46,10 +50,10 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.matrix.view` with global `all` scope. Ensures default roles/permissions exist, then returns legacy and granular permission catalogs, effective role permissions, supported scope options, default role scopes, role compatibility maps and stored role permission scopes.
      *
      * @group Permissions Matrix
+     *
      * @response 200 {"roles":[{"id":1,"name":"coordinator","label":"Koordinator","user_count":4,"permissions":["projects.view"],"granular_effective":["projects.view"]}],"granular_matrix_groups":{"Projects":[{"name":"projects.view","label":"projects.view","group":"Projects"}]},"supported_scope_options":{"projects.view":["all","own_projects","assigned_projects","selected_projects","none"]},"role_scope_storage_ready":true}
      * @response 403 {"message":"Bu islem icin tum sistem kapsami gerekir."}
      */
-
     public function index(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.view');
@@ -101,6 +105,7 @@ class PermissionMatrixController extends Controller
             'role_scope_storage_ready' => Schema::hasTable('role_permission_scopes'),
             'supported_scope_options' => $this->supportedScopeOptions(),
             'default_role_scopes' => $this->defaultRoleScopes($roles),
+            'authorization_management' => AuthorizationManagementCatalog::metadata(),
         ]);
     }
 
@@ -110,6 +115,7 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.matrix.update` with global `all` scope. Accepts either `granular_matrix` or legacy `matrix`, never both. Granular updates validate role/permission compatibility, sync Spatie permissions, optionally sync role permission scopes and clear the permission cache. Super admin always receives all permissions.
      *
      * @group Permissions Matrix
+     *
      * @bodyParam granular_matrix array Optional granular matrix rows. Do not send with `matrix`.
      * @bodyParam granular_matrix.*.role string required_with:granular_matrix Role name. Example: coordinator
      * @bodyParam granular_matrix.*.permissions array Permission names for the role. Example: ["projects.view","programs.view"]
@@ -122,10 +128,10 @@ class PermissionMatrixController extends Controller
      * @bodyParam matrix array Optional legacy matrix rows. Do not send with `granular_matrix`.
      * @bodyParam matrix.*.role string required_with:matrix Role name. Example: staff
      * @bodyParam matrix.*.permissions array Legacy permission names. Example: ["users.view"]
+     *
      * @response 200 {"message":"Granular yetki matrisi guncellendi."}
      * @response 422 {"message":"Yalnizca granular_matrix veya matrix (legacy) gonderin; ikisini birden gondermeyin."}
      */
-
     public function update(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
@@ -166,12 +172,17 @@ class PermissionMatrixController extends Controller
 
                 if ($role->name === 'super_admin') {
                     $role->syncPermissions(Permission::query()->pluck('name')->all());
+
                     continue;
                 }
 
                 $allowed = collect($row['permissions'] ?? [])
                     ->filter(fn (string $name) => in_array($name, $granularCatalog, true))
                     ->filter(fn (string $name) => $this->permissionAllowedForRole($role->name, $name))
+                    ->reject(fn (string $name) => AuthorizationManagementCatalog::roleBusinessPermissionsAreReadOnly($role->name)
+                        && AuthorizationManagementCatalog::isUnitBusinessPermission($name))
+                    ->merge(AuthorizationManagementCatalog::protectedStoredPermissionNames($role))
+                    ->unique()
                     ->values()
                     ->all();
 
@@ -213,11 +224,16 @@ class PermissionMatrixController extends Controller
 
             if ($role->name === 'super_admin') {
                 $role->syncPermissions(Permission::query()->pluck('name')->all());
+
                 continue;
             }
 
             $allowedPermissions = collect($row['permissions'] ?? [])
                 ->filter(fn (string $name) => in_array($name, $assignableNames, true))
+                ->reject(fn (string $name) => AuthorizationManagementCatalog::roleBusinessPermissionsAreReadOnly($role->name)
+                    && AuthorizationManagementCatalog::isUnitBusinessPermission($name))
+                ->merge(AuthorizationManagementCatalog::protectedStoredPermissionNames($role))
+                ->unique()
                 ->values()
                 ->all();
 
@@ -248,11 +264,12 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.user_override.view` with global `all` scope. Returns non-banned users with Spatie roles and staff unit/title metadata for the override panel.
      *
      * @group Permissions Matrix
+     *
      * @queryParam search string Optional search across name, surname and email. Example: ayse
+     *
      * @response 200 {"users":[{"id":8,"name":"Ayse","surname":"Yilmaz","email":"ayse@example.com","role":"coordinator","roles":["coordinator"],"unit":"Program","title":"Koordinator"}]}
      * @response 403 {"message":"Bu islem icin tum sistem kapsami gerekir."}
      */
-
     public function users(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.user_override.view');
@@ -296,16 +313,48 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.user_override.view` with global `all` scope. Returns the selected user, stored allow/deny overrides, sanitized scope payloads and the resolver output showing the final effective permissions.
      *
      * @group Permissions Matrix
+     *
      * @urlParam id integer required User ID. Example: 8
+     *
      * @response 200 {"user":{"id":8,"role":"coordinator","roles":["coordinator"]},"overrides":[{"permission_name":"projects.view","effect":"allow","scope_type":"selected_projects","scope_payload":{"project_ids":[1]}}],"resolved":{"permissions":[]}}
      * @response 404 {"message":"No query results for model [App\\Models\\User] 8"}
      */
-
     public function showUserOverrides(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.user_override.view');
 
-        $user = User::with(['roles:id,name', 'staffProfile:user_id,unit,title'])->findOrFail($id);
+        $user = User::with([
+            'roles:id,name',
+            'staffProfile:user_id,unit,title',
+            'coordinationUnitMemberships' => fn ($query) => $query
+                ->active()
+                ->with('unit:id,code,name,kind,status')
+                ->orderByDesc('is_primary'),
+        ])->findOrFail($id);
+        $usesMembershipOverrides = $this->userUsesCoordinationUnitBusinessSource($user);
+        $globalOverrides = $user->permissionOverrides()
+            ->orderBy('effect')
+            ->orderBy('permission_name')
+            ->get();
+        $legacyGlobalBusinessOverrides = $usesMembershipOverrides
+            ? $globalOverrides
+                ->filter(fn (UserPermissionOverride $override) => AuthorizationManagementCatalog::isUnitBusinessPermission($override->permission_name))
+                ->values()
+            : collect();
+        $editableGlobalOverrides = $usesMembershipOverrides
+            ? $globalOverrides
+                ->reject(fn (UserPermissionOverride $override) => AuthorizationManagementCatalog::isUnitBusinessPermission($override->permission_name))
+                ->values()
+            : $globalOverrides;
+        $membershipOverrides = $usesMembershipOverrides && Schema::hasTable('coordination_unit_membership_permission_overrides')
+            ? CoordinationUnitMembershipPermissionOverride::query()
+                ->active()
+                ->whereIn('membership_id', $user->coordinationUnitMemberships->pluck('id'))
+                ->orderBy('membership_id')
+                ->orderBy('effect')
+                ->orderBy('permission_name')
+                ->get()
+            : collect();
 
         return response()->json([
             'user' => [
@@ -318,20 +367,57 @@ class PermissionMatrixController extends Controller
                 'unit' => $user->staffProfile?->unit,
                 'title' => $user->staffProfile?->title,
             ],
-            'overrides' => $user->permissionOverrides()
-                ->orderBy('effect')
-                ->orderBy('permission_name')
-                ->get()
+            'memberships' => $user->coordinationUnitMemberships
+                ->map(fn (CoordinationUnitMembership $membership) => [
+                    'membership_id' => (int) $membership->id,
+                    'unit_id' => (int) $membership->unit_id,
+                    'unit_code' => $membership->unit?->code,
+                    'unit_name' => $membership->unit?->name,
+                    'position' => $membership->position,
+                    'is_primary' => (bool) $membership->is_primary,
+                ])
+                ->values(),
+            'overrides' => $editableGlobalOverrides
+                ->map(fn (UserPermissionOverride $override) => [
+                    'id' => $override->id,
+                    'override_source' => 'global',
+                    'membership_id' => null,
+                    'permission_name' => $override->permission_name,
+                    'effect' => $override->effect,
+                    'scope_type' => $override->scope_type,
+                    'scope_payload' => $override->scope_payload ?? [],
+                ])
+                ->concat($membershipOverrides->map(fn (CoordinationUnitMembershipPermissionOverride $override) => [
+                    'id' => $override->id,
+                    'override_source' => 'membership',
+                    'membership_id' => (int) $override->membership_id,
+                    'permission_name' => $override->permission_name,
+                    'effect' => $override->effect,
+                    'scope_type' => $override->scope_type,
+                    'scope_payload' => $override->scope_payload ?? [],
+                ]))
+                ->values(),
+            'legacy_global_business_overrides' => $legacyGlobalBusinessOverrides
                 ->map(fn (UserPermissionOverride $override) => [
                     'id' => $override->id,
                     'permission_name' => $override->permission_name,
                     'effect' => $override->effect,
                     'scope_type' => $override->scope_type,
                     'scope_payload' => $override->scope_payload ?? [],
+                    'effective_in_enforce_mode' => $override->effect === 'deny',
                 ])
                 ->values(),
             'resolved' => $this->permissionResolver->resolve($user),
             'granular_permission_groups' => config('permission_catalog.granular_permissions', []),
+            'authorization_management' => array_merge(
+                AuthorizationManagementCatalog::metadata(),
+                [
+                    'selected_user_business_source' => $this->userUsesCoordinationUnitBusinessSource($user)
+                        ? 'coordination_units'
+                        : 'role_matrix',
+                    'business_allow_requires_acknowledgement' => false,
+                ]
+            ),
         ]);
     }
 
@@ -341,16 +427,18 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.user_override.update` with global `all` scope. Replaces all overrides for the target user. Permission names must exist in the granular catalog or legacy map, must be compatible with the user role and scope types must be allowed for the role/permission pair. Clears the permission cache and logs `user_permission_overrides.updated`.
      *
      * @group Permissions Matrix
+     *
      * @urlParam id integer required User ID. Example: 8
+     *
      * @bodyParam overrides array required Complete replacement list. Send an empty array to clear overrides.
      * @bodyParam overrides.*.permission_name string required Permission name. Example: projects.view
      * @bodyParam overrides.*.effect string required Override effect. Allowed values: allow, deny. Example: allow
      * @bodyParam overrides.*.scope_type string Optional scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none. Example: selected_projects
      * @bodyParam overrides.*.scope_payload object Optional payload. Example: {"project_ids":[1,2]}
+     *
      * @response 200 {"message":"Kullaniciya ozel yetkiler guncellendi.","resolved":{"permissions":[]}}
      * @response 422 {"message":"Bu kullanici tipi icin bu permission atanamaz."}
      */
-
     public function updateUserOverrides(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.user_override.update');
@@ -370,7 +458,17 @@ class PermissionMatrixController extends Controller
             'overrides.*.effect' => 'required|in:allow,deny',
             'overrides.*.scope_type' => 'nullable|in:all,own_projects,assigned_projects,own_unit,selected_projects,self,none',
             'overrides.*.scope_payload' => 'nullable|array',
+            'overrides.*.membership_id' => 'nullable|integer',
+            'acknowledge_global_authority_business_allow' => 'sometimes|boolean',
         ]);
+
+        $usesMembershipOverrides = $this->userUsesCoordinationUnitBusinessSource($user);
+        $activeMemberships = CoordinationUnitMembership::query()
+            ->active()
+            ->where('user_id', $user->id)
+            ->with('unit:id,code,name,status')
+            ->get()
+            ->keyBy('id');
 
         foreach ($validated['overrides'] as $override) {
             abort_unless(in_array($override['permission_name'], $allowedPermissions, true), 422, 'Gecersiz permission secildi.');
@@ -380,6 +478,16 @@ class PermissionMatrixController extends Controller
                 'Bu kullanici tipi icin bu permission atanamaz.'
             );
             $scopeType = $override['scope_type'] ?? null;
+            $isBusinessPermission = AuthorizationManagementCatalog::isUnitBusinessPermission($override['permission_name']);
+            if ($usesMembershipOverrides && $isBusinessPermission) {
+                abort_unless(
+                    isset($override['membership_id']) && $activeMemberships->has((int) $override['membership_id']),
+                    422,
+                    'Birim isi override kaydi icin kullanicinin aktif birim uyeligi secilmelidir.'
+                );
+            } else {
+                abort_if(isset($override['membership_id']), 422, 'Global izin override kaydinda birim uyeligi secilemez.');
+            }
             if (is_string($scopeType) && $scopeType !== '') {
                 abort_unless(
                     $this->scopeTypeAllowedForRolePermission($user->role, $override['permission_name'], $scopeType),
@@ -389,17 +497,60 @@ class PermissionMatrixController extends Controller
             }
         }
 
-        $user->permissionOverrides()->delete();
+        DB::transaction(function () use ($activeMemberships, $request, $user, $usesMembershipOverrides, $validated): void {
+            $businessPermissions = AuthorizationManagementCatalog::unitBusinessPermissions();
+            $globalOverrideQuery = $user->permissionOverrides();
+            if ($usesMembershipOverrides) {
+                $globalOverrideQuery->whereNotIn('permission_name', $businessPermissions);
+            }
+            $globalOverrideQuery->delete();
 
-        foreach ($validated['overrides'] as $override) {
-            $scopeType = $override['scope_type'] ?? null;
-            $user->permissionOverrides()->create([
-                'permission_name' => $override['permission_name'],
-                'effect' => $override['effect'],
-                'scope_type' => $scopeType,
-                'scope_payload' => $this->sanitizeScopePayload($scopeType, $override['scope_payload'] ?? []),
-            ]);
-        }
+            if ($usesMembershipOverrides && Schema::hasTable('coordination_unit_membership_permission_overrides')) {
+                CoordinationUnitMembershipPermissionOverride::query()
+                    ->whereIn('membership_id', $activeMemberships->keys())
+                    ->active()
+                    ->update(['status' => CoordinationUnitMembershipPermissionOverride::STATUS_PASSIVE]);
+            }
+
+            foreach ($validated['overrides'] as $override) {
+                $scopeType = $override['scope_type'] ?? null;
+                $isMembershipOverride = $usesMembershipOverrides
+                    && AuthorizationManagementCatalog::isUnitBusinessPermission($override['permission_name']);
+                if ($isMembershipOverride) {
+                    $membership = $activeMemberships->get((int) $override['membership_id']);
+                    $scopePayload = array_merge(
+                        $this->sanitizeScopePayload($scopeType, $override['scope_payload'] ?? []),
+                        [
+                            'unit_ids' => [(int) $membership->unit_id],
+                            'unit_codes' => [$membership->unit?->code],
+                            'membership_ids' => [(int) $membership->id],
+                        ]
+                    );
+                    CoordinationUnitMembershipPermissionOverride::query()->updateOrCreate(
+                        [
+                            'membership_id' => $membership->id,
+                            'permission_name' => $override['permission_name'],
+                            'effect' => $override['effect'],
+                        ],
+                        [
+                            'scope_type' => $scopeType,
+                            'scope_payload' => $scopePayload,
+                            'status' => CoordinationUnitMembershipPermissionOverride::STATUS_ACTIVE,
+                            'created_by' => $request->user()?->id,
+                        ]
+                    );
+
+                    continue;
+                }
+
+                $user->permissionOverrides()->create([
+                    'permission_name' => $override['permission_name'],
+                    'effect' => $override['effect'],
+                    'scope_type' => $scopeType,
+                    'scope_payload' => $this->sanitizeScopePayload($scopeType, $override['scope_payload'] ?? []),
+                ]);
+            }
+        });
 
         $this->logPermissionActivity(
             $request,
@@ -409,6 +560,7 @@ class PermissionMatrixController extends Controller
                 'target_user_id' => $user->id,
                 'target_email' => $user->email,
                 'override_count' => count($validated['overrides']),
+                'membership_scoped_business_overrides' => $usesMembershipOverrides,
                 'overrides_snapshot' => collect($validated['overrides'])->map(fn (array $o) => [
                     'permission_name' => $o['permission_name'],
                     'effect' => $o['effect'],
@@ -430,9 +582,9 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.matrix.view` with global `all` scope. Returns all Spatie roles, system-role markers, permission counts, assigned permissions, user counts and configured scope templates.
      *
      * @group Permissions Matrix
+     *
      * @response 200 {"roles":[{"id":1,"name":"coordinator","label":"Koordinator","is_system":true,"permission_count":12,"user_count":4}],"scope_templates":[]}
      */
-
     public function roleCatalog(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.view');
@@ -444,7 +596,7 @@ class PermissionMatrixController extends Controller
             ->map(fn (Role $role) => [
                 'id' => $role->id,
                 'name' => $role->name,
-                'label' => config('permission_catalog.role_labels.' . $role->name) ?? Str::headline($role->name),
+                'label' => config('permission_catalog.role_labels.'.$role->name) ?? Str::headline($role->name),
                 'is_system' => $this->isSystemRole($role->name),
                 'permission_count' => $role->permissions->count(),
                 'permissions' => $role->permissions->pluck('name')->values(),
@@ -464,13 +616,14 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.matrix.update` with global `all` scope. The submitted name is normalized to a lowercase slug, system role names are reserved, and only valid granular permissions compatible with the role are assigned. Clears the permission cache and logs `role.custom.created`.
      *
      * @group Permissions Matrix
+     *
      * @bodyParam name string required Custom role name. It is normalized to lowercase slug format and must be unique. Example: proje_denetcisi
      * @bodyParam permissions array Optional granular permission names. Example: ["projects.view","logs.view"]
      * @bodyParam permissions.* string Permission name. Example: projects.view
+     *
      * @response 201 {"message":"Ozel rol olusturuldu.","role":{"id":9,"name":"proje_denetcisi","permissions":[{"name":"projects.view"}]}}
      * @response 422 {"message":"Bu isim sistem rolu olarak ayrildi."}
      */
-
     public function createRole(Request $request): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
@@ -513,17 +666,19 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be changed through this endpoint. Updates granular permissions and optional role scopes, validates scope compatibility, clears the permission cache and logs `role.custom.updated`.
      *
      * @group Permissions Matrix
+     *
      * @urlParam id integer required Custom role ID. Example: 9
+     *
      * @bodyParam permissions array Optional granular permission names. Example: ["projects.view"]
      * @bodyParam permissions.* string Permission name. Example: projects.view
      * @bodyParam scopes array Optional role scope rows.
      * @bodyParam scopes.*.permission_name string required_with:scopes Permission name. Example: projects.view
      * @bodyParam scopes.*.scope_type string required_with:scopes Scope type. Allowed values: all, own_projects, assigned_projects, own_unit, selected_projects, self, none. Example: selected_projects
      * @bodyParam scopes.*.scope_payload object Optional scope payload. Example: {"project_ids":[1]}
+     *
      * @response 200 {"message":"Rol yetkileri guncellendi.","role":{"id":9,"name":"proje_denetcisi"}}
      * @response 422 {"message":"Sistem rolleri buradan degistirilemez."}
      */
-
     public function updateRole(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
@@ -566,11 +721,12 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.matrix.update` with global `all` scope. System roles cannot be deleted and roles assigned to users must be unassigned first. Clears the permission cache and logs `role.custom.deleted`.
      *
      * @group Permissions Matrix
+     *
      * @urlParam id integer required Custom role ID. Example: 9
+     *
      * @response 200 {"message":"Rol silindi."}
      * @response 422 {"message":"Bu role atanmis kullanicilar var. Once atamalari kaldirin."}
      */
-
     public function deleteRole(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.matrix.update');
@@ -596,14 +752,16 @@ class PermissionMatrixController extends Controller
      * Requires permission: `permissions.user_override.update` with global `all` scope. Syncs Spatie roles and optionally updates the primary `users.role` column. Student/alumni roles cannot be combined with authority roles. Clears the permission cache and logs `user_roles.updated`.
      *
      * @group Permissions Matrix
+     *
      * @urlParam id integer required User ID. Example: 8
+     *
      * @bodyParam roles array required Role names to assign. Example: ["coordinator"]
      * @bodyParam roles.* string required Existing role name. Example: coordinator
      * @bodyParam primary_role string Optional primary role to store on the user record. Must be one of `roles`. Example: coordinator
+     *
      * @response 200 {"message":"Kullanici rolleri guncellendi.","user":{"id":8,"role":"coordinator","roles":["coordinator"]},"resolved":{"permissions":[]}}
      * @response 422 {"message":"Ogrenci/mezun rolleri baska rollerle birlestirilemez."}
      */
-
     public function assignUserRoles(Request $request, int $id): JsonResponse
     {
         $this->abortUnlessGlobalPermission($request, 'permissions.user_override.update');
@@ -665,10 +823,10 @@ class PermissionMatrixController extends Controller
      * Requires either `permissions.matrix.view` with global `all` scope or `logs.view` with global `all` scope. Reads the Spatie `activity_log` entries with `log_name=permissions` and returns the latest 50 changes. If the activity log table/package is unavailable, an empty list with a warning is returned.
      *
      * @group Permissions Matrix
+     *
      * @response 200 {"logs":[{"id":1,"description":"permission_granular_matrix.updated","created_at":"2026-06-30T12:00:00+00:00","causer":{"id":1,"name":"Admin","role":"super_admin"},"properties":{"roles":[{"role":"coordinator","granular_permission_count":12}]}}]}
      * @response 403 {"message":"Bu global kayitlari goruntuleme yetkiniz bulunmuyor."}
      */
-
     public function audit(Request $request): JsonResponse
     {
         abort_unless(
@@ -689,7 +847,7 @@ class PermissionMatrixController extends Controller
             return response()->json([
                 'logs' => $logs->map(function (Activity $log) {
                     $props = $log->properties;
-                    if ($props instanceof \Illuminate\Support\Collection) {
+                    if ($props instanceof Collection) {
                         $props = $props->toArray();
                     }
 
@@ -776,7 +934,7 @@ class PermissionMatrixController extends Controller
 
             $defaultPermissions = $defaultRolePermissions[$roleName] ?? [];
 
-            if ($role->permissions()->count() === 0) {
+            if ($role->wasRecentlyCreated || ($roleName === 'super_admin' && $role->permissions()->count() === 0)) {
                 if ($defaultPermissions === '*') {
                     $role->syncPermissions(Permission::query()->pluck('name')->all());
                 } else {
@@ -820,6 +978,12 @@ class PermissionMatrixController extends Controller
             ->get(['id', 'name']);
 
         return [$roles, $permissions];
+    }
+
+    private function userUsesCoordinationUnitBusinessSource(User $user): bool
+    {
+        return in_array($user->role, AuthorizationManagementCatalog::protectedAuthorityRoles(), true)
+            && $this->permissionResolver->coordinationUnitsAreAuthoritative($user);
     }
 
     private function isSystemRole(string $roleName): bool
@@ -925,7 +1089,7 @@ class PermissionMatrixController extends Controller
     }
 
     /**
-     * @param \Illuminate\Support\Collection<int, Permission> $permissions
+     * @param  Collection<int, Permission>  $permissions
      * @return array<string, array<int, array{name: string, label: string, group: string, description: string, id: int|null}>>
      */
     private function buildGranularMatrixGroups($permissions): array
@@ -1009,8 +1173,14 @@ class PermissionMatrixController extends Controller
             ])
             ->all();
 
-        if (! empty($known)) {
-            RolePermissionScope::query()->whereIn('role_name', $known)->delete();
+        foreach ($known as $roleName) {
+            $query = RolePermissionScope::query()->where('role_name', $roleName);
+
+            if (AuthorizationManagementCatalog::roleBusinessPermissionsAreReadOnly($roleName)) {
+                $query->whereNotIn('permission_name', AuthorizationManagementCatalog::unitBusinessPermissions());
+            }
+
+            $query->delete();
         }
 
         foreach ($rows as $row) {
@@ -1023,6 +1193,10 @@ class PermissionMatrixController extends Controller
                 $permissionName = $scopeRow['permission_name'] ?? null;
                 $scopeType = $scopeRow['scope_type'] ?? null;
                 if (! is_string($permissionName) || ! in_array($permissionName, $granularCatalog, true)) {
+                    continue;
+                }
+                if (AuthorizationManagementCatalog::roleBusinessPermissionsAreReadOnly($roleName)
+                    && AuthorizationManagementCatalog::isUnitBusinessPermission($permissionName)) {
                     continue;
                 }
                 if (! in_array($permissionName, $roleGrantedPermissions[$roleName] ?? [], true)) {
@@ -1249,6 +1423,7 @@ class PermissionMatrixController extends Controller
 
         if ($scopeType === 'own_unit') {
             $unit = isset($scopePayload['unit']) ? trim((string) $scopePayload['unit']) : '';
+
             return $unit !== '' ? ['unit' => $unit] : [];
         }
 
@@ -1259,6 +1434,7 @@ class PermissionMatrixController extends Controller
                 ->unique()
                 ->values()
                 ->all();
+
             return ['project_ids' => $projectIds];
         }
 

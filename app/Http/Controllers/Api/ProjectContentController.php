@@ -16,6 +16,7 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
+use App\Services\CoordinationUnitPermissionRuleSyncService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\ProjectSpecialModuleCatalog;
@@ -32,7 +33,8 @@ class ProjectContentController extends Controller
     use ResolvesProjectPeriodContext;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly CoordinationUnitPermissionRuleSyncService $permissionRuleSyncService,
     ) {}
 
     /**
@@ -62,9 +64,10 @@ class ProjectContentController extends Controller
             'Projelere erisim yetkiniz yok.'
         );
 
+        $isStructuralProjectListing = $targetPermission === 'projects.view';
         $query = Project::query()->with([
             'periods' => fn ($builder) => $builder->orderByDesc('start_date'),
-            'participants.user',
+            ...($isStructuralProjectListing ? ['participants.user'] : []),
         ]);
 
         if (! $this->permissionResolver->hasGlobalScope($user, $targetPermission)) {
@@ -72,8 +75,15 @@ class ProjectContentController extends Controller
             $query->whereIn('id', $ids === [] ? [-1] : $ids);
         }
 
+        $projects = $query->orderBy('name')->get();
+
         return response()->json([
-            'projects' => ProjectResource::collection($query->orderBy('name')->get()),
+            'projects' => $isStructuralProjectListing
+                ? ProjectResource::collection($projects)
+                : $projects->map(fn (Project $project) => $this->operationalProjectPayload(
+                    $project,
+                    ! str_starts_with($targetPermission, 'projects.public_content') && $targetPermission !== 'projects.gallery.update'
+                ))->values(),
         ]);
     }
 
@@ -92,6 +102,26 @@ class ProjectContentController extends Controller
         ]));
     }
 
+    private function operationalProjectPayload(Project $project, bool $includePeriodDates = true): array
+    {
+        $periodFields = $includePeriodDates
+            ? ['id', 'name', 'status', 'start_date', 'end_date']
+            : ['id', 'name', 'status'];
+        $periods = $project->periods
+            ->map(fn (Period $period) => $period->only($periodFields))
+            ->values();
+
+        return [
+            'id' => $project->id,
+            'name' => $project->name,
+            'status' => $project->status,
+            'short_description' => $project->short_description,
+            'cover_image_path' => $project->cover_image_path,
+            'active_period' => optional($project->currentPeriodOrLegacy())?->only($periodFields),
+            'periods' => $periods,
+        ];
+    }
+
     /**
      * Export manageable projects.
      *
@@ -106,7 +136,7 @@ class ProjectContentController extends Controller
      */
     public function exportManageable(Request $request)
     {
-        $this->abortUnlessAllowedForProject($request, 'projects.export');
+        $this->abortUnlessAllowed($request, 'projects.export');
         $user = $request->user();
 
         $query = Project::query()->with([
@@ -156,32 +186,73 @@ class ProjectContentController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $project = Project::with(['periods', 'participants.user'])->findOrFail($id);
-        $canView = $this->permissionResolver->canAccessProject($request->user(), 'projects.view', (int) $project->id);
-        $canEdit = $this->permissionResolver->canAccessProject($request->user(), 'projects.content.update', (int) $project->id);
-        abort_unless($canView || $canEdit, 403, 'Bu proje icerigini goruntuleme yetkiniz yok.');
+        $project = Project::with(['periods' => fn ($query) => $query->orderByDesc('start_date')])->findOrFail($id);
+        $user = $request->user();
+        $capabilities = [
+            'view_structure' => $this->permissionResolver->canAccessProject($user, 'projects.view', (int) $project->id),
+            'update_structure' => $this->permissionResolver->canAccessProject($user, 'projects.content.update', (int) $project->id),
+            'view_public_content' => $this->permissionResolver->canAccessProject($user, 'projects.public_content.view', (int) $project->id),
+            'update_public_content' => $this->permissionResolver->canAccessProject($user, 'projects.public_content.update', (int) $project->id),
+            'update_gallery' => $this->permissionResolver->canAccessProject($user, 'projects.gallery.update', (int) $project->id),
+            'view_application' => collect([
+                'projects.application_form.update',
+                'applications.intake.view',
+                'applications.intake.manage',
+            ])->contains(fn (string $permission) => $this->permissionResolver->canAccessProject($user, $permission, (int) $project->id)),
+        ];
+        $capabilities['view_public_content'] = $capabilities['view_public_content']
+            || $capabilities['view_structure']
+            || $capabilities['update_structure']
+            || $capabilities['update_public_content']
+            || $capabilities['update_gallery'];
 
-        $applicationForm = ApplicationForm::where('project_id', $project->id)
-            ->where('is_active', true)
-            ->latest()
-            ->first();
+        abort_unless(in_array(true, $capabilities, true), 403, 'Bu proje icerigini goruntuleme yetkiniz yok.');
 
-        return response()->json([
-            'project' => new ProjectResource($project),
-            'editable' => [
+        $applicationForm = null;
+        if ($capabilities['view_structure'] || $capabilities['view_application']) {
+            $applicationForm = ApplicationForm::where('project_id', $project->id)
+                ->where('is_active', true)
+                ->latest()
+                ->first();
+        }
+
+        $editable = [
+            'short_description' => $project->short_description,
+            'description' => $project->description,
+            'cover_image_path' => $project->cover_image_path,
+            'gallery_paths' => $project->gallery_paths ?? [],
+        ];
+
+        if ($capabilities['view_structure'] || $capabilities['update_structure']) {
+            $editable = [
                 'name' => $project->name,
                 'slug' => $project->slug,
                 'type' => $project->type,
-                'short_description' => $project->short_description,
-                'description' => $project->description,
-                'cover_image_path' => $project->cover_image_path,
-                'gallery_paths' => $project->gallery_paths ?? [],
+                'special_modules' => $project->special_modules,
+                'applicable_special_modules' => ProjectSpecialModuleCatalog::forProject($project),
+                'special_modules_inherited' => $project->special_modules === null,
+                ...$editable,
+            ];
+        }
+
+        if ($capabilities['view_structure'] || $capabilities['view_application']) {
+            $editable = [
+                ...$editable,
                 'application_open' => (bool) $project->application_open,
                 'next_application_date' => optional($project->next_application_date)->format('Y-m-d'),
                 'has_interview' => (bool) $project->has_interview,
                 'quota' => $project->quota,
-            ],
+            ];
+        }
+
+        return response()->json([
+            'project' => $this->operationalProjectPayload($project, false),
+            'editable' => $editable,
             'application_form' => $applicationForm,
+            'capabilities' => $capabilities,
+            'special_module_options' => collect(ProjectSpecialModuleCatalog::options())
+                ->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])
+                ->values(),
         ]);
     }
 
@@ -497,6 +568,78 @@ class ProjectContentController extends Controller
             ->all();
     }
 
+    private function assertGalleryPeriodsBelongToProject(Project $project, array $galleryItems): void
+    {
+        $galleryPeriodIds = collect($galleryItems)->pluck('period_id')->filter()->unique()->values()->all();
+        if ($galleryPeriodIds === []) {
+            return;
+        }
+
+        $validPeriodCount = Period::query()
+            ->where('project_id', $project->id)
+            ->whereIn('id', $galleryPeriodIds)
+            ->count();
+
+        abort_unless($validPeriodCount === count($galleryPeriodIds), 422, 'Galeri donemi bu projeye ait olmalidir.');
+    }
+
+    /**
+     * Update only public-facing project text and cover media.
+     *
+     * Project identity, type, periods, application settings and gallery are deliberately not accepted here.
+     */
+    public function updatePublicContent(Request $request, int $id): JsonResponse
+    {
+        $project = Project::findOrFail($id);
+        $this->abortUnlessAllowedForProject($request, 'projects.public_content.update', $project);
+
+        $validated = $request->validate([
+            'short_description' => 'nullable|string|max:1000',
+            'description' => 'nullable|string',
+            'cover_image_path' => 'nullable|string|max:2048',
+        ]);
+
+        $project->update($validated);
+
+        return response()->json([
+            'message' => 'Projenin kamusal icerigi guncellendi.',
+            'project' => $this->operationalProjectPayload($project->load('periods'), false),
+            'editable' => [
+                'short_description' => $project->short_description,
+                'description' => $project->description,
+                'cover_image_path' => $project->cover_image_path,
+            ],
+        ]);
+    }
+
+    /**
+     * Replace only the public project gallery.
+     */
+    public function updateGallery(Request $request, int $id): JsonResponse
+    {
+        $project = Project::findOrFail($id);
+        $this->abortUnlessAllowedForProject($request, 'projects.gallery.update', $project);
+
+        $validated = $request->validate([
+            'gallery_paths' => 'present|array',
+            'gallery_paths.*' => 'nullable',
+            'gallery_paths.*.path' => 'nullable|string|max:2048',
+            'gallery_paths.*.url' => 'nullable|string|max:2048',
+            'gallery_paths.*.caption' => 'nullable|string|max:255',
+            'gallery_paths.*.year' => 'nullable|string|max:32',
+            'gallery_paths.*.period_id' => 'nullable|integer|exists:periods,id',
+        ]);
+        $galleryItems = $this->normalizeGalleryItems($validated['gallery_paths']);
+        $this->assertGalleryPeriodsBelongToProject($project, $galleryItems);
+
+        $project->update(['gallery_paths' => $galleryItems]);
+
+        return response()->json([
+            'message' => 'Proje galerisi guncellendi.',
+            'gallery_paths' => $project->gallery_paths ?? [],
+        ]);
+    }
+
     /**
      * Update editable project content.
      *
@@ -509,6 +652,7 @@ class ProjectContentController extends Controller
      * @bodyParam name string required Project name. Example: Diplomasi360
      * @bodyParam slug string required Unique project slug. Example: diplomasi360
      * @bodyParam type string required Project type. Example: diplomacy
+     * @bodyParam special_modules string[] Optional explicit project module keys. Null uses project-type defaults; an empty list disables all project-special modules.
      * @bodyParam short_description string Optional short description. Example: Genclere diplomasi egitimi.
      * @bodyParam description string Optional long description.
      * @bodyParam cover_image_path string Optional cover image path or URL. Example: projects/diplomasi/cover.jpg
@@ -526,6 +670,7 @@ class ProjectContentController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $project = Project::findOrFail($id);
+        $previousFamilyModules = ProjectSpecialModuleCatalog::forProject($project);
         $this->abortUnlessAllowedForProject($request, 'projects.content.update', $project);
 
         $validated = $request->validate([
@@ -537,6 +682,8 @@ class ProjectContentController extends Controller
                 Rule::unique('projects', 'slug')->ignore($project->id),
             ],
             'type' => 'required|string|max:255',
+            'special_modules' => 'sometimes|nullable|array',
+            'special_modules.*' => ['string', Rule::in(ProjectSpecialModuleCatalog::supportedKeys())],
             'short_description' => 'nullable|string|max:1000',
             'description' => 'nullable|string',
             'cover_image_path' => 'nullable|string|max:2048',
@@ -553,15 +700,7 @@ class ProjectContentController extends Controller
             'quota' => 'nullable|integer|min:0',
         ]);
         $galleryItems = $this->normalizeGalleryItems($validated['gallery_paths'] ?? []);
-        $galleryPeriodIds = collect($galleryItems)->pluck('period_id')->filter()->unique()->values()->all();
-        if ($galleryPeriodIds !== []) {
-            $validPeriodCount = Period::query()
-                ->where('project_id', $project->id)
-                ->whereIn('id', $galleryPeriodIds)
-                ->count();
-
-            abort_unless($validPeriodCount === count($galleryPeriodIds), 422, 'Galeri donemi bu projeye ait olmalidir.');
-        }
+        $this->assertGalleryPeriodsBelongToProject($project, $galleryItems);
 
         $applicationKeys = ['application_open', 'next_application_date', 'has_interview', 'quota'];
         $hasLegacyApplicationSettings = collect($applicationKeys)->contains(fn (string $key) => $request->exists($key));
@@ -581,7 +720,7 @@ class ProjectContentController extends Controller
             abort_if(! $legacyIsOpen && ! $legacyNextApplicationDate, 422, 'Aktif donemde basvurular kapaliysa sonraki basvuru tarihi zorunludur.');
         }
 
-        $project->update([
+        $projectData = [
             'name' => $validated['name'],
             'slug' => $validated['slug'],
             'type' => $validated['type'],
@@ -589,7 +728,23 @@ class ProjectContentController extends Controller
             'description' => $validated['description'] ?? null,
             'cover_image_path' => $validated['cover_image_path'] ?? null,
             'gallery_paths' => $galleryItems,
-        ]);
+        ];
+        if ($request->exists('special_modules')) {
+            $projectData['special_modules'] = $validated['special_modules'] ?? null;
+        }
+        $project->update($projectData);
+        $project->refresh();
+
+        $newFamilyModules = ProjectSpecialModuleCatalog::forProject($project);
+        sort($previousFamilyModules);
+        sort($newFamilyModules);
+        $familyPermissionChanges = 0;
+        if ($previousFamilyModules !== $newFamilyModules) {
+            $unit = $project->coordinationUnit()->first();
+            if ($unit) {
+                $familyPermissionChanges = $this->permissionRuleSyncService->reconcileProjectFamily($unit);
+            }
+        }
 
         if ($hasLegacyApplicationSettings && $activePeriod) {
             $window = ApplicationWindow::query()->firstOrNew([
@@ -648,11 +803,15 @@ class ProjectContentController extends Controller
 
         return response()->json([
             'message' => 'Proje icerigi guncellendi.',
+            'family_permission_changes_applied' => $familyPermissionChanges,
             'project' => new ProjectResource($project),
             'editable' => [
                 'name' => $project->name,
                 'slug' => $project->slug,
                 'type' => $project->type,
+                'special_modules' => $project->special_modules,
+                'applicable_special_modules' => ProjectSpecialModuleCatalog::forProject($project),
+                'special_modules_inherited' => $project->special_modules === null,
                 'short_description' => $project->short_description,
                 'description' => $project->description,
                 'cover_image_path' => $project->cover_image_path,

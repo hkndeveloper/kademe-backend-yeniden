@@ -16,8 +16,7 @@ class FeedbackFormTemplateController extends Controller
 {
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function authorizeTemplate(Request $request, string $permission, ?int $projectId): void
     {
@@ -75,10 +74,10 @@ class FeedbackFormTemplateController extends Controller
                 $inner->where('project_id', $projectId)->orWhereNull('project_id');
             }))
             ->when(! $projectId && ! $this->permissionResolver->hasGlobalScope($request->user(), 'programs.view'), function ($query) use ($request) {
-                $projectIds = $request->user()->coordinatedProjects()->pluck('projects.id')
-                    ->merge($request->user()->assignedProjects()->pluck('projects.id'))
-                    ->unique()
-                    ->values();
+                $projectIds = $this->permissionResolver->projectIdsForPermission(
+                    $request->user(),
+                    'programs.view'
+                );
 
                 $query->whereIn('project_id', $projectIds);
             })

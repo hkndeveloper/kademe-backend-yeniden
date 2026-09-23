@@ -13,7 +13,9 @@ class Request extends Model
         'requester_id',
         'type',
         'target_unit',
+        'target_unit_id',
         'target_user_id',
+        'target_membership_id',
         'description',
         'status',
         'response_file_path',
@@ -29,6 +31,21 @@ class Request extends Model
     public function targetUser()
     {
         return $this->belongsTo(User::class, 'target_user_id');
+    }
+
+    public function targetUnit()
+    {
+        return $this->belongsTo(CoordinationUnit::class, 'target_unit_id');
+    }
+
+    public function targetMembership()
+    {
+        return $this->belongsTo(CoordinationUnitMembership::class, 'target_membership_id');
+    }
+
+    public function statusHistories()
+    {
+        return $this->morphMany(WorkflowStatusHistory::class, 'subject');
     }
 
     public function project()

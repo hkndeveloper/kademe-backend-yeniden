@@ -24,8 +24,7 @@ class ContentManagementController extends Controller
 
     public function __construct(
         private readonly PermissionResolver $permissionResolver
-    ) {
-    }
+    ) {}
 
     private function abortUnlessGlobalContentPermission(Request $request, string $permission): void
     {
@@ -88,12 +87,37 @@ class ContentManagementController extends Controller
         $this->assertCanUseBlogProject($request, $permission, $blog->project_id);
     }
 
+    private function canUseBlogProject(Request $request, string $permission, ?int $projectId): bool
+    {
+        if (! $this->permissionResolver->hasPermission($request->user(), $permission)) {
+            return false;
+        }
+
+        return $projectId === null
+            ? $this->hasGlobalContentPermission($request, $permission)
+            : $this->permissionResolver->canAccessProject($request->user(), $permission, $projectId);
+    }
+
+    private function blogCapabilities(Request $request, BlogPost $blog): array
+    {
+        $canPublish = $this->canUseBlogProject($request, 'content.blog.publish', $blog->project_id);
+        $canUpdate = $this->canUseBlogProject($request, 'content.blog.update', $blog->project_id)
+            && ($blog->status !== 'published' || $canPublish);
+
+        return [
+            'update' => $canUpdate,
+            'publish' => $canPublish,
+            'delete' => $this->canUseBlogProject($request, 'content.blog.delete', $blog->project_id),
+        ];
+    }
+
     /**
      * List panel content resources.
      *
      * Panel/admin endpoint exposed under `/admin/content` and `/panel/content`. Requires `content.view` with a non-empty scope. Global scope returns all blogs, FAQs, categories, and projects; project-scoped users only see blog posts and projects inside their `content.view` project scope and receive an empty FAQ list because FAQs are global content.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @response 200 {"blogs":[{"id":1,"title":"Haber","status":"published","project":{"id":1,"name":"KADEME"}}],"categories":[{"id":1,"name":"Duyurular"}],"faqs":[],"content_scope":{"global":false,"project_ids":[1]},"projects":[{"id":1,"name":"KADEME"}]}
@@ -106,8 +130,13 @@ class ContentManagementController extends Controller
         $this->applyBlogScope($blogQuery, $request, 'content.view');
         $canViewGlobalContent = $this->hasGlobalContentPermission($request, 'content.view');
 
+        $blogs = $blogQuery->orderByDesc('created_at')->get();
+
         return response()->json([
-            'blogs' => $blogQuery->orderByDesc('created_at')->get(),
+            'blogs' => $blogs->map(fn (BlogPost $blog) => [
+                ...$blog->toArray(),
+                'capabilities' => $this->blogCapabilities($request, $blog),
+            ])->values(),
             'categories' => BlogCategory::orderBy('name')->get(),
             'faqs' => $canViewGlobalContent ? Faq::orderBy('category')->orderBy('order')->get() : [],
             'content_scope' => [
@@ -130,9 +159,11 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/blogs/export` and `/panel/content/blogs/export`. Requires `content.blog.export` with a non-empty scope. Global scope exports all blogs; scoped users export only blogs tied to projects in their blog export scope. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @queryParam format string Optional export format. Example: xlsx
+     *
      * @response 200 {"download":"Export file stream"}
      * @response 403 {"message":"Bu icerik islemi icin kapsam verilmemis."}
      */
@@ -158,7 +189,7 @@ class ContentManagementController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'blog_yazilari_' . now()->format('Ymd_His'),
+            'blog_yazilari_'.now()->format('Ymd_His'),
             'Blog Yazilari',
             $headings,
             $rows,
@@ -171,9 +202,11 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/faqs/export` and `/panel/content/faqs/export`. Requires `content.faq.export` with global/tum sistem scope because FAQ content is not project-scoped. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @queryParam format string Optional export format. Example: csv
+     *
      * @response 200 {"download":"Export file stream"}
      * @response 403 {"message":"Bu global icerik islemi icin tum sistem kapsami gerekir."}
      */
@@ -197,7 +230,7 @@ class ContentManagementController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'sss_listesi_' . now()->format('Ymd_His'),
+            'sss_listesi_'.now()->format('Ymd_His'),
             'SSS',
             $headings,
             $rows,
@@ -210,6 +243,7 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/blogs` and `/panel/content/blogs`. Requires `content.blog.create` with a non-empty scope. Project blogs require create access to the selected project; global blog posts with `project_id=null` require global/tum sistem scope. If `slug` is omitted, the backend generates one from the title.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @bodyParam title string required Blog title. Example: Yeni haber
@@ -221,6 +255,7 @@ class ContentManagementController extends Controller
      * @bodyParam project_id integer Optional project id; scoped by `content.blog.create`. Null requires global scope. Example: 1
      * @bodyParam status string required One of draft or published. Example: published
      * @bodyParam published_at datetime Optional publish date; defaults to now when status is published. Example: 2026-06-30 10:00:00
+     *
      * @response 201 {"message":"Blog yazisi olusturuldu.","blog":{"id":1,"title":"Yeni haber","status":"published"}}
      * @response 403 {"message":"Bu proje icin blog icerigi yonetme yetkiniz yok."}
      * @response 422 {"message":"Global blog yazisi icin tum sistem kapsami gerekir."}
@@ -241,10 +276,13 @@ class ContentManagementController extends Controller
             'published_at' => 'nullable|date',
         ]);
         $this->assertCanUseBlogProject($request, 'content.blog.create', $validated['project_id'] ?? null);
+        if ($validated['status'] === 'published') {
+            $this->assertCanUseBlogProject($request, 'content.blog.publish', $validated['project_id'] ?? null);
+        }
 
         $blog = BlogPost::create([
             ...$validated,
-            'slug' => $validated['slug'] ?: Str::slug($validated['title']) . '-' . Str::lower(Str::random(4)),
+            'slug' => $validated['slug'] ?: Str::slug($validated['title']).'-'.Str::lower(Str::random(4)),
             'author_id' => $request->user()->id,
             'published_at' => $validated['status'] === 'published'
                 ? ($validated['published_at'] ?? now())
@@ -263,9 +301,11 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/blogs/{id}` and `/panel/content/blogs/{id}`. Requires `content.blog.update` with access to the blog's current project scope and access to the new `project_id` when moving a blog. Moving a blog to global content requires global/tum sistem scope.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @urlParam id integer required Blog post id. Example: 1
+     *
      * @bodyParam title string required Blog title. Example: Guncel haber
      * @bodyParam slug string required Unique slug. Example: guncel-haber
      * @bodyParam excerpt string Optional short summary, max 1000 chars. Example: Guncel ozet
@@ -275,6 +315,7 @@ class ContentManagementController extends Controller
      * @bodyParam project_id integer Optional project id; scoped by `content.blog.update`. Null requires global scope. Example: 1
      * @bodyParam status string required One of draft or published. Example: draft
      * @bodyParam published_at datetime Optional publish date. Example: 2026-06-30 10:00:00
+     *
      * @response 200 {"message":"Blog yazisi guncellendi.","blog":{"id":1,"title":"Guncel haber","status":"draft"}}
      * @response 403 {"message":"Bu proje icin blog icerigi yonetme yetkiniz yok."}
      * @response 422 {"message":"The slug has already been taken."}
@@ -298,6 +339,10 @@ class ContentManagementController extends Controller
             'published_at' => 'nullable|date',
         ]);
         $this->assertCanUseBlogProject($request, 'content.blog.update', $validated['project_id'] ?? null);
+        if ($blog->status === 'published' || $validated['status'] === 'published') {
+            $this->assertCanManageBlog($request, 'content.blog.publish', $blog);
+            $this->assertCanUseBlogProject($request, 'content.blog.publish', $validated['project_id'] ?? null);
+        }
 
         $blog->update([
             ...$validated,
@@ -318,9 +363,11 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/blogs/{id}` and `/panel/content/blogs/{id}`. Requires `content.blog.delete` with access to the blog project. Global blog posts require global/tum sistem scope.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @urlParam id integer required Blog post id. Example: 1
+     *
      * @response 200 {"message":"Blog yazisi silindi."}
      * @response 403 {"message":"Bu proje icin blog icerigi yonetme yetkiniz yok."}
      */
@@ -343,12 +390,14 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/faqs` and `/panel/content/faqs`. Requires `content.faq.create` with global/tum sistem scope because FAQs are global public content.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @bodyParam question string required FAQ question, max 1000 chars. Example: Basvuru nasil yapilir?
      * @bodyParam answer string required FAQ answer. Example: Basvuru formunu doldurabilirsiniz.
      * @bodyParam category string required FAQ category. Example: Basvuru
      * @bodyParam order integer Optional display order. Example: 10
+     *
      * @response 201 {"message":"SSS maddesi olusturuldu.","faq":{"id":1,"question":"Basvuru nasil yapilir?"}}
      * @response 403 {"message":"Bu global icerik islemi icin tum sistem kapsami gerekir."}
      */
@@ -380,13 +429,16 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/faqs/{id}` and `/panel/content/faqs/{id}`. Requires `content.faq.update` with global/tum sistem scope because FAQs are global public content.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @urlParam id integer required FAQ id. Example: 1
+     *
      * @bodyParam question string required FAQ question, max 1000 chars. Example: Basvuru nasil yapilir?
      * @bodyParam answer string required FAQ answer. Example: Basvuru formunu doldurabilirsiniz.
      * @bodyParam category string required FAQ category. Example: Basvuru
      * @bodyParam order integer Optional display order. Example: 10
+     *
      * @response 200 {"message":"SSS maddesi guncellendi.","faq":{"id":1,"question":"Basvuru nasil yapilir?"}}
      * @response 403 {"message":"Bu global icerik islemi icin tum sistem kapsami gerekir."}
      */
@@ -420,9 +472,11 @@ class ContentManagementController extends Controller
      * Panel/admin endpoint exposed under `/admin/content/faqs/{id}` and `/panel/content/faqs/{id}`. Requires `content.faq.delete` with global/tum sistem scope.
      *
      * @group Content Management
+     *
      * @authenticated
      *
      * @urlParam id integer required FAQ id. Example: 1
+     *
      * @response 200 {"message":"SSS maddesi silindi."}
      * @response 403 {"message":"Bu global icerik islemi icin tum sistem kapsami gerekir."}
      */

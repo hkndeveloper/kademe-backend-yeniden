@@ -5,16 +5,19 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
-use App\Models\SupportReply;
-use App\Models\SupportTicket;
+use App\Models\CoordinationUnit;
+use App\Models\CoordinationUnitMembership;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Project;
+use App\Models\SupportReply;
+use App\Models\SupportTicket;
 use App\Models\User;
-use App\Support\AdminExportResponder;
-use App\Support\MediaStorage;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
+use App\Services\WorkflowStatusHistoryRecorder;
+use App\Support\AdminExportResponder;
+use App\Support\MediaStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,8 +37,8 @@ class SupportTicketController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
         private readonly NotificationService $notificationService,
-    ) {
-    }
+        private readonly WorkflowStatusHistoryRecorder $statusHistoryRecorder,
+    ) {}
 
     private function notifyTicketAssignee(SupportTicket $ticket): void
     {
@@ -86,6 +89,15 @@ class SupportTicketController extends Controller
             return false;
         }
 
+        if ($ticket->assigned_unit_id !== null) {
+            return $this->permissionResolver->canAccessCoordinationUnit(
+                $user,
+                $permission,
+                (int) $ticket->assigned_unit_id
+            );
+        }
+
+        // Kisiye atanmis ama birim snapshot'i olmayan eski kayitlar icin dar fallback.
         if ($ticket->assigned_to === $user->id) {
             return true;
         }
@@ -95,6 +107,90 @@ class SupportTicketController extends Controller
         }
 
         return $this->permissionResolver->canAccessProject($user, $permission, $ticket->project_id);
+    }
+
+    private function canCoordinateTicket(User $user, SupportTicket $ticket, string $permission): bool
+    {
+        if (! $this->permissionResolver->hasPermission($user, $permission)) {
+            return false;
+        }
+
+        if ($this->permissionResolver->hasGlobalScope($user, $permission)) {
+            return true;
+        }
+
+        if ($ticket->assigned_unit_id !== null) {
+            return $this->permissionResolver->canAccessCoordinationUnit(
+                $user,
+                $permission,
+                (int) $ticket->assigned_unit_id
+            );
+        }
+
+        // Birim FK'si olmayan eski kayitlarda coordinator proje/atanan-kisi policy'si korunur.
+        return $user->role === 'coordinator' && $this->canAccessTicket($user, $ticket, $permission);
+    }
+
+    private function unitIdForAssignee(?int $userId, ?int $projectId = null): ?int
+    {
+        if ($userId === null) {
+            return null;
+        }
+
+        $query = CoordinationUnitMembership::query()
+            ->active()
+            ->where('user_id', $userId)
+            ->whereHas('unit', fn ($unitQuery) => $unitQuery->active());
+
+        if ($projectId !== null) {
+            $projectMembership = (clone $query)
+                ->whereHas('unit', fn ($unitQuery) => $unitQuery->where('project_id', $projectId))
+                ->orderByDesc('is_primary')
+                ->first();
+            if ($projectMembership) {
+                return (int) $projectMembership->unit_id;
+            }
+        }
+
+        return ($query->orderByDesc('is_primary')->orderBy('id')->value('unit_id')) ?: null;
+    }
+
+    private function assignmentUnits(): array
+    {
+        return CoordinationUnit::query()
+            ->active()
+            ->whereHas('memberships', fn ($query) => $query
+                ->active()
+                ->whereHas('user', fn ($userQuery) => $userQuery
+                    ->where('status', 'active')
+                    ->whereIn('role', ['coordinator', 'staff'])))
+            ->with(['memberships' => fn ($query) => $query
+                ->active()
+                ->whereHas('user', fn ($userQuery) => $userQuery
+                    ->where('status', 'active')
+                    ->whereIn('role', ['coordinator', 'staff']))
+                ->with('user:id,name,surname,role,status')
+                ->orderByRaw("CASE WHEN position = 'coordinator' THEN 0 ELSE 1 END")])
+            ->orderBy('kind')
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'kind', 'project_id'])
+            ->map(fn (CoordinationUnit $unit) => [
+                'id' => (int) $unit->id,
+                'code' => $unit->code,
+                'name' => $unit->name,
+                'kind' => $unit->kind,
+                'project_id' => $unit->project_id === null ? null : (int) $unit->project_id,
+                'members' => $unit->memberships->map(fn (CoordinationUnitMembership $membership) => [
+                    'membership_id' => (int) $membership->id,
+                    'user_id' => (int) $membership->user_id,
+                    'name' => $membership->user?->name,
+                    'surname' => $membership->user?->surname,
+                    'role' => $membership->user?->role,
+                    'position' => $membership->position,
+                ])->values()->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     private function canUseProjectAsTicketOwner(User $user, int $projectId): bool
@@ -207,6 +303,7 @@ class SupportTicketController extends Controller
             'project_id' => $ticket->project_id,
             'period_id' => $ticket->period_id,
             'assigned_to' => $ticket->assigned_to,
+            'assigned_unit_id' => $ticket->assigned_unit_id === null ? null : (int) $ticket->assigned_unit_id,
             'status' => $ticket->status,
             'created_at' => optional($ticket->created_at)?->toIso8601String(),
             'updated_at' => optional($ticket->updated_at)?->toIso8601String(),
@@ -214,6 +311,12 @@ class SupportTicketController extends Controller
             'project' => $ticket->relationLoaded('project') ? $ticket->project : null,
             'period' => $ticket->relationLoaded('period') ? $ticket->period : null,
             'assignee' => $ticket->relationLoaded('assignee') ? $ticket->assignee : null,
+            'assigned_unit' => $ticket->relationLoaded('assignedUnit') ? $ticket->assignedUnit : null,
+            'can_update' => auth()->user() ? $this->canCoordinateTicket(auth()->user(), $ticket, 'support.update') : false,
+            'can_reopen' => auth()->user() ? $this->canCoordinateTicket(auth()->user(), $ticket, 'support.reopen') : false,
+            'can_assign' => auth()->user() ? $this->canAccessTicket(auth()->user(), $ticket, 'support.assign') : false,
+            'can_reply' => auth()->user() ? $this->canAccessTicket(auth()->user(), $ticket, 'support.reply') : false,
+            'can_close' => auth()->user() ? $this->canAccessTicket(auth()->user(), $ticket, 'support.close') : false,
             'replies' => $ticket->relationLoaded('replies')
                 ? $ticket->replies->map(fn (SupportReply $reply) => $this->replyPayload($reply, $usePanelAttachmentUrls))->values()
                 : [],
@@ -237,11 +340,11 @@ class SupportTicketController extends Controller
         }
 
         $extension = pathinfo($ticket->attachment_path, PATHINFO_EXTENSION);
-        $filename = 'destek_talebi_ek_' . $ticket->id;
+        $filename = 'destek_talebi_ek_'.$ticket->id;
 
         return MediaStorage::disk()->download(
             $ticket->attachment_path,
-            $filename . ($extension ? ".{$extension}" : '')
+            $filename.($extension ? ".{$extension}" : '')
         );
     }
 
@@ -262,11 +365,11 @@ class SupportTicketController extends Controller
         }
 
         $extension = pathinfo($reply->attachment_path, PATHINFO_EXTENSION);
-        $filename = 'destek_ek_' . $reply->id;
+        $filename = 'destek_ek_'.$reply->id;
 
         return MediaStorage::disk()->download(
             $reply->attachment_path,
-            $filename . ($extension ? ".{$extension}" : '')
+            $filename.($extension ? ".{$extension}" : '')
         );
     }
 
@@ -336,7 +439,7 @@ class SupportTicketController extends Controller
             ->whereHas('staffProfile', function (Builder $builder) use ($unitKeywords) {
                 $builder->where(function (Builder $inner) use ($unitKeywords) {
                     foreach ($unitKeywords as $keyword) {
-                        $inner->orWhereRaw('LOWER(unit) LIKE ?', ['%' . $keyword . '%']);
+                        $inner->orWhereRaw('LOWER(unit) LIKE ?', ['%'.$keyword.'%']);
                     }
                 });
             })
@@ -388,6 +491,7 @@ class SupportTicketController extends Controller
      * Participant/mobile endpoint. Requires `participant.support.manage`; the result is limited to tickets created by the authenticated student/alumni user and includes replies plus participant-facing attachment URLs.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @response 200 {"tickets":[{"id":1,"subject":"Teknik destek","category":"technical","status":"open","attachment_download_url":"/tickets/1/attachment","replies":[]}]}
@@ -412,12 +516,14 @@ class SupportTicketController extends Controller
      * Participant/mobile endpoint. Requires `participant.support.manage`; exports only the authenticated user's tickets. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled by the application export stack.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 1
      * @queryParam status string Optional status filter. Example: open
      * @queryParam format string Optional export format. Example: csv
+     *
      * @response 200 {"download":"Export file stream"}
      * @response 401 {"message":"Unauthenticated."}
      */
@@ -445,7 +551,7 @@ class SupportTicketController extends Controller
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'destek_taleplerim_' . now()->format('Ymd_His'),
+            'destek_taleplerim_'.now()->format('Ymd_His'),
             'Destek Taleplerim',
             $headings,
             $rows,
@@ -460,6 +566,7 @@ class SupportTicketController extends Controller
      * Send as `multipart/form-data` when uploading an attachment. Official document categories such as `official_document`, `official_doc`, or `resmi_evrak` require an attachment. The ticket is auto-assigned to a project coordinator, category unit candidate, or fallback super admin when possible.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @bodyParam subject string required Ticket subject. Example: Teknik destek
@@ -468,6 +575,7 @@ class SupportTicketController extends Controller
      * @bodyParam period_id integer Optional period id. Example: 1
      * @bodyParam message string required Ticket message. Example: Sisteme girerken hata aliyorum.
      * @bodyParam attachment file Optional attachment, max 10MB. Required for official document categories.
+     *
      * @response 201 {"message":"Destek talebiniz basariyla alindi.","ticket":{"id":1,"subject":"Teknik destek","status":"in_progress"}}
      * @response 403 {"message":"Bu proje icin destek talebi olusturma yetkiniz bulunmuyor."}
      * @response 422 {"message":"The subject field is required.","errors":{"subject":["The subject field is required."]}}
@@ -517,13 +625,14 @@ class SupportTicketController extends Controller
 
         $ticket = SupportTicket::create([
             'user_id' => $request->user()->id,
-            'name' => trim($request->user()->name . ' ' . $request->user()->surname),
+            'name' => trim($request->user()->name.' '.$request->user()->surname),
             'email' => $request->user()->email,
             'subject' => $validated['subject'],
             'category' => $validated['category'],
             'project_id' => $validated['project_id'] ?? null,
             'period_id' => $periodId,
             'assigned_to' => $autoAssigneeId,
+            'assigned_unit_id' => $this->unitIdForAssignee($autoAssigneeId, $validated['project_id'] ?? null),
             'message' => $validated['message'],
             'attachment_path' => $attachmentPath,
             'status' => $autoAssigneeId ? 'in_progress' : 'open',
@@ -550,6 +659,7 @@ class SupportTicketController extends Controller
      * Send as `multipart/form-data` when uploading an attachment. Official document categories may require an attachment.
      *
      * @group Contact
+     *
      * @unauthenticated
      *
      * @bodyParam name string required Sender name. Example: Hakan Kekec
@@ -559,6 +669,7 @@ class SupportTicketController extends Controller
      * @bodyParam project_id integer Optional related project id. Example: 1
      * @bodyParam message string required Message body. Example: Merhaba, bilgi almak istiyorum.
      * @bodyParam attachment file Optional attachment file, max 10MB. Required for official document categories.
+     *
      * @response 201 {"message":"Mesajiniz basariyla alindi. En kisa surede sizinle iletisime gececegiz.","ticket":{"id":1,"name":"Hakan Kekec","email":"hakan@example.com","subject":"Bilgi talebi","status":"open"}}
      * @response 422 {"message":"The email field must be a valid email address.","errors":{"email":["The email field must be a valid email address."]}}
      */
@@ -567,33 +678,34 @@ class SupportTicketController extends Controller
         $officialDocumentRequired = $this->isOfficialDocumentCategory($request->input('category'));
 
         $validated = $request->validate([
-            'name'       => 'required|string|max:255',
-            'email'      => 'required|email|max:255',
-            'subject'    => 'required|string|max:255',
-            'category'   => 'required|string|max:100',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'subject' => 'required|string|max:255',
+            'category' => 'required|string|max:100',
             'project_id' => 'nullable|exists:projects,id',
-            'message'    => 'required|string',
+            'message' => 'required|string',
             'attachment' => $officialDocumentRequired ? 'required|file|max:10240' : 'nullable|file|max:10240',
         ]);
 
         $attachmentPath = null;
         if ($request->hasFile('attachment') && $request->file('attachment')?->isValid()) {
-            $attachmentPath = \App\Support\MediaStorage::putFile('support-attachments', $request->file('attachment'));
+            $attachmentPath = MediaStorage::putFile('support-attachments', $request->file('attachment'));
         }
 
         $autoAssigneeId = $this->resolveAutoAssignee($validated['project_id'] ?? null, $validated['category'] ?? null);
 
         $ticket = SupportTicket::create([
-            'user_id'         => null,
-            'name'            => $validated['name'],
-            'email'           => $validated['email'],
-            'subject'         => $validated['subject'],
-            'category'        => $validated['category'],
-            'project_id'      => $validated['project_id'] ?? null,
-            'assigned_to'     => $autoAssigneeId,
-            'message'         => $validated['message'],
+            'user_id' => null,
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'subject' => $validated['subject'],
+            'category' => $validated['category'],
+            'project_id' => $validated['project_id'] ?? null,
+            'assigned_to' => $autoAssigneeId,
+            'assigned_unit_id' => $this->unitIdForAssignee($autoAssigneeId, $validated['project_id'] ?? null),
+            'message' => $validated['message'],
             'attachment_path' => $attachmentPath,
-            'status'          => $autoAssigneeId ? 'in_progress' : 'open',
+            'status' => $autoAssigneeId ? 'in_progress' : 'open',
         ]);
 
         $this->notifyTicketAssignee($ticket);
@@ -615,11 +727,14 @@ class SupportTicketController extends Controller
      * Ticket owners can reply to their own ticket. Staff/admin replies require `support.reply` and ticket visibility through global scope, assigned ownership, project scope, or ticket ownership. Upload attachments with `multipart/form-data`.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @urlParam id integer required Ticket id. Example: 1
+     *
      * @bodyParam message string required Reply message. Example: Ek bilgi paylasiyorum.
      * @bodyParam attachment file Optional reply attachment, max 10MB.
+     *
      * @response 200 {"reply":{"id":1,"ticket_id":1,"message":"Ek bilgi paylasiyorum","attachment_download_url":"/tickets/replies/1/attachment"}}
      * @response 403 {"message":"Bu ticket icin yanit yetkiniz yok."}
      * @response 422 {"message":"The message field is required.","errors":{"message":["The message field is required."]}}
@@ -653,7 +768,16 @@ class SupportTicketController extends Controller
         ]);
 
         if ($ticket->status === 'open') {
+            $oldStatus = $ticket->status;
             $ticket->update(['status' => 'in_progress']);
+            $this->statusHistoryRecorder->record(
+                $ticket,
+                $oldStatus,
+                'in_progress',
+                $request->user()->id,
+                $ticket->assigned_unit_id,
+                ['action' => 'support.reply']
+            );
         }
 
         $ticket->loadMissing('user:id,email');
@@ -689,9 +813,11 @@ class SupportTicketController extends Controller
      * The current user must own the parent ticket or pass `support.view`/`support.reply` visibility. Returns a storage direct URL when configured; otherwise streams the binary file.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @urlParam id integer required Reply id. Example: 1
+     *
      * @response 200 {"download_url":"https://storage.example.com/support-replies/file.pdf"}
      * @response 200 {"download":"Binary reply attachment stream"}
      * @response 403 {"message":"Bu ek dosyayi indirme yetkiniz yok."}
@@ -720,9 +846,11 @@ class SupportTicketController extends Controller
      * The current user must own the ticket or pass `support.view`/`support.reply` visibility. Returns a storage direct URL when configured; otherwise streams the binary file.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @urlParam id integer required Ticket id. Example: 1
+     *
      * @response 200 {"download_url":"https://storage.example.com/support-attachments/file.pdf"}
      * @response 200 {"download":"Binary attachment stream"}
      * @response 403 {"message":"Bu ek dosyayi indirme yetkiniz yok."}
@@ -747,6 +875,7 @@ class SupportTicketController extends Controller
      * Panel/admin endpoint. Requires `support.view`; users with global scope see all tickets. Scoped users see tickets for manageable projects plus tickets assigned to them or created by them. The response is paginated and includes user, project, period, assignee, replies, and panel attachment URLs.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @queryParam status string Optional ticket status filter. Example: open
@@ -755,6 +884,7 @@ class SupportTicketController extends Controller
      * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
      * @queryParam assigned_to integer Optional assignee user id filter. Example: 5
      * @queryParam search string Optional subject, message, name, or email search. Example: belge
+     *
      * @response 200 {"tickets":{"data":[{"id":1,"subject":"Teknik destek","status":"open","attachment_download_url":"/panel/support/tickets/1/attachment","replies":[]}]}}
      * @response 403 {"message":"This action is unauthorized."}
      */
@@ -786,6 +916,7 @@ class SupportTicketController extends Controller
             ->with([
                 'user:id,name,surname,email,role',
                 'assignee:id,name,surname,role',
+                'assignedUnit:id,code,name,kind,project_id',
                 'project:id,name',
                 'period:id,name,status',
                 'replies.user:id,name,surname,role',
@@ -794,11 +925,19 @@ class SupportTicketController extends Controller
 
         if (! $this->permissionResolver->hasGlobalScope($user, 'support.view')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.view');
+            $unitIds = $this->permissionResolver->coordinationUnitIdsForPermission($user, 'support.view');
 
-            $query->where(function (Builder $builder) use ($user, $manageableProjectIds) {
+            $query->where(function (Builder $builder) use ($user, $manageableProjectIds, $unitIds) {
                 $builder
-                    ->whereIn('project_id', $manageableProjectIds)
-                    ->orWhere('assigned_to', $user->id)
+                    ->whereIn('assigned_unit_id', $unitIds)
+                    ->orWhere(function (Builder $legacyQuery) use ($user, $manageableProjectIds) {
+                        $legacyQuery->whereNull('assigned_unit_id')
+                            ->where(function (Builder $legacyAccess) use ($user, $manageableProjectIds) {
+                                $legacyAccess
+                                    ->whereIn('project_id', $manageableProjectIds)
+                                    ->orWhere('assigned_to', $user->id);
+                            });
+                    })
                     ->orWhere('user_id', $user->id);
             });
         }
@@ -827,15 +966,18 @@ class SupportTicketController extends Controller
             $search = $validated['search'];
             $query->where(function (Builder $builder) use ($search) {
                 $builder
-                    ->where('subject', 'like', '%' . $search . '%')
-                    ->orWhere('message', 'like', '%' . $search . '%')
-                    ->orWhere('name', 'like', '%' . $search . '%')
-                    ->orWhere('email', 'like', '%' . $search . '%');
+                    ->where('subject', 'like', '%'.$search.'%')
+                    ->orWhere('message', 'like', '%'.$search.'%')
+                    ->orWhere('name', 'like', '%'.$search.'%')
+                    ->orWhere('email', 'like', '%'.$search.'%');
             });
         }
 
         return response()->json([
             'tickets' => $query->paginate(20)->through(fn (SupportTicket $ticket) => $this->ticketPayload($ticket, true)),
+            'assignment_units' => $this->permissionResolver->hasPermission($user, 'support.assign')
+                ? $this->assignmentUnits()
+                : [],
         ]);
     }
 
@@ -845,6 +987,7 @@ class SupportTicketController extends Controller
      * Panel/admin endpoint. Requires `support.export`; users with global scope export all matching tickets, while scoped users export only manageable project tickets plus tickets assigned to or created by them. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @queryParam status string Optional ticket status filter. Example: closed
@@ -853,6 +996,7 @@ class SupportTicketController extends Controller
      * @queryParam period_id integer Optional period filter; resolved with project-period scope. Example: 1
      * @queryParam search string Optional subject, message, name, or email search. Example: evrak
      * @queryParam format string Optional export format. Example: xlsx
+     *
      * @response 200 {"download":"Export file stream"}
      * @response 403 {"message":"This action is unauthorized."}
      */
@@ -890,11 +1034,19 @@ class SupportTicketController extends Controller
 
         if (! $this->permissionResolver->hasGlobalScope($user, 'support.export')) {
             $manageableProjectIds = $this->permissionResolver->projectIdsForPermission($user, 'support.export');
+            $unitIds = $this->permissionResolver->coordinationUnitIdsForPermission($user, 'support.export');
 
-            $query->where(function (Builder $builder) use ($user, $manageableProjectIds) {
+            $query->where(function (Builder $builder) use ($user, $manageableProjectIds, $unitIds) {
                 $builder
-                    ->whereIn('project_id', $manageableProjectIds)
-                    ->orWhere('assigned_to', $user->id)
+                    ->whereIn('assigned_unit_id', $unitIds)
+                    ->orWhere(function (Builder $legacyQuery) use ($user, $manageableProjectIds) {
+                        $legacyQuery->whereNull('assigned_unit_id')
+                            ->where(function (Builder $legacyAccess) use ($user, $manageableProjectIds) {
+                                $legacyAccess
+                                    ->whereIn('project_id', $manageableProjectIds)
+                                    ->orWhere('assigned_to', $user->id);
+                            });
+                    })
                     ->orWhere('user_id', $user->id);
             });
         }
@@ -919,10 +1071,10 @@ class SupportTicketController extends Controller
             $search = $validated['search'];
             $query->where(function (Builder $builder) use ($search) {
                 $builder
-                    ->where('subject', 'like', '%' . $search . '%')
-                    ->orWhere('message', 'like', '%' . $search . '%')
-                    ->orWhere('name', 'like', '%' . $search . '%')
-                    ->orWhere('email', 'like', '%' . $search . '%');
+                    ->where('subject', 'like', '%'.$search.'%')
+                    ->orWhere('message', 'like', '%'.$search.'%')
+                    ->orWhere('name', 'like', '%'.$search.'%')
+                    ->orWhere('email', 'like', '%'.$search.'%');
             });
         }
 
@@ -934,17 +1086,17 @@ class SupportTicketController extends Controller
             $ticket->subject,
             $ticket->category,
             $ticket->status,
-            $ticket->user ? trim($ticket->user->name . ' ' . $ticket->user->surname) : $ticket->name,
+            $ticket->user ? trim($ticket->user->name.' '.$ticket->user->surname) : $ticket->name,
             $ticket->user?->email ?? $ticket->email ?? '-',
             $ticket->project?->name ?? '-',
             $ticket->period?->name ?? '-',
-            $ticket->assignee ? trim($ticket->assignee->name . ' ' . $ticket->assignee->surname) : '-',
+            $ticket->assignee ? trim($ticket->assignee->name.' '.$ticket->assignee->surname) : '-',
             $ticket->created_at?->format('d.m.Y H:i') ?? '-',
         ])->all();
 
         return AdminExportResponder::download(
             $request->string('format')->toString() ?: 'csv',
-            'destek_kayitlari_' . now()->format('Ymd_His'),
+            'destek_kayitlari_'.now()->format('Ymd_His'),
             'Destek Kayitlari',
             $headings,
             $rows,
@@ -957,9 +1109,11 @@ class SupportTicketController extends Controller
      * Panel/admin endpoint. Requires `support.assign`. This intentionally returns a limited active admin/coordinator/staff list without requiring `users.view`. Without global support assign scope, candidates are restricted to users who can view the selected/manageable project scope.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @queryParam project_id integer Optional project id used to narrow assignable candidates. Example: 1
+     *
      * @response 200 {"users":[{"id":2,"name":"Ayse","surname":"Yilmaz","role":"staff"}]}
      * @response 403 {"message":"Bu proje icin destek atama yetkiniz yok."}
      */
@@ -969,8 +1123,32 @@ class SupportTicketController extends Controller
         $user = $request->user();
         $validated = $request->validate([
             'project_id' => 'nullable|integer|exists:projects,id',
+            'unit_id' => 'nullable|integer|exists:coordination_units,id',
         ]);
         $projectId = $validated['project_id'] ?? null;
+
+        if (! empty($validated['unit_id'])) {
+            $unit = CoordinationUnit::query()->active()->findOrFail((int) $validated['unit_id']);
+
+            return response()->json([
+                'users' => $unit->memberships()
+                    ->active()
+                    ->whereHas('user', fn ($query) => $query
+                        ->where('status', 'active')
+                        ->whereIn('role', ['coordinator', 'staff']))
+                    ->with('user:id,name,surname,role')
+                    ->get()
+                    ->map(fn (CoordinationUnitMembership $membership) => [
+                        'id' => (int) $membership->user_id,
+                        'name' => $membership->user?->name,
+                        'surname' => $membership->user?->surname,
+                        'role' => $membership->user?->role,
+                        'position' => $membership->position,
+                        'membership_id' => (int) $membership->id,
+                    ])
+                    ->values(),
+            ]);
+        }
 
         $users = User::query()
             ->select(['id', 'name', 'surname', 'role'])
@@ -1018,10 +1196,13 @@ class SupportTicketController extends Controller
      * Panel/admin endpoint. Requires `support.assign` and ticket visibility through global scope, project scope, ownership, or current assignment. The selected assignee must be an active super admin/coordinator/staff user; for project-scoped assignment, the assignee must also have `support.view` on the ticket project.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @urlParam id integer required Ticket id. Example: 1
+     *
      * @bodyParam assigned_to integer required Active admin/coordinator/staff user id. Example: 2
+     *
      * @response 200 {"message":"Ticket atandi.","ticket":{"id":1,"assigned_to":2,"status":"in_progress"}}
      * @response 403 {"message":"Bu ticket icin atama yetkiniz yok."}
      * @response 422 {"message":"Secilen kullanici bu destek talebinin proje kapsaminda goruntuleme yetkisine sahip degil."}
@@ -1030,7 +1211,10 @@ class SupportTicketController extends Controller
     {
         $this->abortUnlessAllowed($request, 'support.assign');
 
-        $request->validate(['assigned_to' => 'required|exists:users,id']);
+        $validated = $request->validate([
+            'assigned_to' => 'required|exists:users,id',
+            'assigned_unit_id' => 'nullable|integer|exists:coordination_units,id',
+        ]);
 
         $ticket = SupportTicket::findOrFail($id);
         abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.assign'), 403, 'Bu ticket icin atama yetkiniz yok.');
@@ -1042,6 +1226,19 @@ class SupportTicketController extends Controller
             ->whereIn('role', ['super_admin', 'coordinator', 'staff'])
             ->firstOrFail();
 
+        $assignedUnitId = ! empty($validated['assigned_unit_id'])
+            ? (int) $validated['assigned_unit_id']
+            : $this->unitIdForAssignee($assignee->id, $ticket->project_id);
+
+        if ($assignedUnitId !== null) {
+            $validMembership = CoordinationUnitMembership::query()
+                ->active()
+                ->where('unit_id', $assignedUnitId)
+                ->where('user_id', $assignee->id)
+                ->exists();
+            abort_unless($validMembership, 422, 'Secilen kisi atanan koordinatörlügün aktif üyesi degil.');
+        }
+
         if (! $this->permissionResolver->hasGlobalScope($request->user(), 'support.assign') && $ticket->project_id !== null) {
             abort_unless(
                 $this->permissionResolver->canAccessProject($assignee, 'support.view', (int) $ticket->project_id),
@@ -1050,10 +1247,20 @@ class SupportTicketController extends Controller
             );
         }
 
+        $oldStatus = $ticket->status;
         $ticket->update([
             'assigned_to' => $assignee->id,
+            'assigned_unit_id' => $assignedUnitId,
             'status' => 'in_progress',
         ]);
+        $this->statusHistoryRecorder->record(
+            $ticket,
+            $oldStatus,
+            'in_progress',
+            $request->user()->id,
+            $assignedUnitId,
+            ['action' => 'support.assign', 'assigned_to' => $assignee->id]
+        );
 
         $this->notificationService->sendEmail(
             array_filter([$assignee->email]),
@@ -1082,9 +1289,11 @@ class SupportTicketController extends Controller
      * Panel/admin endpoint. Requires `support.close` and ticket visibility through global scope, project scope, ownership, or current assignment. Closing the ticket notifies the owner when an email is available.
      *
      * @group Support
+     *
      * @authenticated
      *
      * @urlParam id integer required Ticket id. Example: 1
+     *
      * @response 200 {"message":"Ticket kapatildi.","ticket":{"id":1,"status":"closed"}}
      * @response 403 {"message":"Bu ticketi kapatma yetkiniz yok."}
      */
@@ -1095,7 +1304,16 @@ class SupportTicketController extends Controller
         abort_unless($this->canAccessTicket($request->user(), $ticket, 'support.close'), 403, 'Bu ticketi kapatma yetkiniz yok.');
         $this->assertPeriodResolvable($request, $ticket->period_id);
 
+        $oldStatus = $ticket->status;
         $ticket->update(['status' => 'closed']);
+        $this->statusHistoryRecorder->record(
+            $ticket,
+            $oldStatus,
+            'closed',
+            $request->user()->id,
+            $ticket->assigned_unit_id,
+            ['action' => 'support.close']
+        );
 
         $ticket->loadMissing('user:id,email');
         $this->notifyTicketOwner(
@@ -1107,6 +1325,70 @@ class SupportTicketController extends Controller
         return response()->json([
             'message' => 'Ticket kapatildi.',
             'ticket' => $ticket,
+        ]);
+    }
+
+    public function reopen(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'support.reopen');
+        $ticket = SupportTicket::query()->findOrFail($id);
+        abort_unless(
+            $this->canCoordinateTicket($request->user(), $ticket, 'support.reopen'),
+            403,
+            'Bu destek kaydini yeniden acma yetkiniz yok.'
+        );
+        $this->assertPeriodResolvable($request, $ticket->period_id);
+
+        abort_unless(in_array($ticket->status, ['closed', 'resolved'], true), 422, 'Yalniz kapali veya cozulmus kayit yeniden acilabilir.');
+
+        $oldStatus = $ticket->status;
+        $newStatus = $ticket->assigned_to ? 'in_progress' : 'open';
+        $ticket->update(['status' => $newStatus]);
+        $this->statusHistoryRecorder->record(
+            $ticket,
+            $oldStatus,
+            $newStatus,
+            $request->user()->id,
+            $ticket->assigned_unit_id,
+            ['action' => 'support.reopen']
+        );
+
+        $ticket->loadMissing('user:id,email');
+        $this->notifyTicketOwner(
+            $ticket,
+            'Destek talebiniz yeniden acildi',
+            "Konu: {$ticket->subject}\nDestek talebiniz koordinatör tarafindan yeniden isleme alindi."
+        );
+
+        return response()->json([
+            'message' => 'Destek kaydi yeniden acildi.',
+            'ticket' => $ticket->fresh(['assignee:id,name,surname,role', 'assignedUnit:id,code,name,kind,project_id']),
+        ]);
+    }
+
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'support.update');
+        $ticket = SupportTicket::query()->findOrFail($id);
+        abort_unless(
+            $this->canCoordinateTicket($request->user(), $ticket, 'support.update'),
+            403,
+            'Bu destek kaydini düzenleme yetkiniz yok.'
+        );
+        $this->assertPeriodResolvable($request, $ticket->period_id);
+
+        $validated = $request->validate([
+            'subject' => 'sometimes|required|string|max:255',
+            'category' => 'sometimes|required|string|max:100',
+            'message' => 'sometimes|required|string|max:10000',
+        ]);
+        abort_if($validated === [], 422, 'En az bir düzenlenebilir alan gonderilmelidir.');
+
+        $ticket->update($validated);
+
+        return response()->json([
+            'message' => 'Destek kaydi güncellendi.',
+            'ticket' => $ticket->fresh(['assignee:id,name,surname,role', 'assignedUnit:id,code,name,kind,project_id']),
         ]);
     }
 }

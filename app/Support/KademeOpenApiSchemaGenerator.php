@@ -270,6 +270,7 @@ class KademeOpenApiSchemaGenerator extends OpenApiGenerator
             'FinancialTransaction' => $this->object([
                 'id' => ['type' => 'integer', 'example' => 99],
                 'project_id' => ['type' => 'integer', 'nullable' => true],
+                'processing_unit_id' => ['type' => 'integer', 'nullable' => true],
                 'period_id' => ['type' => 'integer', 'nullable' => true],
                 'type' => ['type' => 'string', 'example' => 'expense'],
                 'category' => ['type' => 'string', 'nullable' => true],
@@ -278,6 +279,16 @@ class KademeOpenApiSchemaGenerator extends OpenApiGenerator
                 'status' => ['type' => 'string', 'example' => 'pending'],
                 'invoice_path' => ['type' => 'string', 'nullable' => true],
                 'payment_date' => ['type' => 'string', 'format' => 'date', 'nullable' => true],
+                'processing_unit' => [
+                    'type' => 'object',
+                    'nullable' => true,
+                    'properties' => [
+                        'id' => ['type' => 'integer'],
+                        'code' => ['type' => 'string'],
+                        'name' => ['type' => 'string'],
+                    ],
+                ],
+                'capabilities' => ['type' => 'object', 'additionalProperties' => ['type' => 'boolean']],
             ], ['id', 'type', 'amount', 'status']),
             'ActivityLog' => $this->object([
                 'id' => ['type' => 'integer', 'example' => 1200],

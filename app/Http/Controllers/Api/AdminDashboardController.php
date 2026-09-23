@@ -47,6 +47,8 @@ class AdminDashboardController extends Controller
     {
         $user = $request->user();
         $any = $this->permissionResolver->hasPermission($user, 'programs.view')
+            || $this->permissionResolver->hasPermission($user, 'programs.community_event.view')
+            || $this->permissionResolver->hasPermission($user, 'programs.logistics.view')
             || $this->permissionResolver->hasPermission($user, 'applications.view')
             || $this->permissionResolver->hasPermission($user, 'financial.view')
             || $this->permissionResolver->hasPermission($user, 'support.view')
@@ -67,6 +69,8 @@ class AdminDashboardController extends Controller
             'dashboard.staff.view',
             'projects.view',
             'programs.view',
+            'programs.community_event.view',
+            'programs.logistics.view',
             'applications.view',
             'financial.view',
             'support.view',
@@ -74,6 +78,37 @@ class AdminDashboardController extends Controller
             'assignments.view',
             'projects.participants.view',
         ];
+    }
+
+    private function dashboardProgramMode(User $user): string
+    {
+        if ($this->permissionResolver->hasGlobalScope($user, 'programs.view')) {
+            return 'all';
+        }
+
+        if ($this->permissionResolver->hasPermission($user, 'programs.view')) {
+            $hasCoreOperation = collect([
+                'programs.create',
+                'programs.update',
+                'programs.complete',
+                'programs.attendance.view',
+                'programs.attendance.manage',
+                'programs.qr.manage',
+                'programs.export',
+            ])->contains(fn (string $permission) => $this->permissionResolver->hasPermission($user, $permission));
+
+            return ! $hasCoreOperation && $this->permissionResolver->hasPermission($user, 'programs.media.upload')
+                ? 'media'
+                : 'core';
+        }
+
+        if ($this->permissionResolver->hasPermission($user, 'programs.community_event.view')) {
+            return 'community_event';
+        }
+
+        return $this->permissionResolver->hasPermission($user, 'programs.logistics.view')
+            ? 'logistics'
+            : 'none';
     }
 
     private function dashboardProjectsPayload(Request $request): array
@@ -209,7 +244,15 @@ class AdminDashboardController extends Controller
         $isGlobal = $this->permissionResolver->hasGlobalScope($user, 'dashboard.admin.view')
             || $this->permissionResolver->hasGlobalScope($user, 'projects.view');
         $projectIdsByPermission = [
-            'programs' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'programs.view'),
+            'programs' => $isGlobal ? null : collect([
+                'programs.view',
+                'programs.community_event.view',
+                'programs.logistics.view',
+            ])->flatMap(fn (string $permission) => $this->permissionResolver->projectIdsForPermission($user, $permission))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all(),
             'applications' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'applications.view'),
             'financial' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'financial.view'),
             'support' => $isGlobal ? null : $this->permissionResolver->projectIdsForPermission($user, 'support.view'),
@@ -229,8 +272,14 @@ class AdminDashboardController extends Controller
             ->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['projects'] ?? [-1]))
             ->when($selectedProjectId, fn ($q) => $q->where('project_id', $selectedProjectId))
             ->when($selectedPeriodId, fn ($q) => $q->where('period_id', $selectedPeriodId));
+        $programMode = $this->dashboardProgramMode($user);
         $scopeProgram = Program::query()
             ->when(! $isGlobal, fn ($q) => $q->whereIn('project_id', $projectIdsByPermission['programs'] ?? [-1]))
+            ->when($programMode === 'core', fn ($q) => $q->where(fn ($builder) => $builder
+                ->whereNull('program_kind')
+                ->orWhere('program_kind', Program::KIND_CORE_PROGRAM)))
+            ->when($programMode === 'community_event', fn ($q) => $q->where('program_kind', Program::KIND_COMMUNITY_EVENT))
+            ->when($programMode === 'none', fn ($q) => $q->whereRaw('1 = 0'))
             ->when($selectedProjectId, fn ($q) => $q->where('project_id', $selectedProjectId))
             ->when($selectedPeriodId, fn ($q) => $q->where('period_id', $selectedPeriodId));
         $scopeFinancial = FinancialTransaction::query()

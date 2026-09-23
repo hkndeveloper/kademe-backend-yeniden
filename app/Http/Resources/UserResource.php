@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\CoordinationOrganizationContextService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -20,6 +21,9 @@ class UserResource extends JsonResource
         if ($request->user()?->id === $this->id) {
             $authorization = app(PermissionResolver::class)->resolve($this->resource);
         }
+        $organizationContext = $authorization === null
+            ? null
+            : app(CoordinationOrganizationContextService::class)->forUser($this->resource, $authorization);
 
         return [
             'id' => $this->id,
@@ -50,21 +54,28 @@ class UserResource extends JsonResource
             'permission_scopes' => $authorization['scopes'] ?? [],
             'permission_overrides' => $authorization['direct_overrides'] ?? [],
             'authorization_context' => $authorization['contexts'] ?? [],
+            'organization_context' => $organizationContext ?? [],
         ];
     }
 
     private function maskEmail($email)
     {
-        if (!$email) return null;
-        $parts = explode("@", $email);
-        $name = implode('@', array_slice($parts, 0, count($parts)-1));
-        $len  = floor(strlen($name)/2);
-        return substr($name, 0, $len) . str_repeat('*', $len) . "@" . end($parts);
+        if (! $email) {
+            return null;
+        }
+        $parts = explode('@', $email);
+        $name = implode('@', array_slice($parts, 0, count($parts) - 1));
+        $len = floor(strlen($name) / 2);
+
+        return substr($name, 0, $len).str_repeat('*', $len).'@'.end($parts);
     }
 
     private function maskPhone($phone)
     {
-        if (!$phone) return null;
-        return substr($phone, 0, 4) . '***' . substr($phone, -2);
+        if (! $phone) {
+            return null;
+        }
+
+        return substr($phone, 0, 4).'***'.substr($phone, -2);
     }
 }

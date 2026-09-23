@@ -4,14 +4,18 @@ namespace App\Policies;
 
 use App\Models\Participant;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
+use App\Services\PermissionResolver;
 
 class ParticipantPolicy
 {
+    public function __construct(
+        private readonly PermissionResolver $permissionResolver
+    ) {}
+
     /**
      * Tüm kurallardan önce çalışır
      */
-    public function before(User $user, string $ability): bool|null
+    public function before(User $user, string $ability): ?bool
     {
         if ($user->hasRole('super_admin')) {
             return true;
@@ -30,11 +34,11 @@ class ParticipantPolicy
             return true;
         }
 
-        if ($user->hasRole('coordinator')) {
-            return $participant->project->coordinators()->where('user_id', $user->id)->exists();
-        }
-
-        return false;
+        return $this->permissionResolver->canAccessProject(
+            $user,
+            'projects.participants.view',
+            $participant->project_id
+        );
     }
 
     /**
@@ -42,10 +46,10 @@ class ParticipantPolicy
      */
     public function update(User $user, Participant $participant): bool
     {
-        if ($user->hasRole('coordinator')) {
-            return $participant->project->coordinators()->where('user_id', $user->id)->exists();
-        }
-
-        return false;
+        return $this->permissionResolver->canAccessProject(
+            $user,
+            'projects.participants.manage',
+            $participant->project_id
+        );
     }
 }

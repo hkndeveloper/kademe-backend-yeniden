@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\GoogleCalendarService;
+use App\Services\PeriodLifecycleService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\IstanbulDateTime;
@@ -49,12 +50,6 @@ class CalendarController extends Controller
 
     private function viewableProjectIds(User $user): array
     {
-        // Is kurali: coordinator/personel, etkinlik cakisma kontrolu icin tum projeleri gorebilir.
-        $allowCrossProjectCalendarView = (bool) config('permission_catalog.calendar_cross_project_view_for_staff_coordinator', true);
-        if ($allowCrossProjectCalendarView && in_array($user->role, ['coordinator', 'staff'], true)) {
-            return Project::query()->pluck('id')->all();
-        }
-
         return $this->permissionResolver->projectIdsForPermission($user, 'calendar.view');
     }
 
@@ -78,17 +73,12 @@ class CalendarController extends Controller
 
     private function isMediaUnit(User $user): bool
     {
-        $unit = mb_strtolower((string) $user->staffProfile?->unit);
-        $markers = config('permission_catalog.media_unit_markers', ['medya', 'media']);
-
-        foreach ($markers as $marker) {
-            $marker = mb_strtolower((string) $marker);
-            if ($marker !== '' && str_contains($unit, $marker)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $user->coordinationUnitMemberships()
+            ->active()
+            ->whereHas('unit', fn ($query) => $query
+                ->where('status', 'active')
+                ->where('code', 'service_media'))
+            ->exists();
     }
 
     private function canBeAssignedToProject(User $candidate, int $projectId): bool
@@ -97,7 +87,17 @@ class CalendarController extends Controller
             return true;
         }
 
-        if ($candidate->coordinatedProjects->contains('id', $projectId)) {
+        if ($candidate->coordinationUnitMemberships()
+            ->active()
+            ->whereHas('unit', fn ($query) => $query
+                ->where('status', 'active')
+                ->where(function ($unitQuery) use ($projectId) {
+                    $unitQuery->where('project_id', $projectId)
+                        ->orWhereHas('projectResponsibilities', fn ($responsibilityQuery) => $responsibilityQuery
+                            ->active()
+                            ->where('project_id', $projectId));
+                }))
+            ->exists()) {
             return true;
         }
 
@@ -150,11 +150,13 @@ class CalendarController extends Controller
         $assignmentItems = $assignedIds
             ->map(fn (int $userId) => $assignedUsers->get($userId))
             ->filter();
+        $responsibleUnit = $event->project?->coordinationUnit;
 
         return [
             'id' => $event->id,
             'calendar_event_id' => $event->id,
             'event_type' => 'meeting',
+            'program_kind' => null,
             'title' => $event->title,
             'description' => $event->description,
             'location' => $event->location,
@@ -168,6 +170,12 @@ class CalendarController extends Controller
             'project' => $event->project ? [
                 'id' => $event->project->id,
                 'name' => $event->project->name,
+            ] : null,
+            'responsible_unit' => $responsibleUnit ? [
+                'id' => (int) $responsibleUnit->id,
+                'name' => $responsibleUnit->name,
+                'code' => $responsibleUnit->code,
+                'kind' => $responsibleUnit->kind,
             ] : null,
             'period' => $event->period ? [
                 'id' => $event->period->id,
@@ -245,7 +253,9 @@ class CalendarController extends Controller
         $programQuery = Program::query()
             ->with([
                 'project:id,name',
+                'project.coordinationUnit:id,project_id,name,code,kind',
                 'period:id,name',
+                'managingUnit:id,name,code,kind',
                 'calendarEvent:id,program_id,google_event_id,assigned_users',
             ])
             ->orderBy('start_at');
@@ -254,7 +264,11 @@ class CalendarController extends Controller
         $programCollection = $programQuery->get();
 
         $meetingQuery = CalendarEvent::query()
-            ->with(['project:id,name', 'period:id,name'])
+            ->with([
+                'project:id,name',
+                'project.coordinationUnit:id,project_id,name,code,kind',
+                'period:id,name',
+            ])
             ->where('event_type', 'meeting')
             ->orderBy('start_at');
 
@@ -307,6 +321,7 @@ class CalendarController extends Controller
                 $assignmentItems = $assignedIds
                     ->map(fn (int $userId) => $assignedUsers->get($userId))
                     ->filter();
+                $responsibleUnit = $program->managingUnit ?? $program->project?->coordinationUnit;
 
                 return [
                     'id' => $program->id,
@@ -316,9 +331,13 @@ class CalendarController extends Controller
                     'description' => $program->description,
                     'location' => $program->location,
                     'status' => $program->status,
-                    'radius_meters' => $program->radius_meters,
-                    'credit_deduction' => $program->credit_deduction,
-                    'application_quota' => $program->application_quota,
+                    'program_kind' => $program->program_kind ?: Program::KIND_CORE_PROGRAM,
+                    'responsible_unit' => $responsibleUnit ? [
+                        'id' => (int) $responsibleUnit->id,
+                        'name' => $responsibleUnit->name,
+                        'code' => $responsibleUnit->code,
+                        'kind' => $responsibleUnit->kind,
+                    ] : null,
                     'start_at' => optional($program->start_at)?->toIso8601String(),
                     'end_at' => optional($program->end_at)?->toIso8601String(),
                     'project_id' => $program->project_id,
@@ -410,7 +429,22 @@ class CalendarController extends Controller
                     'active_period' => $activePeriod ? [
                         'id' => $activePeriod->id,
                         'name' => $activePeriod->name,
+                        'status' => $activePeriod->status,
+                        'lifecycle' => [
+                            'is_archive_mode' => PeriodLifecycleService::isArchiveStatus($activePeriod->status),
+                            'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($activePeriod->status),
+                        ],
                     ] : null,
+                    'periods' => $project->periods->map(fn (Period $period) => [
+                        'id' => (int) $period->id,
+                        'project_id' => (int) $period->project_id,
+                        'name' => $period->name,
+                        'status' => $period->status,
+                        'lifecycle' => [
+                            'is_archive_mode' => PeriodLifecycleService::isArchiveStatus($period->status),
+                            'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($period->status),
+                        ],
+                    ])->values(),
                 ];
             })->values(),
             'programs' => $calendarItems,

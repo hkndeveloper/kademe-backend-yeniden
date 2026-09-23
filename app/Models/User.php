@@ -103,6 +103,16 @@ class User extends Authenticatable implements CanResetPasswordContract
         return $this->belongsToMany(Project::class, 'project_staff_assignments');
     }
 
+    public function coordinationUnitMemberships()
+    {
+        return $this->hasMany(CoordinationUnitMembership::class);
+    }
+
+    public function assignedCoordinationUnitMemberships()
+    {
+        return $this->hasMany(CoordinationUnitMembership::class, 'assigned_by');
+    }
+
     // Katılımcı olduğu projeler
     public function participations()
     {

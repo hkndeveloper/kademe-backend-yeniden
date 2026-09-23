@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class AuditAdminActions
 {
@@ -18,7 +19,13 @@ class AuditAdminActions
         $requestId = (string) Str::uuid();
         $request->attributes->set('audit.request_id', $requestId);
 
-        $response = $next($request);
+        try {
+            $response = $next($request);
+        } catch (\Throwable $exception) {
+            $this->recordExceptionOutcome($request, $exception, $startedAt, $requestId);
+
+            throw $exception;
+        }
 
         $user = $request->user();
         if (! $user) {
@@ -36,6 +43,7 @@ class AuditAdminActions
             $statusCode = $response->getStatusCode();
             $event = $request->attributes->get('audit.event') ?: $this->resolveEvent($request->method(), $statusCode);
             $subject = $this->resolveSubjectModel($request);
+            $activeCoordinationContext = $request->attributes->get('audit.active_coordination_context');
 
             $properties = [
                 'status_code' => $statusCode,
@@ -51,6 +59,14 @@ class AuditAdminActions
                 'permission_checked' => $request->attributes->get('audit.permission_checked'),
                 'permission_any_checked' => $request->attributes->get('audit.permission_any_checked'),
                 'permission_scope' => $request->attributes->get('audit.permission_scope'),
+                'authorization_signal' => $this->authorizationSignal($request, $statusCode),
+                'acting_unit_id' => is_array($activeCoordinationContext)
+                    ? ($activeCoordinationContext['active_unit_id'] ?? null)
+                    : null,
+                'acting_membership_id' => is_array($activeCoordinationContext)
+                    ? ($activeCoordinationContext['active_membership_id'] ?? null)
+                    : null,
+                'active_coordination_context' => $activeCoordinationContext,
                 'route_parameters' => $this->sanitizeRouteParameters($request),
                 'query' => $this->sanitizeArray($request->query()),
                 'query_keys' => array_values(array_keys($request->query())),
@@ -95,6 +111,70 @@ class AuditAdminActions
         }
 
         return $response;
+    }
+
+    private function recordExceptionOutcome(
+        Request $request,
+        \Throwable $exception,
+        float $startedAt,
+        string $requestId
+    ): void {
+        $user = $request->user();
+        $routeMiddleware = $request->route()?->gatherMiddleware() ?? [];
+        if (! $user || ! in_array('audit.action', $routeMiddleware, true)) {
+            return;
+        }
+
+        try {
+            $statusCode = $exception instanceof HttpExceptionInterface
+                ? $exception->getStatusCode()
+                : 500;
+            $activeCoordinationContext = $request->attributes->get('audit.active_coordination_context');
+
+            activity()
+                ->useLog($request->attributes->get('audit.log_name', 'admin_actions'))
+                ->causedBy($user)
+                ->event($statusCode === 403 ? 'forbidden' : 'failed')
+                ->withProperties([
+                    'status_code' => $statusCode,
+                    'outcome' => 'denied_or_failed',
+                    'http_method' => $request->method(),
+                    'path' => $request->path(),
+                    'route_uri' => $request->route()?->uri(),
+                    'route_name' => $request->route()?->getName(),
+                    'request_id' => $requestId,
+                    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                    'permission_checked' => $request->attributes->get('audit.permission_checked'),
+                    'permission_any_checked' => $request->attributes->get('audit.permission_any_checked'),
+                    'permission_scope' => $request->attributes->get('audit.permission_scope'),
+                    'authorization_signal' => $this->authorizationSignal($request, $statusCode),
+                    'acting_unit_id' => is_array($activeCoordinationContext)
+                        ? ($activeCoordinationContext['active_unit_id'] ?? null)
+                        : null,
+                    'acting_membership_id' => is_array($activeCoordinationContext)
+                        ? ($activeCoordinationContext['active_membership_id'] ?? null)
+                        : null,
+                    'active_coordination_context' => $activeCoordinationContext,
+                    'route_parameters' => $this->sanitizeRouteParameters($request),
+                    'query_keys' => array_values(array_keys($request->query())),
+                    'exception' => class_basename($exception),
+                ])
+                ->log($this->buildDescription($request, $statusCode));
+        } catch (\Throwable $auditException) {
+            report($auditException);
+        }
+    }
+
+    private function authorizationSignal(Request $request, int $statusCode): string
+    {
+        if ($request->attributes->has('audit.permission_checked')
+            || $request->attributes->has('audit.permission_any_checked')) {
+            return $statusCode === 403 ? 'checked_and_denied' : 'checked';
+        }
+
+        return $statusCode === 403
+            ? 'denied_without_recorded_permission_check'
+            : 'no_controller_permission_check_recorded';
     }
 
     private function resolveEvent(string $method, int $statusCode): string
@@ -144,7 +224,7 @@ class AuditAdminActions
     }
 
     /**
-     * @param array<string, mixed> $items
+     * @param  array<string, mixed>  $items
      * @return array<string, mixed>
      */
     private function sanitizeArray(array $items): array
@@ -156,11 +236,13 @@ class AuditAdminActions
             $normalizedKey = Str::lower((string) $key);
             if (collect($sensitiveKeys)->contains(fn (string $needle) => str_contains($normalizedKey, $needle))) {
                 $out[$key] = '[redacted]';
+
                 continue;
             }
 
             if (is_array($value)) {
                 $out[$key] = $this->sanitizeArray($value);
+
                 continue;
             }
 

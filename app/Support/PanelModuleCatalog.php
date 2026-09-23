@@ -9,9 +9,7 @@ use Illuminate\Support\Collection;
 
 class PanelModuleCatalog
 {
-    public function __construct(private readonly PermissionResolver $permissionResolver)
-    {
-    }
+    public function __construct(private readonly PermissionResolver $permissionResolver) {}
 
     public function visibleFor(User $user): array
     {
@@ -36,6 +34,13 @@ class PanelModuleCatalog
             'modules' => $modules->all(),
             'sections' => $this->sections($modules),
             'authorization_context' => [
+                'active_unit_id' => $contexts['active_coordination_context']['active_unit_id']
+                    ?? $contexts['active_unit_id']
+                    ?? null,
+                'active_membership_id' => $contexts['active_coordination_context']['active_membership_id']
+                    ?? $contexts['active_membership_id']
+                    ?? null,
+                'active_context_source' => $contexts['active_coordination_context']['source'] ?? null,
                 'manageable_project_ids' => $contexts['manageable_project_ids'] ?? [],
                 'project_ids_by_special_module' => $contexts['project_ids_by_special_module'] ?? [],
                 'user_special_modules' => $contexts['user_special_modules'] ?? [],
@@ -51,7 +56,7 @@ class PanelModuleCatalog
             return false;
         }
 
-        $viewPermissions = collect($module['view_permissions'] ?? [])
+        $entryPermissions = $this->entryPermissions($module)
             ->map(fn ($permission) => (string) $permission)
             ->filter()
             ->values();
@@ -63,20 +68,21 @@ class PanelModuleCatalog
             return false;
         }
 
-        if ($viewPermissions->isEmpty()) {
+        if ($entryPermissions->isEmpty()) {
             return (bool) ($module['always_visible'] ?? false);
         }
 
-        $usableViewPermissions = $viewPermissions
+        $usableEntryPermissions = $entryPermissions
             ->filter(fn (string $permission) => $effectivePermissions->contains($permission)
                 && $this->scopeIsUsable($scopes[$permission] ?? null))
             ->values();
 
-        if ($usableViewPermissions->isEmpty()) {
+        if ($usableEntryPermissions->isEmpty()) {
             return false;
         }
 
-        return $this->projectFamilyIsVisible($module, $usableViewPermissions, $scopes, $contexts);
+        return $this->projectFamilyIsVisible($module, $usableEntryPermissions, $scopes, $contexts)
+            && $this->navigationModeIsVisible($module, $usableEntryPermissions, $scopes, $contexts);
     }
 
     private function shapeModule(array $module, Collection $effectivePermissions, array $scopes, array $contexts): array
@@ -92,6 +98,17 @@ class PanelModuleCatalog
                 && $this->scopeIsUsable($scopes[$permission] ?? null))
             ->values();
 
+        $entryPermissions = $this->entryPermissions($module);
+        $enabledEntryPermissions = $entryPermissions
+            ->filter(fn (string $permission) => $effectivePermissions->contains($permission)
+                && $this->scopeIsUsable($scopes[$permission] ?? null))
+            ->values();
+        $scopedPermissions = $enabledActions
+            ->merge($enabledEntryPermissions)
+            ->unique()
+            ->values();
+        $entryScopes = $this->scopesFor($enabledEntryPermissions, $scopes);
+
         $shaped = [
             'id' => $module['id'],
             'panel_type' => $module['panel_type'] ?? 'authority',
@@ -100,10 +117,22 @@ class PanelModuleCatalog
             'href' => $module['href'] ?? null,
             'icon' => $module['icon'] ?? null,
             'order' => (int) ($module['order'] ?? 999),
-            'view_permissions' => array_values($module['view_permissions'] ?? []),
+            'entry_permissions' => $entryPermissions->all(),
+            // Temporary response adapter for older clients. New code must use entry_permissions.
+            'view_permissions' => $entryPermissions->all(),
             'actions' => $actions->all(),
             'enabled_actions' => $enabledActions->all(),
-            'scopes' => $this->scopesFor($enabledActions, $scopes),
+            'always_visible' => (bool) ($module['always_visible'] ?? false),
+            'context_mode' => (string) ($module['context_mode'] ?? 'organization'),
+            'navigation_mode' => (string) ($module['navigation_mode'] ?? 'standard'),
+            'scope_modes' => collect($entryScopes)
+                ->pluck('scope_type')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+            'entry_scopes' => $entryScopes,
+            'scopes' => $this->scopesFor($scopedPermissions, $scopes),
         ];
 
         if (isset($module['family_key'])) {
@@ -116,7 +145,7 @@ class PanelModuleCatalog
             $shaped['required_special_modules'] = array_values($module['required_special_modules']);
         }
 
-        $matchedProjectIds = $this->matchedProjectIdsForModule($module, $enabledActions, $scopes, $contexts);
+        $matchedProjectIds = $this->matchedProjectIdsForModule($module, $enabledEntryPermissions, $scopes, $contexts);
         if ($matchedProjectIds !== null) {
             $shaped['matched_project_ids'] = $matchedProjectIds;
         }
@@ -128,7 +157,7 @@ class PanelModuleCatalog
     {
         return collect(config('panel_modules.modules', []))
             ->filter(fn (array $module) => ($module['panel_type'] ?? 'authority') === 'authority')
-            ->flatMap(fn (array $module) => $module['view_permissions'] ?? [])
+            ->flatMap(fn (array $module) => $this->entryPermissions($module))
             ->filter(fn (string $permission) => ! str_starts_with($permission, 'participant.') && ! str_starts_with($permission, 'alumni.'))
             ->unique()
             ->contains(fn (string $permission) => $effectivePermissions->contains($permission)
@@ -142,6 +171,37 @@ class PanelModuleCatalog
         }
 
         return ! empty($this->matchedProjectIdsForModule($module, $permissions, $scopes, $contexts));
+    }
+
+    private function navigationModeIsVisible(array $module, Collection $entryPermissions, array $scopes, array $contexts): bool
+    {
+        $mode = (string) ($module['navigation_mode'] ?? 'standard');
+        if ($mode === 'standard') {
+            return true;
+        }
+
+        $projectsViewScope = $entryPermissions->contains('projects.view')
+            ? ($scopes['projects.view'] ?? null)
+            : null;
+        $manageableProjectCount = collect($contexts['manageable_project_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->count();
+
+        return match ($mode) {
+            'project_list' => $entryPermissions->contains(fn (string $permission) => $permission !== 'projects.view')
+                || ($projectsViewScope['scope_type'] ?? 'none') === 'all'
+                || (($projectsViewScope['scope_type'] ?? 'none') !== 'self' && $manageableProjectCount > 1),
+            'single_project' => $projectsViewScope !== null
+                && ($projectsViewScope['scope_type'] ?? 'none') !== 'all'
+                && $manageableProjectCount <= 1,
+            'global_staff' => $entryPermissions->contains('staff.view')
+                && ($scopes['staff.view']['scope_type'] ?? 'none') === 'all',
+            'unit_members' => $entryPermissions->contains('staff.view')
+                && ! in_array($scopes['staff.view']['scope_type'] ?? 'none', ['none', '', 'all'], true),
+            default => false,
+        };
     }
 
     private function matchedProjectIdsForModule(array $module, Collection $permissions, array $scopes, array $contexts): ?array
@@ -165,6 +225,7 @@ class PanelModuleCatalog
             $scopeType = $scope['scope_type'] ?? 'none';
             if ($scopeType === 'all') {
                 $matched = array_merge($matched, $familyProjectIds);
+
                 continue;
             }
 
@@ -273,6 +334,15 @@ class PanelModuleCatalog
                 ],
             ])
             ->all();
+    }
+
+    private function entryPermissions(array $module): Collection
+    {
+        return collect($module['entry_permissions'] ?? $module['view_permissions'] ?? [])
+            ->map(fn ($permission) => (string) $permission)
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     private function sections(Collection $modules): array

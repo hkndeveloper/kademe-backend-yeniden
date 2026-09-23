@@ -15,6 +15,7 @@ class FinancialTransaction extends Model
     protected $fillable = [
         'project_id',
         'spending_unit',
+        'processing_unit_id',
         'period_id',
         'type',
         'category',
@@ -50,6 +51,11 @@ class FinancialTransaction extends Model
         return $this->belongsTo(Period::class);
     }
 
+    public function processingUnit()
+    {
+        return $this->belongsTo(CoordinationUnit::class, 'processing_unit_id');
+    }
+
     public function submitter()
     {
         return $this->belongsTo(User::class, 'submitted_by');
@@ -59,6 +65,12 @@ class FinancialTransaction extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+
+    public function statusHistories()
+    {
+        return $this->morphMany(WorkflowStatusHistory::class, 'subject')->latest();
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -67,4 +79,3 @@ class FinancialTransaction extends Model
             ->dontLogEmptyChanges();
     }
 }
-
