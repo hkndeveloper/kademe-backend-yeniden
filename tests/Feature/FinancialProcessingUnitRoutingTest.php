@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Services\CoordinationUnitBackfillService;
 use App\Services\CoordinationUnitPermissionRuleSyncService;
+use App\Support\PanelModuleCatalog;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -51,11 +52,17 @@ class FinancialProcessingUnitRoutingTest extends TestCase
         ]);
     }
 
-    public function test_legacy_project_financial_is_preserved_for_purchase_unit_while_project_users_cannot_create_new_records(): void
+    public function test_project_team_sees_its_own_financials_while_purchase_unit_keeps_final_approval(): void
     {
         $project = Project::query()->create([
             'name' => 'Pergel Finans',
             'slug' => 'pergel-finans',
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $otherProject = Project::query()->create([
+            'name' => 'Diger Proje',
+            'slug' => 'diger-proje',
             'type' => 'other',
             'status' => 'active',
         ]);
@@ -64,50 +71,84 @@ class FinancialProcessingUnitRoutingTest extends TestCase
         app(CoordinationUnitPermissionRuleSyncService::class)->execute(true);
 
         $projectUnit = CoordinationUnit::query()->where('project_id', $project->id)->firstOrFail();
+        $otherProjectUnit = CoordinationUnit::query()->where('project_id', $otherProject->id)->firstOrFail();
         $purchaseUnit = CoordinationUnit::query()
             ->where('code', 'service_purchase_organization')
             ->firstOrFail();
 
         $projectCoordinator = $this->authority('coordinator', 'Project');
+        $projectStaff = $this->authority('staff', 'Project');
         $otherProjectCoordinator = $this->authority('coordinator', 'ProjectOther');
         $purchaseCoordinator = $this->authority('coordinator', 'Purchase');
         $purchaseStaff = $this->authority('staff', 'Purchase');
         $this->membership($projectUnit, $projectCoordinator, CoordinationUnitMembership::POSITION_COORDINATOR);
-        $this->membership($projectUnit, $otherProjectCoordinator, CoordinationUnitMembership::POSITION_COORDINATOR);
+        $this->membership($projectUnit, $projectStaff, CoordinationUnitMembership::POSITION_STAFF);
+        $this->membership($otherProjectUnit, $otherProjectCoordinator, CoordinationUnitMembership::POSITION_COORDINATOR);
         $this->membership($purchaseUnit, $purchaseCoordinator, CoordinationUnitMembership::POSITION_COORDINATOR);
         $this->membership($purchaseUnit, $purchaseStaff, CoordinationUnitMembership::POSITION_STAFF);
 
+        $projectMenu = app(PanelModuleCatalog::class)->visibleFor($projectCoordinator);
+        $this->assertContains('financials', array_column($projectMenu['modules'], 'id'));
+
         Sanctum::actingAs($projectCoordinator);
+        $created = $this->postJson('/api/panel/financials', [
+            'project_id' => $project->id,
+            'type' => 'expense',
+            'category' => 'food',
+            'spending_unit' => 'Pergel Ekibi',
+            'payee_name' => 'Tedarikci A.S.',
+            'amount' => 1250,
+        ])->assertCreated();
+        $transactionId = (int) $created->json('transaction.id');
+        $this->assertDatabaseHas('financial_transactions', [
+            'id' => $transactionId,
+            'project_id' => $project->id,
+            'processing_unit_id' => $purchaseUnit->id,
+            'status' => 'pending',
+        ]);
+
         $this->postJson('/api/panel/financials', [
             'project_id' => $project->id,
             'type' => 'expense',
             'category' => 'food',
-            'spending_unit' => 'Pergel Ekibi',
             'payee_name' => 'Tedarikci A.S.',
-            'amount' => 1250,
-        ])->assertForbidden();
-
-        $this->getJson('/api/panel/financials')->assertForbidden();
-        $this->getJson('/api/coordinator/financials')->assertForbidden();
-
-        $transaction = FinancialTransaction::query()->create([
+            'amount' => 100,
+            'payment_date' => '2026-09-24',
+        ])->assertUnprocessable();
+        $this->postJson('/api/panel/financials', [
             'project_id' => $project->id,
-            'processing_unit_id' => $purchaseUnit->id,
-            'type' => 'expense',
+            'type' => 'payment',
             'category' => 'food',
-            'spending_unit' => 'Pergel Ekibi',
             'payee_name' => 'Tedarikci A.S.',
-            'amount' => 1250,
-            'status' => 'pending',
-            'submitted_by' => $projectCoordinator->id,
-            'submitted_at' => now(),
-        ]);
-        $transactionId = (int) $transaction->id;
+            'amount' => 100,
+        ])->assertUnprocessable();
+
+        $this->getJson('/api/panel/financials')
+            ->assertOk()
+            ->assertJsonPath('transactions.data.0.id', $transactionId)
+            ->assertJsonPath('transactions.data.0.capabilities.approve', false);
+        $this->getJson('/api/coordinator/financials')->assertOk();
+        $this->putJson("/api/panel/financials/{$transactionId}/approve")->assertForbidden();
+
+        Sanctum::actingAs($projectStaff);
+        $this->getJson('/api/panel/financials')
+            ->assertOk()
+            ->assertJsonPath('transactions.data.0.id', $transactionId)
+            ->assertJsonPath('transactions.data.0.capabilities.approve', false);
+        $this->getJson("/api/panel/financials/{$transactionId}")->assertOk();
+        $this->getJson('/api/panel/financials/export')->assertForbidden();
         $this->putJson("/api/panel/financials/{$transactionId}/approve")->assertForbidden();
 
         Sanctum::actingAs($otherProjectCoordinator);
-        $this->getJson('/api/panel/financials')->assertForbidden();
+        $this->getJson('/api/panel/financials')->assertOk()->assertJsonCount(0, 'transactions.data');
         $this->getJson("/api/panel/financials/{$transactionId}")->assertForbidden();
+        $this->postJson('/api/panel/financials', [
+            'project_id' => $project->id,
+            'type' => 'expense',
+            'category' => 'food',
+            'payee_name' => 'Yanlis Proje',
+            'amount' => 1,
+        ])->assertForbidden();
 
         Sanctum::actingAs($purchaseStaff);
         $this->getJson('/api/panel/financials')

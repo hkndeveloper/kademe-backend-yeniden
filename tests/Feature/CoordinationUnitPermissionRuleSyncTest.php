@@ -62,6 +62,30 @@ class CoordinationUnitPermissionRuleSyncTest extends TestCase
         $this->assertTrue($secondApply['verification']['idempotent']);
     }
 
+    public function test_existing_passive_project_coordinator_financial_rules_are_activated_by_upgrade(): void
+    {
+        $project = $this->createProject();
+        app(CoordinationUnitBackfillService::class)->execute(true);
+        app(CoordinationUnitPermissionRuleSyncService::class)->execute(true);
+        $unit = CoordinationUnit::query()->where('project_id', $project->id)->firstOrFail();
+
+        CoordinationUnitPermissionRule::query()
+            ->where('unit_id', $unit->id)
+            ->where('position', 'coordinator')
+            ->whereIn('permission_name', ['financial.view', 'financial.create'])
+            ->update(['status' => CoordinationUnitPermissionRule::STATUS_PASSIVE]);
+
+        $migration = require database_path('migrations/2026_09_24_000003_activate_project_coordinator_financial_rules.php');
+        $migration->up();
+
+        $this->assertSame(2, CoordinationUnitPermissionRule::query()
+            ->where('unit_id', $unit->id)
+            ->where('position', 'coordinator')
+            ->whereIn('permission_name', ['financial.view', 'financial.create'])
+            ->where('status', CoordinationUnitPermissionRule::STATUS_ACTIVE)
+            ->count());
+    }
+
     public function test_customized_active_rule_is_preserved_without_blocking_sync(): void
     {
         $this->createProject();
@@ -212,11 +236,13 @@ class CoordinationUnitPermissionRuleSyncTest extends TestCase
 
         $report = app(CoordinationUnitPermissionRuleSyncService::class)->execute(true);
 
-        $this->assertSame(4, $report['summary']['deactivate_count']);
+        $this->assertSame(3, $report['summary']['deactivate_count']);
         foreach ($legacyRules as $rule) {
             $this->assertDatabaseHas('coordination_unit_permission_rules', [
                 'id' => $rule->id,
-                'status' => CoordinationUnitPermissionRule::STATUS_PASSIVE,
+                'status' => $rule->permission_name === 'financial.view'
+                    ? CoordinationUnitPermissionRule::STATUS_ACTIVE
+                    : CoordinationUnitPermissionRule::STATUS_PASSIVE,
             ]);
             $this->assertSame(1, CoordinationUnitPermissionRule::withTrashed()->whereKey($rule->id)->count());
         }

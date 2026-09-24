@@ -129,6 +129,7 @@ class PublicContentController extends Controller
         $programs = Program::query()
             ->with(['project:id,name,slug', 'period:id,name'])
             ->where('is_public', true)
+            ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
             ->whereIn('status', ! empty($validated['status']) ? [$validated['status']] : ['scheduled', 'active', 'completed'])
             ->when(empty($validated['from']) && empty($validated['to']), fn ($query) => $query->where('start_at', '>=', now()->subYear()))
             ->when(! empty($validated['from']), fn ($query) => $query->where('start_at', '>=', $validated['from']))
@@ -169,6 +170,7 @@ class PublicContentController extends Controller
         $program = Program::query()
             ->with(['project:id,name,slug', 'period:id,name', 'photos'])
             ->where('is_public', true)
+            ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
             ->whereIn('status', ['scheduled', 'active', 'completed'])
             ->findOrFail($id);
 

@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\CoordinationAuthorizationPreviewService;
 use App\Services\PermissionResolver;
 use App\Support\CoordinationUnitCatalog;
+use App\Support\CoordinationUnitExclusivePermissionCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -333,6 +334,11 @@ class CoordinationUnitController extends Controller
             'service_domain' => ['nullable', Rule::in(array_keys(CoordinationUnitCatalog::serviceDomains()))],
             'scope_payload' => ['nullable', 'array'],
         ]);
+        abort_unless(
+            CoordinationUnitExclusivePermissionCatalog::isOwnedBy($validated['permission_name'], $coordinationUnit->code),
+            422,
+            'Bu işlem yetkisi seçilen koordinatörlüğe atanamaz.'
+        );
         abort_if(
             $validated['scope_source'] === CoordinationUnitPermissionRule::SCOPE_LINKED_PROJECT
                 && $coordinationUnit->kind !== CoordinationUnit::KIND_PROJECT,

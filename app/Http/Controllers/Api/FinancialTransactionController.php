@@ -6,10 +6,12 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\FinancialTransaction;
+use App\Models\CoordinationUnit;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\FinancialTransactionAccessService;
+use App\Services\ActiveCoordinationUnitContext;
 use App\Services\PermissionResolver;
 use App\Services\WorkflowStatusHistoryRecorder;
 use App\Support\AdminExportResponder;
@@ -365,6 +367,19 @@ class FinancialTransactionController extends Controller
             'accounting_code' => 'nullable|string|max:80',
             'invoice' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
+
+        $activeUnit = app(ActiveCoordinationUnitContext::class)->membershipFor($request->user())?->unit;
+        if ($activeUnit?->kind === CoordinationUnit::KIND_PROJECT && (
+            $validated['type'] !== 'expense'
+            || ! empty($validated['payment_date'])
+            || ! empty($validated['payment_method'])
+            || ! empty($validated['accounting_code'])
+        )) {
+            throw ValidationException::withMessages([
+                $validated['type'] !== 'expense' ? 'type' : 'payment_date'
+                    => 'Proje birimi yalnizca harcama faturasi gonderebilir; odeme ve muhasebe bilgilerini belirleyemez.',
+            ]);
+        }
 
         if (! empty($validated['project_id'])) {
             $this->abortUnlessProjectAllowed($request, 'financial.create', (int) $validated['project_id']);

@@ -245,12 +245,19 @@ class CoordinatorParticipantController extends Controller
 
     public function updatePublicVisibility(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'projects.participants.manage');
+        $this->abortUnlessAnyPermission($request, ['projects.participants.manage', 'projects.alumni.manage']);
 
         $participant = Participant::with(['user:id,public_profile_visible,public_photo_visible,public_alumni_visible', 'project:id,name'])
             ->findOrFail($id);
 
-        $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+        $canManageParticipant = $this->permissionResolver->canAccessProject($request->user(), 'projects.participants.manage', (int) $participant->project_id);
+        $isAlumni = $participant->graduation_status === 'graduated' || $participant->graduated_at !== null;
+        abort_unless($canManageParticipant || $isAlumni, 403, 'Bu kaydin kamusal gorunurlugunu yonetemezsiniz.');
+        $this->abortUnlessProjectAllowed(
+            $request,
+            $canManageParticipant ? 'projects.participants.manage' : 'projects.alumni.manage',
+            (int) $participant->project_id,
+        );
 
         $validated = $request->validate([
             'public_profile_visible' => 'sometimes|boolean',
@@ -668,9 +675,9 @@ class CoordinatorParticipantController extends Controller
 
     public function updateGraduationStatus(Request $request, int $id): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'projects.participants.manage');
+        $this->abortUnlessAnyPermission($request, ['projects.participants.manage', 'projects.alumni.manage']);
         $participant = Participant::with(['user', 'project:id,name', 'period:id,name'])->findOrFail($id);
-        $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+        $this->abortUnlessGraduationProjectAllowed($request, (int) $participant->project_id);
         $this->assertPeriodResolvable($request, $participant->period_id);
         $before = [
             'status' => $participant->status,
@@ -722,9 +729,17 @@ class CoordinatorParticipantController extends Controller
         ]);
     }
 
+    private function abortUnlessGraduationProjectAllowed(Request $request, int $projectId): void
+    {
+        $permission = $this->permissionResolver->canAccessProject($request->user(), 'projects.participants.manage', $projectId)
+            ? 'projects.participants.manage'
+            : 'projects.alumni.manage';
+        $this->abortUnlessProjectAllowed($request, $permission, $projectId);
+    }
+
     public function bulkUpdateGraduationStatus(Request $request): JsonResponse
     {
-        $this->abortUnlessAllowed($request, 'projects.participants.manage');
+        $this->abortUnlessAnyPermission($request, ['projects.participants.manage', 'projects.alumni.manage']);
         $validated = $request->validate([
             'participant_ids' => 'required|array|min:1|max:200',
             'participant_ids.*' => 'integer|exists:participants,id',
@@ -749,7 +764,7 @@ class CoordinatorParticipantController extends Controller
         }
 
         foreach ($participants as $participant) {
-            $this->abortUnlessProjectAllowed($request, 'projects.participants.manage', (int) $participant->project_id);
+            $this->abortUnlessGraduationProjectAllowed($request, (int) $participant->project_id);
         }
 
         $actor = $request->user();

@@ -22,6 +22,7 @@ use App\Support\AdminExportResponder;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 /**
@@ -115,6 +116,7 @@ class ProjectContentController extends Controller
             'id' => $project->id,
             'name' => $project->name,
             'status' => $project->status,
+            'is_public' => (bool) $project->is_public,
             'short_description' => $project->short_description,
             'cover_image_path' => $project->cover_image_path,
             'active_period' => optional($project->currentPeriodOrLegacy())?->only($periodFields),
@@ -581,6 +583,22 @@ class ProjectContentController extends Controller
             ->count();
 
         abort_unless($validPeriodCount === count($galleryPeriodIds), 422, 'Galeri donemi bu projeye ait olmalidir.');
+    }
+
+    /** Toggle the public project showcase and all public activities owned by it. */
+    public function updateVisibility(Request $request, int $id): JsonResponse
+    {
+        $project = Project::findOrFail($id);
+        $this->abortUnlessAllowedForProject($request, 'projects.content.update', $project);
+        $validated = $request->validate(['is_public' => ['required', 'boolean']]);
+
+        $project->update(['is_public' => $validated['is_public']]);
+        Cache::forget('public.homepage.v1');
+
+        return response()->json([
+            'message' => $project->is_public ? 'Proje kamusal alanda yayinda.' : 'Proje kamusal alandan gizlendi.',
+            'project' => ['id' => $project->id, 'is_public' => (bool) $project->is_public],
+        ]);
     }
 
     /**

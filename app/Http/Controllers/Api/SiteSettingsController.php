@@ -214,12 +214,15 @@ class SiteSettingsController extends Controller
             ],
             [
                 'label' => 'Aktif Proje',
-                'value' => number_format(Project::where('status', 'active')->count()),
+                'value' => number_format(Project::where('status', 'active')->where('is_public', true)->count()),
                 'icon' => 'trophy',
             ],
             [
                 'label' => 'Yaklasan Faaliyet',
-                'value' => number_format(Program::whereIn('status', ['scheduled', 'active'])->count()),
+                'value' => number_format(Program::where('is_public', true)
+                    ->whereIn('status', ['scheduled', 'active'])
+                    ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
+                    ->count()),
                 'icon' => 'calendar',
             ],
             [
@@ -443,6 +446,7 @@ class SiteSettingsController extends Controller
 
             $projects = Project::query()
                 ->where('status', 'active')
+                ->where('is_public', true)
                 ->with([
                     'periods' => fn ($query) => $query->whereIn('status', ['active', 'closing']),
                     'currentPeriod',
@@ -462,6 +466,7 @@ class SiteSettingsController extends Controller
             $activities = Program::query()
                 ->with(['project:id,name,slug', 'period:id,name'])
                 ->where('is_public', true)
+                ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
                 ->whereIn('status', ['scheduled', 'active', 'completed'])
                 ->where('start_at', '>=', now()->subYear())
                 ->orderByDesc('is_featured')

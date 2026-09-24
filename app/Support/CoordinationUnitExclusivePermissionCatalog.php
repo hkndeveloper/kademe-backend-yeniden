@@ -47,6 +47,21 @@ final class CoordinationUnitExclusivePermissionCatalog
 
     public static function isOwnedBy(string $permissionName, string $unitCode): bool
     {
+        if ($unitCode === 'service_community_culture' && in_array($permissionName, [
+            'alumni_opportunities.view', 'alumni_opportunities.manage',
+        ], true)) {
+            return true;
+        }
+
+        if (str_starts_with($unitCode, 'project_') && in_array($permissionName, [
+            'financial.view',
+            'financial.create',
+            'financial.export',
+            'financial.invoice.download',
+        ], true)) {
+            return true;
+        }
+
         $ownerCode = self::ownerCodeFor($permissionName);
 
         return $ownerCode === null || $ownerCode === $unitCode;

@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Certificate;
+use App\Models\Participant;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
@@ -251,6 +252,17 @@ class AdminCertificateController extends Controller
             403,
             'Bu projede sertifika olusturma yetkiniz yok.',
         );
+
+        if (! $this->permissionResolver->hasGlobalScope($request->user(), 'certificates.create')) {
+            abort_unless(
+                Participant::query()
+                    ->where('user_id', (int) $validated['user_id'])
+                    ->where('project_id', (int) $validated['project_id'])
+                    ->exists(),
+                422,
+                'Sertifika alicisi secilen projenin katilimcisi veya mezunu olmalidir.'
+            );
+        }
 
         if (! empty($validated['period_id'])) {
             abort_unless(

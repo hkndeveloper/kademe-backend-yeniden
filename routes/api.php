@@ -282,6 +282,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::put('/projects/{id}/special-modules/kademe-module-enrollments/{enrollment}', [ProjectSpecialModuleController::class, 'updateKademeModuleEnrollment']);
     Route::get('/projects/{id}/content', [ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [ProjectContentController::class, 'update']);
+    Route::patch('/projects/{id}/visibility', [ProjectContentController::class, 'updateVisibility']);
     Route::patch('/projects/{id}/public-content', [ProjectContentController::class, 'updatePublicContent']);
     Route::put('/projects/{id}/gallery', [ProjectContentController::class, 'updateGallery']);
     Route::get('/projects/{id}/application-form', [ProjectContentController::class, 'applicationForm']);
@@ -534,6 +535,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::put('/projects/{id}/special-modules/kademe-module-enrollments/{enrollment}', [ProjectSpecialModuleController::class, 'updateKademeModuleEnrollment']);
     Route::get('/projects/{id}/content', [ProjectContentController::class, 'show']);
     Route::put('/projects/{id}/content', [ProjectContentController::class, 'update']);
+    Route::patch('/projects/{id}/visibility', [ProjectContentController::class, 'updateVisibility']);
     Route::patch('/projects/{id}/public-content', [ProjectContentController::class, 'updatePublicContent']);
     Route::put('/projects/{id}/gallery', [ProjectContentController::class, 'updateGallery']);
     Route::get('/projects/{id}/application-form', [ProjectContentController::class, 'applicationForm']);

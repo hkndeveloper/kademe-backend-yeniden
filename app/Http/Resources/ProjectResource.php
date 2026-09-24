@@ -175,6 +175,7 @@ class ProjectResource extends JsonResource
             'short_description' => $this->short_description,
             'cover_image' => $this->mediaUrl($this->cover_image_path),
             'status' => $this->status,
+            'is_public' => (bool) $this->is_public,
             'is_application_open' => $applicationSettings['is_open'],
             'application_start_at' => optional($applicationSettings['starts_at'])?->toISOString(),
             'application_end_at' => optional($applicationSettings['ends_at'])?->toISOString(),

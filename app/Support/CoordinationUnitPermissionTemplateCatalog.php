@@ -52,6 +52,7 @@ final class CoordinationUnitPermissionTemplateCatalog
             'applications.view', 'applications.intake.view', 'applications.intake.manage',
             'applications.update_status', 'applications.plan_interview',
             'applications.waitlist.manage', 'applications.export',
+            'financial.view', 'financial.create', 'financial.export', 'financial.invoice.download',
             'requests.create', 'support.create', 'inbox.view',
             'certificates.view', 'certificates.create', 'certificates.delete', 'certificates.export',
             ...$coordinatorFamily,
@@ -71,6 +72,7 @@ final class CoordinationUnitPermissionTemplateCatalog
             'programs.attendance.export', 'programs.create', 'programs.update',
             'programs.qr.manage', 'programs.export',
             'calendar.view',
+            'financial.view', 'financial.create', 'financial.invoice.download',
             'requests.create', 'support.create', 'inbox.view',
             'certificates.view',
             ...$staffFamily,
@@ -165,6 +167,16 @@ final class CoordinationUnitPermissionTemplateCatalog
 
     private static function communityCultureRules(): array
     {
+        $coordinatorAlumni = [
+            'projects.participants.view', 'projects.alumni.manage',
+            'projects.alumni.view', 'projects.student_cv.view',
+            'certificates.view', 'certificates.create', 'certificates.delete', 'certificates.export',
+            'alumni_opportunities.view', 'alumni_opportunities.manage',
+        ];
+        $staffAlumni = [
+            'projects.alumni.view', 'projects.student_cv.view',
+            'certificates.view', 'alumni_opportunities.view',
+        ];
         $coordinator = [
             'dashboard.coordinator.view',
             'programs.community_event.view', 'programs.community_event.create',
@@ -174,6 +186,7 @@ final class CoordinationUnitPermissionTemplateCatalog
             'calendar.view', 'calendar.export', 'calendar.meetings.create', 'calendar.meetings.manage',
             'volunteer.view', 'volunteer.manage', 'inbox.view',
             'requests.create', 'support.create',
+            ...$coordinatorAlumni,
         ];
         $staff = [
             'dashboard.staff.view',
@@ -182,6 +195,7 @@ final class CoordinationUnitPermissionTemplateCatalog
             'calendar.view',
             'calendar.meetings.create', 'volunteer.view', 'inbox.view',
             'requests.create', 'support.create',
+            ...$staffAlumni,
         ];
 
         return [

@@ -23,6 +23,7 @@ class Project extends Model
         'cover_image_path',
         'gallery_paths',
         'status',
+        'is_public',
         'application_open',
         'application_start_at',
         'application_end_at',
@@ -39,6 +40,7 @@ class Project extends Model
         'application_end_at' => 'datetime',
         'next_application_date' => 'date',
         'application_open' => 'boolean',
+        'is_public' => 'boolean',
         'has_interview' => 'boolean',
     ];
 

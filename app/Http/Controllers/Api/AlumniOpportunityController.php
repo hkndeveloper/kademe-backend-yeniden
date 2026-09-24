@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AlumniOpportunity;
 use App\Models\Participant;
 use App\Services\PermissionResolver;
+use App\Services\ActiveCoordinationUnitContext;
 use App\Support\IstanbulDateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -175,6 +176,12 @@ class AlumniOpportunityController extends Controller
 
         if (! empty($validated['project_id'])) {
             $this->assertProjectOpportunityScope($request, (int) $validated['project_id'], 'alumni_opportunities.manage');
+        } elseif (app(ActiveCoordinationUnitContext::class)->membershipFor($request->user())?->unit?->code === 'service_community_culture') {
+            abort_unless(
+                $this->permissionResolver->hasGlobalScope($request->user(), 'alumni_opportunities.manage'),
+                403,
+                'Projesiz firsat kaydi icin global kapsam gerekir.'
+            );
         }
 
         $opportunity = AlumniOpportunity::create([

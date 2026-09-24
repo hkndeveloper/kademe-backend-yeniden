@@ -45,7 +45,7 @@ class ProjectController extends Controller
             'type' => 'nullable|string|max:100',
         ]);
 
-        $projects = Project::where('status', 'active')
+        $projects = Project::where('status', 'active')->where('is_public', true)
             ->with([
                 'periods' => function ($query) {
                     $query->whereIn('status', ['active', 'closing']);
@@ -90,6 +90,7 @@ class ProjectController extends Controller
     {
         $project = Project::where('slug', $slug)
             ->where('status', 'active')
+            ->where('is_public', true)
             ->with([
                 'periods',
                 'currentPeriod',

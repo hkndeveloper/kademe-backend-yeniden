@@ -207,6 +207,7 @@ return [
             'projects.participants.view',
             'projects.participants.manage',
             'projects.alumni.view',
+            'projects.alumni.manage',
             'projects.student_cv.view',
             'projects.attendance.view',
             'projects.attendance.export',

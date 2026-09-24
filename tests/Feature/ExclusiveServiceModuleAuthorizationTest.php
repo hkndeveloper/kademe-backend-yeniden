@@ -22,11 +22,12 @@ class ExclusiveServiceModuleAuthorizationTest extends TestCase
         config()->set('coordination_authorization.mode', 'enforce');
     }
 
-    public function test_project_positions_have_inbox_but_no_exclusive_service_permissions_or_endpoints(): void
+    public function test_project_positions_have_scoped_financial_access_but_no_purchase_approval_or_other_service_permissions(): void
     {
         $forbiddenPermissions = [
-            'financial.view',
-            'financial.create',
+            'financial.approve',
+            'financial.reject',
+            'financial.mark_paid',
             'announcements.view',
             'content.view',
             'volunteer.view',
@@ -35,7 +36,6 @@ class ExclusiveServiceModuleAuthorizationTest extends TestCase
             'forum.view',
         ];
         $forbiddenModules = [
-            'financials',
             'announcements',
             'content',
             'volunteer',
@@ -50,12 +50,17 @@ class ExclusiveServiceModuleAuthorizationTest extends TestCase
                 $resolver = app(PermissionResolver::class);
 
                 $this->assertTrue($resolver->hasPermission($user, 'inbox.view'));
+                $this->assertTrue($resolver->hasPermission($user, 'financial.view'));
+                $this->assertTrue($resolver->hasPermission($user, 'financial.create'));
+                $this->assertTrue($resolver->hasPermission($user, 'financial.invoice.download'));
+                $this->assertSame($position === 'coordinator', $resolver->hasPermission($user, 'financial.export'));
                 foreach ($forbiddenPermissions as $permission) {
                     $this->assertFalse($resolver->hasPermission($user, $permission), "{$user->email} unexpectedly has {$permission}.");
                 }
 
                 $moduleIds = $this->moduleIds($user);
                 $this->assertContains('inbox', $moduleIds);
+                $this->assertContains('financials', $moduleIds);
                 foreach ($forbiddenModules as $moduleId) {
                     $this->assertNotContains($moduleId, $moduleIds, "{$user->email} unexpectedly sees {$moduleId}.");
                 }
@@ -65,7 +70,7 @@ class ExclusiveServiceModuleAuthorizationTest extends TestCase
         foreach (['demo.coordinator.p01@kademe.org', 'demo.staff.p01@kademe.org'] as $email) {
             Sanctum::actingAs($this->user($email));
             $this->getJson('/api/panel/inbox/messages')->assertOk();
-            $this->getJson('/api/panel/financials')->assertForbidden();
+            $this->getJson('/api/panel/financials')->assertOk();
             $this->getJson('/api/panel/content')->assertForbidden();
             $this->getJson('/api/panel/announcements')->assertForbidden();
             $this->getJson('/api/panel/volunteer/opportunities')->assertForbidden();
@@ -95,12 +100,12 @@ class ExclusiveServiceModuleAuthorizationTest extends TestCase
                 'deny' => ['announcements.view', 'content.view', 'alumni_opportunities.view', 'volunteer.view', 'motivation.view', 'forum.view'],
             ],
             'demo.coordinator.community.culture@kademe.org' => [
-                'allow' => ['inbox.view', 'volunteer.view', 'motivation.view'],
-                'deny' => ['financial.view', 'announcements.view', 'content.view', 'alumni_opportunities.view', 'forum.view'],
+                'allow' => ['inbox.view', 'volunteer.view', 'motivation.view', 'projects.participants.view', 'projects.alumni.manage', 'projects.alumni.view', 'projects.student_cv.view', 'certificates.view', 'certificates.create', 'certificates.delete', 'certificates.export', 'alumni_opportunities.view', 'alumni_opportunities.manage'],
+                'deny' => ['financial.view', 'announcements.view', 'content.view', 'forum.view', 'projects.participants.manage'],
             ],
             'demo.staff.community.culture@kademe.org' => [
-                'allow' => ['inbox.view', 'volunteer.view', 'motivation.view'],
-                'deny' => ['financial.view', 'announcements.view', 'content.view', 'alumni_opportunities.view', 'forum.view'],
+                'allow' => ['inbox.view', 'volunteer.view', 'motivation.view', 'projects.alumni.view', 'projects.student_cv.view', 'certificates.view', 'alumni_opportunities.view'],
+                'deny' => ['financial.view', 'announcements.view', 'content.view', 'forum.view', 'projects.participants.manage', 'certificates.create', 'alumni_opportunities.manage'],
             ],
         ];
 
@@ -130,6 +135,9 @@ class ExclusiveServiceModuleAuthorizationTest extends TestCase
         Sanctum::actingAs($this->user('demo.coordinator.community.culture@kademe.org'));
         $this->getJson('/api/panel/volunteer/opportunities')->assertOk();
         $this->getJson('/api/panel/motivation/lists')->assertOk();
+        $this->getJson('/api/panel/participants')->assertOk();
+        $this->getJson('/api/panel/certificates')->assertOk();
+        $this->getJson('/api/panel/alumni-opportunities')->assertOk();
         $this->getJson('/api/panel/announcements')->assertForbidden();
         $this->getJson('/api/panel/content')->assertForbidden();
     }

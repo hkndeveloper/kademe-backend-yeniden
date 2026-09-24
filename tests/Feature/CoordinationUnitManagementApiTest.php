@@ -262,7 +262,14 @@ class CoordinationUnitManagementApiTest extends TestCase
         $admin = $this->authority();
         $coordinator = $this->authority('coordinator');
         $serviceUnit = CoordinationUnit::query()->where('code', 'service_media')->firstOrFail();
+        $projectUnit = CoordinationUnit::query()->where('kind', CoordinationUnit::KIND_PROJECT)->firstOrFail();
         Sanctum::actingAs($admin);
+
+        $this->postJson("/api/panel/coordination-units/{$projectUnit->id}/permission-rules", [
+            'position' => CoordinationUnitMembership::POSITION_COORDINATOR,
+            'permission_name' => 'financial.approve',
+            'scope_source' => CoordinationUnitPermissionRule::SCOPE_LINKED_PROJECT,
+        ])->assertUnprocessable();
 
         $this->postJson("/api/panel/coordination-units/{$serviceUnit->id}/permission-rules", [
             'position' => CoordinationUnitMembership::POSITION_COORDINATOR,
