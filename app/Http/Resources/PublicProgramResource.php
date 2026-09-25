@@ -46,6 +46,7 @@ class PublicProgramResource extends JsonResource
                     'sort_order' => $photo->sort_order,
                 ]);
             }),
+            'cover_image' => $this->whenLoaded('coverPhoto', fn () => $this->coverPhoto?->url),
             'is_featured' => (bool) $this->is_featured,
         ];
     }

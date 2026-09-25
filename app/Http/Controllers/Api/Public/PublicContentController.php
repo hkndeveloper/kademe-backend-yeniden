@@ -127,8 +127,8 @@ class PublicContentController extends Controller
         ]);
 
         $programs = Program::query()
-            ->with(['project:id,name,slug', 'period:id,name'])
-            ->where('is_public', true)
+            ->with(['project:id,name,slug', 'period:id,name', 'coverPhoto'])
+            ->publiclyVisible()
             ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
             ->whereIn('status', ! empty($validated['status']) ? [$validated['status']] : ['scheduled', 'active', 'completed'])
             ->when(empty($validated['from']) && empty($validated['to']), fn ($query) => $query->where('start_at', '>=', now()->subYear()))
@@ -168,8 +168,8 @@ class PublicContentController extends Controller
     public function activityDetail($id)
     {
         $program = Program::query()
-            ->with(['project:id,name,slug', 'period:id,name', 'photos'])
-            ->where('is_public', true)
+            ->with(['project:id,name,slug', 'period:id,name', 'photos', 'coverPhoto'])
+            ->publiclyVisible()
             ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
             ->whereIn('status', ['scheduled', 'active', 'completed'])
             ->findOrFail($id);

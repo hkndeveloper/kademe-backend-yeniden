@@ -7,6 +7,7 @@ use App\Models\BlogPost;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
+use App\Models\ProgramPhoto;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,6 +16,41 @@ use Tests\TestCase;
 class PublicContentSafetyTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_activity_cards_use_first_ordered_gallery_photo_as_cover(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Fotograf Projesi', 'slug' => 'fotograf-projesi', 'type' => 'other',
+            'status' => 'active', 'is_public' => true,
+        ]);
+        $period = $this->activePeriod($project);
+        $program = Program::query()->create([
+            'project_id' => $project->id, 'period_id' => $period->id,
+            'title' => 'Fotografli Program', 'start_at' => now()->addDay(),
+            'end_at' => now()->addDays(2), 'status' => 'scheduled', 'is_public' => true,
+        ]);
+        $withoutPhoto = Program::query()->create([
+            'project_id' => $project->id, 'period_id' => $period->id,
+            'title' => 'Fotografsiz Program', 'start_at' => now()->addDays(3),
+            'end_at' => now()->addDays(4), 'status' => 'scheduled', 'is_public' => true,
+        ]);
+        $later = ProgramPhoto::query()->create(['program_id' => $program->id, 'url' => 'program-photos/later.jpg', 'sort_order' => 2]);
+        $first = ProgramPhoto::query()->create(['program_id' => $program->id, 'url' => 'program-photos/first.jpg', 'sort_order' => 1]);
+        $expectedCover = $first->url;
+
+        $list = $this->getJson('/api/activities')->assertOk();
+        $this->assertSame($expectedCover, collect($list->json('programs.data'))->firstWhere('id', $program->id)['cover_image']);
+        $this->assertNull(collect($list->json('programs.data'))->firstWhere('id', $withoutPhoto->id)['cover_image']);
+        $list->assertJsonMissingPath('programs.data.0.photos');
+
+        $homepage = $this->getJson('/api/homepage')->assertOk();
+        $this->assertSame($expectedCover, collect($homepage->json('programs'))->firstWhere('id', $program->id)['cover_image']);
+
+        $detail = $this->getJson('/api/activities/'.$program->id)->assertOk();
+        $detail->assertJsonPath('program.cover_image', $expectedCover);
+        $detail->assertJsonPath('program.photos.0.id', $first->id);
+        $detail->assertJsonPath('program.photos.1.id', $later->id);
+    }
 
     public function test_public_blogs_search_uses_excerpt_and_returns_normalized_fields(): void
     {

@@ -69,7 +69,7 @@ class AdminProgramController extends Controller
         $permission = $this->programViewPermission($request);
         $workMode = $this->programWorkMode($request->user());
         $ctx = $this->resolveProjectPeriodContext($request, $permission, ! empty($v['project_id']) ? (int) $v['project_id'] : null, ! empty($v['period_id']) ? (int) $v['period_id'] : null);
-        $q = Program::query()->with(['project:id,name', 'period:id,name,status', 'managingUnit:id,name'])->withCount(['attendances', 'feedbacks'])->orderByDesc('start_at');
+        $q = Program::query()->with(['project:id,name', 'period:id,name,status', 'managingUnit:id,name', 'publicVisibilityOverride'])->withCount(['attendances', 'feedbacks'])->orderByDesc('start_at');
         $this->applyProjectPeriodContext($q, $ctx);
         if ($workMode === 'community_event') {
             $this->communityProgramAccess->constrainToAccessibleEvents($q, $request->user(), $permission);
@@ -101,7 +101,7 @@ class AdminProgramController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $program = Program::query()
-            ->with(['project:id,name', 'period:id,name,status', 'managingUnit:id,name'])
+            ->with(['project:id,name', 'period:id,name,status', 'managingUnit:id,name', 'publicVisibilityOverride'])
             ->withCount(['attendances', 'feedbacks'])
             ->findOrFail($id);
         $this->authorizeProgramView($request, $program);
@@ -254,6 +254,9 @@ class AdminProgramController extends Controller
         }
         $this->assertNoOverlap($v['start_at'] ?? $program->start_at, $v['end_at'] ?? $program->end_at, $program->id, $v['status'] ?? $program->status);
         $program->update($v);
+        if (array_key_exists('is_public', $v)) {
+            $program->publicVisibilityOverride()->delete();
+        }
         $this->clearPublicHomepageCache();
 
         return response()->json(['program' => $this->programPayload($program->fresh(['project:id,name', 'period:id,name,status', 'managingUnit:id,name']), $request->user())]);
@@ -720,6 +723,7 @@ class AdminProgramController extends Controller
         $v = $request->validate(['photo' => ['required', 'image', 'max:5120'], 'caption' => ['nullable', 'string', 'max:255']]);
         $path = MediaStorage::putFile('program-photos/'.$program->id, $v['photo']);
         $photo = ProgramPhoto::query()->create(['program_id' => $program->id, 'url' => $path, 'caption' => $v['caption'] ?? null, 'sort_order' => ((int) ProgramPhoto::query()->where('program_id', $program->id)->max('sort_order')) + 1, 'created_by' => $request->user()->id]);
+        $this->clearPublicHomepageCache();
 
         return response()->json(['photo' => $photo], 201);
     }
@@ -748,6 +752,7 @@ class AdminProgramController extends Controller
         foreach ($v['photo_ids'] as $i => $photoId) {
             ProgramPhoto::query()->where('program_id', $program->id)->where('id', $photoId)->update(['sort_order' => $i + 1]);
         }
+        $this->clearPublicHomepageCache();
 
         return response()->json(['photos' => $program->photos()->get()]);
     }
@@ -802,6 +807,7 @@ class AdminProgramController extends Controller
         $photo = ProgramPhoto::query()->where('program_id', $program->id)->findOrFail($photoId);
         MediaStorage::delete($photo->getRawOriginal('url'));
         $photo->delete();
+        $this->clearPublicHomepageCache();
 
         return response()->json(['message' => 'Fotograf silindi.']);
     }
@@ -809,7 +815,7 @@ class AdminProgramController extends Controller
     /**
      * Update public visibility for a program.
      *
-     * Requires permission: `programs.update` for the program project. This panel-only endpoint toggles public listing and featured state without changing the rest of the program payload. Completed periods require archive update permission.
+     * Requires permission: `programs.update` for the program project. Archived periods allow only `is_public` as a separate publication setting; program data and featured state remain locked.
      *
      * @authenticated
      *
@@ -831,12 +837,24 @@ class AdminProgramController extends Controller
             403,
             'Ortak etkinligin yayin ayarlari cekirdek program endpointinden degistirilemez.'
         );
-        $this->assertPeriodWritable($request, $program->period_id);
-        $v = $request->validate(['is_public' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
-        $program->update($v);
+        $archived = PeriodLifecycleService::isArchiveStatus($program->period?->status);
+        if ($archived) {
+            $v = $request->validate(['is_public' => ['required', 'boolean'], 'is_featured' => ['prohibited']]);
+            $program->publicVisibilityOverride()->updateOrCreate(
+                ['program_id' => $program->id],
+                ['is_public' => $v['is_public'], 'updated_by' => $request->user()->id]
+            );
+        } else {
+            $this->assertPeriodWritable($request, $program->period_id);
+            $v = $request->validate(['is_public' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
+            $program->update($v);
+            if (array_key_exists('is_public', $v)) {
+                $program->publicVisibilityOverride()->delete();
+            }
+        }
         $this->clearPublicHomepageCache();
 
-        return response()->json(['program' => $this->programPayload($program->fresh(['project:id,name', 'period:id,name,status', 'managingUnit:id,name']), $request->user())]);
+        return response()->json(['program' => $this->programPayload($program->fresh(['project:id,name', 'period:id,name,status', 'managingUnit:id,name', 'publicVisibilityOverride']), $request->user())]);
     }
 
     private function validatedProgramData(Request $request, bool $creating, ?Program $program = null): array
@@ -942,7 +960,7 @@ class AdminProgramController extends Controller
     {
         $base = ['id' => $p->id, 'program_kind' => $p->program_kind ?: Program::KIND_CORE_PROGRAM, 'managing_unit' => $p->managingUnit ? ['id' => $p->managingUnit->id, 'name' => $p->managingUnit->name] : null, 'title' => $p->title, 'description' => $p->description, 'location' => $p->location, 'location_place_name' => $p->location_place_name, 'location_place_address' => $p->location_place_address, 'location_place_id' => $p->location_place_id, 'location_place_provider' => $p->location_place_provider, 'latitude' => $p->latitude, 'longitude' => $p->longitude, 'radius_meters' => $p->radius_meters, 'guest_info' => $p->guest_info, 'start_at' => optional($p->start_at)?->toIso8601String(), 'end_at' => optional($p->end_at)?->toIso8601String(), 'target_audience' => $p->targetAudience(), 'status' => $p->status, 'project_id' => $p->project_id, 'project' => $p->project ? ['id' => $p->project->id, 'name' => $p->project->name] : null, 'period' => $p->period ? ['id' => $p->period->id, 'name' => $p->period->name, 'status' => $p->period->status, 'lifecycle' => ['is_archive_mode' => PeriodLifecycleService::isArchiveStatus($p->period->status), 'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($p->period->status)]] : null, 'attendance_count' => $p->attendances_count ?? null];
         if ($user === null) {
-            return $base + ['credit_deduction' => $p->credit_deduction, 'application_quota' => $p->application_quota, 'feedback_form_template_id' => $p->feedback_form_template_id, 'feedback_count' => $p->feedbacks_count ?? null, 'is_public' => (bool) $p->is_public, 'is_featured' => (bool) $p->is_featured, 'questions' => FeedbackFormResolver::forProgram($p)];
+            return $base + ['credit_deduction' => $p->credit_deduction, 'application_quota' => $p->application_quota, 'feedback_form_template_id' => $p->feedback_form_template_id, 'feedback_count' => $p->feedbacks_count ?? null, 'is_public' => $p->effectivePublicVisibility(), 'is_featured' => (bool) $p->is_featured, 'questions' => FeedbackFormResolver::forProgram($p)];
         }
 
         $workMode ??= $this->programWorkMode($user);
@@ -965,7 +983,7 @@ class AdminProgramController extends Controller
             return $base;
         }
 
-        return $base + ['credit_deduction' => $p->credit_deduction, 'application_quota' => $p->application_quota, 'feedback_form_template_id' => $p->feedback_form_template_id, 'feedback_count' => $p->feedbacks_count ?? null, 'is_public' => (bool) $p->is_public, 'is_featured' => (bool) $p->is_featured, 'questions' => FeedbackFormResolver::forProgram($p)];
+        return $base + ['credit_deduction' => $p->credit_deduction, 'application_quota' => $p->application_quota, 'feedback_form_template_id' => $p->feedback_form_template_id, 'feedback_count' => $p->feedbacks_count ?? null, 'is_public' => $p->effectivePublicVisibility(), 'is_featured' => (bool) $p->is_featured, 'questions' => FeedbackFormResolver::forProgram($p)];
     }
 
     private function programParticipantsQuery(Program $program)

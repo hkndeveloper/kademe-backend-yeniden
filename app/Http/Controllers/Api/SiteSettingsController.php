@@ -219,7 +219,7 @@ class SiteSettingsController extends Controller
             ],
             [
                 'label' => 'Yaklasan Faaliyet',
-                'value' => number_format(Program::where('is_public', true)
+                'value' => number_format(Program::publiclyVisible()
                     ->whereIn('status', ['scheduled', 'active'])
                     ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
                     ->count()),
@@ -464,8 +464,8 @@ class SiteSettingsController extends Controller
                 ->get();
 
             $activities = Program::query()
-                ->with(['project:id,name,slug', 'period:id,name'])
-                ->where('is_public', true)
+                ->with(['project:id,name,slug', 'period:id,name', 'coverPhoto'])
+                ->publiclyVisible()
                 ->whereHas('project', fn ($query) => $query->where('status', 'active')->where('is_public', true))
                 ->whereIn('status', ['scheduled', 'active', 'completed'])
                 ->where('start_at', '>=', now()->subYear())

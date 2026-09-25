@@ -120,7 +120,7 @@ class ProjectController extends Controller
         $programs = Program::query()
             ->where('project_id', $project->id)
             ->with('period:id,name')
-            ->where('is_public', true)
+            ->publiclyVisible()
             ->whereIn('status', ['scheduled', 'active', 'completed'])
             ->orderBy('start_at')
             ->get();
