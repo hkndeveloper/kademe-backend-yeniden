@@ -815,7 +815,7 @@ class AdminProgramController extends Controller
     /**
      * Update public visibility for a program.
      *
-     * Requires permission: `programs.update` for the program project. Archived periods allow only `is_public` as a separate publication setting; program data and featured state remain locked.
+     * Requires permission: `programs.update` for the program project. Completed, cancelled and legacy passive periods allow only `is_public` as a separate publication setting; program data and featured state remain locked.
      *
      * @authenticated
      *
@@ -837,8 +837,9 @@ class AdminProgramController extends Controller
             403,
             'Ortak etkinligin yayin ayarlari cekirdek program endpointinden degistirilemez.'
         );
-        $archived = PeriodLifecycleService::isArchiveStatus($program->period?->status);
-        if ($archived) {
+        $publicationOnly = PeriodLifecycleService::isArchiveStatus($program->period?->status)
+            || $program->period?->status === PeriodLifecycleService::LEGACY_PASSIVE;
+        if ($publicationOnly) {
             $v = $request->validate(['is_public' => ['required', 'boolean'], 'is_featured' => ['prohibited']]);
             $program->publicVisibilityOverride()->updateOrCreate(
                 ['program_id' => $program->id],

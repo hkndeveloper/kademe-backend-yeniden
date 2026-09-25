@@ -147,4 +147,38 @@ class ProjectPublicVisibilityTest extends TestCase
         $this->assertDatabaseHas('program_public_visibility_overrides', ['program_id' => $programs[0]->id, 'is_public' => false]);
         $this->assertDatabaseMissing('program_public_visibility_overrides', ['program_id' => $programs[1]->id]);
     }
+
+    public function test_legacy_passive_period_allows_only_public_visibility_change(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $project = Project::query()->create([
+            'name' => 'Eski Donem Projesi', 'slug' => 'eski-donem-projesi',
+            'type' => 'other', 'status' => 'active', 'is_public' => true,
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id, 'name' => 'Eski Pasif Donem',
+            'start_date' => now()->subMonths(3), 'end_date' => now()->subMonth(), 'status' => 'passive',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id, 'period_id' => $period->id,
+            'title' => 'Eski Donem Etkinligi', 'start_at' => now()->subWeek(),
+            'end_at' => now()->subWeek()->addHour(), 'status' => 'completed', 'is_public' => true,
+        ]);
+        $original = $program->fresh()->getRawOriginal();
+        $admin = User::factory()->create(['surname' => 'Yonetici', 'role' => 'super_admin', 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/activities')->assertJsonCount(1, 'programs.data');
+        $this->patchJson("/api/panel/programs/{$program->id}/visibility", ['is_public' => false])
+            ->assertOk()->assertJsonPath('program.is_public', false);
+        $this->getJson('/api/activities')->assertJsonCount(0, 'programs.data');
+        $this->getJson('/api/panel/programs/'.$program->id)->assertJsonPath('program.is_public', false);
+        $this->patchJson("/api/panel/programs/{$program->id}/visibility", ['is_featured' => true])->assertUnprocessable();
+        $this->putJson('/api/panel/programs/'.$program->id, ['title' => 'Degistirildi'])->assertStatus(423);
+        $this->assertSame($original, $program->fresh()->getRawOriginal());
+        $this->patchJson("/api/panel/programs/{$program->id}/visibility", ['is_public' => true])
+            ->assertOk()->assertJsonPath('program.is_public', true);
+        $this->getJson('/api/activities')->assertJsonCount(1, 'programs.data');
+    }
 }
