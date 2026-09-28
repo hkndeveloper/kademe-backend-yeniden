@@ -33,9 +33,13 @@ class CreditDeductionJob implements ShouldQueue
                 fn ($query) => $query->whereNull('period_id')
             )
             ->where('status', 'active')
+            ->with('user:id,role')
             ->get();
 
         foreach ($participants as $participant) {
+            if ($participant->user?->role === 'alumni' || $participant->graduation_status === 'graduated') {
+                continue;
+            }
             $hasAttended = Attendance::query()
                 ->where('program_id', $this->program->id)
                 ->where('user_id', $participant->user_id)
@@ -48,7 +52,8 @@ class CreditDeductionJob implements ShouldQueue
                 null,
                 $hasAttended
                     ? 'Etkinlik tamamlandi, degerlendirme bekleniyor'
-                    : 'Etkinlige katilim saglanmadi, kredi dusumu uygulandi'
+                    : 'Etkinlige katilim saglanmadi, kredi dusumu uygulandi',
+                $hasAttended
             );
         }
     }

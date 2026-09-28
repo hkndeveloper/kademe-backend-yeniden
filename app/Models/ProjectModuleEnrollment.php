@@ -13,6 +13,7 @@ class ProjectModuleEnrollment extends Model
         'participant_id',
         'status',
         'consented_at',
+        'consent_text_snapshot',
         'reviewed_at',
         'reviewed_by',
         'note',

@@ -19,23 +19,37 @@ class Application extends Model
         'program_id',
         'application_form_id',
         'form_data',
+        'consent_text_snapshot',
+        'consent_accepted_at',
         'status',
         'waitlist_order',
         'waitlist_invited_at',
         'waitlist_invitation_expires_at',
+        'waitlist_invitation_delivery_status',
+        'waitlist_invitation_response_seconds',
         'rejection_reason',
         'interview_at',
+        'interview_passed_at',
         'auto_rejected',
         'auto_rejection_reason',
+        'screening_review_reason',
+        'auto_rejection_corrected_at',
+        'auto_rejection_corrected_by',
+        'auto_rejection_corrected_by_name',
+        'auto_rejection_correction_reason',
         'evaluation_note',
     ];
 
     protected $casts = [
         'form_data' => 'array',
+        'consent_accepted_at' => 'datetime',
         'interview_at' => 'datetime',
+        'interview_passed_at' => 'datetime',
         'waitlist_invited_at' => 'datetime',
         'waitlist_invitation_expires_at' => 'datetime',
+        'waitlist_invitation_response_seconds' => 'integer',
         'auto_rejected' => 'boolean',
+        'auto_rejection_corrected_at' => 'datetime',
     ];
 
     public function user()
@@ -70,9 +84,13 @@ class Application extends Model
 
     public function usesInterview(): bool
     {
-        $this->loadMissing(['applicationWindow:id,has_interview', 'project:id,has_interview']);
+        // List/detail queries may already carry partial relations without this
+        // field; the persisted application setting must decide the workflow.
+        $windowSetting = $this->application_window_id !== null
+            ? $this->applicationWindow()->value('has_interview')
+            : null;
 
-        return (bool) ($this->applicationWindow?->has_interview ?? $this->project?->has_interview);
+        return (bool) ($windowSetting ?? $this->project()->value('has_interview'));
     }
 
     public function projectQuota(): ?int

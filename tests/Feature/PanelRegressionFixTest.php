@@ -33,6 +33,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\VolunteerOpportunity;
+use App\Services\NotificationService;
 use App\Support\IstanbulDateTime;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -52,6 +53,28 @@ class PanelRegressionFixTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolePermissionSeeder::class);
+    }
+
+    private function publicApplicationCode(Project $project, string $email): string
+    {
+        $code = null;
+        $this->mock(NotificationService::class, function ($mock) use (&$code) {
+            $mock->shouldReceive('sendEmail')->andReturnUsing(function (...$arguments) use (&$code) {
+                preg_match('/kodunuz: ([0-9]{8})/', (string) ($arguments[2] ?? ''), $matches);
+                $code = $matches[1] ?? null;
+
+                return 1;
+            });
+            $mock->shouldReceive('sendTemplatedEmail')->andReturn(1);
+        });
+
+        $this->postJson('/api/applications/public/verification', [
+            'project_id' => $project->id,
+            'email' => $email,
+        ])->assertOk();
+        $this->assertMatchesRegularExpression('/^[0-9]{8}$/', (string) $code);
+
+        return $code;
     }
 
     private function actingSuperAdmin(): User
@@ -870,6 +893,8 @@ class PanelRegressionFixTest extends TestCase
         $this->assertSame(90, $attendingParticipant->fresh()->credit);
         $this->assertSame(90, $absentParticipant->fresh()->credit);
         $this->assertSame(2, CreditLog::query()->where('program_id', $program->id)->where('type', 'deduction')->count());
+        $this->assertFalse((bool) CreditLog::query()->where('participant_id', $attendingParticipant->id)->where('program_id', $program->id)->firstOrFail()->absence_confirmed);
+        $this->assertTrue((bool) CreditLog::query()->where('participant_id', $absentParticipant->id)->where('program_id', $program->id)->firstOrFail()->absence_confirmed);
 
         $this->postJson("/api/panel/programs/{$program->id}/complete")
             ->assertOk()
@@ -1009,6 +1034,7 @@ class PanelRegressionFixTest extends TestCase
         $this->postJson('/api/applications', [
             'project_id' => $project->id,
             'program_id' => $program->id,
+            'consent_accepted' => true,
             'form_data' => ['department' => 'Uyumsuz'],
         ])
             ->assertCreated()
@@ -1027,6 +1053,7 @@ class PanelRegressionFixTest extends TestCase
 
     public function test_program_waitlist_order_and_invitation_can_be_managed(): void
     {
+        $this->mock(NotificationService::class)->shouldReceive('sendTemplatedEmail')->andReturn(1);
         $admin = $this->actingSuperAdmin();
         $project = Project::query()->create([
             'name' => 'Waitlist Project',
@@ -1073,6 +1100,7 @@ class PanelRegressionFixTest extends TestCase
         $applicationId = $this->postJson('/api/applications', [
             'project_id' => $project->id,
             'program_id' => $program->id,
+            'consent_accepted' => true,
         ])
             ->assertCreated()
             ->assertJsonPath('application.status', 'waitlisted')
@@ -1084,7 +1112,10 @@ class PanelRegressionFixTest extends TestCase
             'waitlist_order' => 3,
         ])
             ->assertOk()
-            ->assertJsonPath('application.waitlist_order', 3);
+            ->assertJsonPath('application.waitlist_order', 1);
+
+        // A waitlist invitation requires an actual free place.
+        Application::query()->where('user_id', $acceptedUser->id)->update(['status' => 'rejected']);
 
         $this->postJson("/api/panel/applications/{$applicationId}/waitlist-invite")
             ->assertOk()
@@ -1092,7 +1123,7 @@ class PanelRegressionFixTest extends TestCase
 
         $this->assertDatabaseHas('applications', [
             'id' => $applicationId,
-            'waitlist_order' => 3,
+            'waitlist_order' => 1,
         ]);
         $this->assertNotNull(Application::query()->find($applicationId)?->waitlist_invited_at);
     }
@@ -1228,12 +1259,13 @@ class PanelRegressionFixTest extends TestCase
         $this->postJson("/api/panel/applications/{$expiredApp->id}/waitlist-refresh")
             ->assertOk()
             ->assertJsonPath('expired_count', 1)
-            ->assertJsonPath('auto_invited_application_id', $expiredApp->id);
+            ->assertJsonPath('auto_invited_application_id', null);
 
         $this->assertDatabaseHas('applications', [
             'id' => $expiredApp->id,
             'status' => 'waitlisted',
         ]);
+        $this->assertSame('expired', Application::query()->find($expiredApp->id)?->waitlist_invitation_delivery_status);
         $this->assertNotNull(Application::query()->find($expiredApp->id)?->waitlist_invited_at);
     }
 
@@ -1345,7 +1377,7 @@ class PanelRegressionFixTest extends TestCase
         $this->assertNotNull(Application::query()->find($waitlistedApplication->id)?->waitlist_invited_at);
     }
 
-    public function test_program_creation_rejects_overlapping_time_across_projects(): void
+    public function test_program_creation_allows_overlapping_time_across_projects(): void
     {
         $this->actingSuperAdmin();
         $firstProject = $this->project();
@@ -1391,13 +1423,24 @@ class PanelRegressionFixTest extends TestCase
             'start_at' => '2026-10-10 11:00:00',
             'end_at' => '2026-10-10 13:00:00',
             'credit_deduction' => 10,
-        ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('start_at');
+        ])->assertCreated();
 
-        $this->assertDatabaseMissing('programs', [
+        $this->assertDatabaseHas('programs', [
             'project_id' => $secondProject->id,
             'title' => 'Cakisan Program',
+        ]);
+
+        $this->postJson('/api/panel/programs', [
+            'project_id' => $firstProject->id,
+            'period_id' => $firstPeriod->id,
+            'title' => 'Ayni Projede Es Zamanli Program',
+            'start_at' => '2026-10-10 10:30:00',
+            'end_at' => '2026-10-10 11:30:00',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('programs', [
+            'project_id' => $firstProject->id,
+            'title' => 'Ayni Projede Es Zamanli Program',
         ]);
     }
 
@@ -1527,7 +1570,7 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('programs.0.location_place_provider', 'osm');
     }
 
-    public function test_program_update_rejects_overlapping_time_and_allows_cancelled_conflicts(): void
+    public function test_program_update_allows_overlapping_time_and_cancelled_programs(): void
     {
         $this->actingSuperAdmin();
         $project = $this->project();
@@ -1573,9 +1616,12 @@ class PanelRegressionFixTest extends TestCase
             'end_at' => '2026-10-10 13:00:00',
             'credit_deduction' => 10,
             'status' => 'scheduled',
-        ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('start_at');
+        ])->assertOk();
+
+        $this->assertSame(
+            IstanbulDateTime::toUtc('2026-10-10 11:00:00')->toDateTimeString(),
+            $program->fresh()->start_at->toDateTimeString()
+        );
 
         $this->putJson('/api/panel/programs/'.$program->id, [
             'title' => 'Guncellenecek Program',
@@ -1682,6 +1728,57 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('programs.0.attendance_status', 'invalid')
             ->assertJsonPath('programs.0.credit.restored', false)
             ->assertJsonPath('programs.0.credit.net_amount', -10);
+    }
+
+    public function test_zero_credit_absence_excuse_requires_scoped_program_and_reason(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id, 'name' => 'Mazeret dönemi',
+            'start_date' => now()->subMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(), 'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id, 'period_id' => $period->id,
+            'title' => 'Sıfır kredi oturumu', 'start_at' => now()->subHours(2),
+            'end_at' => now()->subHour(), 'status' => 'active', 'credit_deduction' => 0,
+        ]);
+        $student = User::factory()->create(['surname' => 'Devamsızlık', 'role' => 'student', 'status' => 'active']);
+        $participant = Participant::query()->create([
+            'user_id' => $student->id, 'project_id' => $project->id,
+            'period_id' => $period->id, 'status' => 'active', 'credit' => 100,
+        ]);
+
+        $this->postJson("/api/panel/programs/{$program->id}/complete")
+            ->assertOk()->assertJsonPath('deducted_participant_count', 0);
+        $this->assertDatabaseHas('program_absences', [
+            'program_id' => $program->id, 'participant_id' => $participant->id, 'excused' => false,
+        ]);
+        $this->getJson("/api/panel/programs/{$program->id}/attendances")
+            ->assertOk()->assertJsonPath('records.0.zero_credit_absence_excused', false);
+        $this->putJson("/api/panel/programs/{$program->id}/attendances/{$participant->id}/excuse", [
+            'excused' => true, 'reason' => 'Kısa',
+        ])->assertUnprocessable();
+        $this->putJson("/api/panel/programs/{$program->id}/attendances/{$participant->id}/excuse", [
+            'excused' => true, 'reason' => 'Belgelendirilen sağlık mazereti kabul edildi.',
+        ])->assertOk()->assertJsonPath('absence.excused', true);
+        $this->assertSame(100, (int) $participant->fresh()->credit);
+        $this->assertSame(0, CreditLog::query()->where('participant_id', $participant->id)->count());
+
+        Sanctum::actingAs($student);
+        $this->putJson("/api/panel/programs/{$program->id}/attendances/{$participant->id}/excuse", [
+            'excused' => false, 'reason' => 'Yetkisiz karar denemesi yapılmaktadır.',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($admin);
+        $period->update(['status' => 'completed']);
+        $this->putJson("/api/panel/programs/{$program->id}/attendances/{$participant->id}/excuse", [
+            'excused' => false, 'reason' => 'Dönem arşivinde değişiklik denemesi.',
+        ])->assertStatus(423);
+        $this->assertDatabaseHas('program_absences', [
+            'program_id' => $program->id, 'participant_id' => $participant->id, 'excused' => true,
+        ]);
     }
 
     public function test_program_complete_and_manual_attendance_write_domain_audit_properties(): void
@@ -2326,6 +2423,80 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('applications.data.0.workflow.next_step', 'plan_interview');
     }
 
+    public function test_internal_application_note_saves_without_decision_or_applicant_notification(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id, 'name' => 'Not dönemi',
+            'start_date' => now()->toDateString(), 'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create([
+            'surname' => 'NotAdayı', 'role' => 'student', 'kvkk_consent_at' => now(),
+        ]);
+        $application = Application::query()->create([
+            'user_id' => $student->id, 'project_id' => $project->id,
+            'period_id' => $period->id, 'status' => 'pending',
+        ]);
+        $this->mock(NotificationService::class, function ($mock) {
+            $mock->shouldNotReceive('sendTemplatedEmail');
+            $mock->shouldNotReceive('sendEmail');
+        });
+
+        $this->putJson("/api/panel/applications/{$application->id}/evaluation-note", [
+            'evaluation_note' => '   ',
+        ])->assertUnprocessable();
+        $this->putJson("/api/panel/applications/{$application->id}/evaluation-note", [
+            'evaluation_note' => 'Mülakat öncesinde ek belge incelenecek.',
+        ])->assertOk()->assertJsonPath('application.evaluation_note', 'Mülakat öncesinde ek belge incelenecek.');
+        $this->assertSame('pending', $application->fresh()->status);
+        $this->assertNull($application->fresh()->rejection_reason);
+
+        Sanctum::actingAs($student);
+        $this->getJson('/api/applications')
+            ->assertOk()
+            ->assertJsonPath('applications.0.id', $application->id)
+            ->assertJsonMissingPath('applications.0.evaluation_note');
+        $this->putJson("/api/panel/applications/{$application->id}/evaluation-note", [
+            'evaluation_note' => 'Yetkisiz not denemesi',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($admin);
+        $period->update(['status' => 'completed']);
+        $this->putJson("/api/panel/applications/{$application->id}/evaluation-note", [
+            'evaluation_note' => 'Arşiv dönemi not denemesi',
+        ])->assertStatus(423);
+        $this->assertSame('Mülakat öncesinde ek belge incelenecek.', $application->fresh()->evaluation_note);
+    }
+
+    public function test_interview_plan_keeps_internal_note_separate_from_candidate_reason(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $project->update(['has_interview' => true]);
+        $period = Period::query()->create([
+            'project_id' => $project->id, 'name' => 'Mülakat dönemi',
+            'start_date' => now()->toDateString(), 'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $student = User::factory()->create(['surname' => 'Görüşme', 'role' => 'student']);
+        $application = Application::query()->create([
+            'user_id' => $student->id, 'project_id' => $project->id,
+            'period_id' => $period->id, 'status' => 'pending',
+        ]);
+        $this->mock(NotificationService::class, function ($mock) {
+            $mock->shouldReceive('sendTemplatedEmail')->andReturn(1)->byDefault();
+        });
+
+        $this->putJson("/api/panel/applications/{$application->id}/interview", [
+            'interview_at' => now()->addDay()->toIso8601String(),
+            'evaluation_note' => 'Yalnız değerlendirme ekibinin göreceği mülakat hazırlık notu.',
+        ])->assertOk()->assertJsonPath('application.status', 'interview_planned');
+        $this->assertSame('Yalnız değerlendirme ekibinin göreceği mülakat hazırlık notu.', $application->fresh()->evaluation_note);
+        $this->assertNull($application->fresh()->rejection_reason);
+    }
+
     public function test_project_content_counts_accepted_applications_as_approved_summary(): void
     {
         $this->actingSuperAdmin();
@@ -2451,7 +2622,8 @@ class PanelRegressionFixTest extends TestCase
             'is_active' => true,
         ])->assertOk()
             ->assertJsonPath('application_form.program_id', $program->id)
-            ->assertJsonPath('application_form.period_id', $fall->id);
+            ->assertJsonPath('application_form.period_id', $fall->id)
+            ->assertJsonPath('application_form.require_consent', true);
 
         $this->getJson('/api/panel/projects/'.$project->id.'/application-form?period_id='.$fall->id)
             ->assertOk()
@@ -2472,6 +2644,62 @@ class PanelRegressionFixTest extends TestCase
             ],
             'is_active' => true,
         ])->assertStatus(422);
+    }
+
+    public function test_saving_form_creates_new_version_without_changing_submitted_answers(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Guz',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $oldForm = ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'fields' => [['id' => 'motivation', 'type' => 'text', 'label' => 'Eski soru', 'required' => true]],
+            'require_consent' => true,
+            'consent_text' => 'Eski kosullar',
+            'is_active' => true,
+        ]);
+        $application = Application::query()->create([
+            'user_id' => User::factory()->create(['surname' => 'Aday'])->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'application_form_id' => $oldForm->id,
+            'form_data' => ['motivation' => 'Eski cevap'],
+            'status' => 'pending',
+        ]);
+
+        $payload = [
+            'period_id' => $period->id,
+            'fields' => [['id' => 'motivation', 'type' => 'text', 'label' => 'Yeni soru', 'required' => true]],
+            'require_consent' => true,
+            'consent_text' => 'Yeni kosullar',
+            'is_active' => true,
+        ];
+
+        $this->putJson('/api/panel/projects/'.$project->id.'/application-form', $payload)
+            ->assertOk()
+            ->assertJsonPath('application_form.fields.0.label', 'Yeni soru');
+
+        $this->assertDatabaseCount('application_forms', 2);
+        $this->assertSame('Eski soru', $application->fresh()->form->fields[0]['label']);
+        $this->assertSame('Eski kosullar', $application->form->consent_text);
+        $this->assertSame('Eski cevap', $application->form_data['motivation']);
+        $this->assertFalse($oldForm->fresh()->is_active);
+        $this->getJson('/api/panel/projects/'.$project->id.'/application-form?period_id='.$period->id)
+            ->assertOk()
+            ->assertJsonPath('application_form.fields.0.label', 'Yeni soru');
+
+        $payload['fields'][] = ['id' => 'motivation', 'type' => 'text', 'label' => 'Tekrarlanan soru', 'required' => false];
+        $this->putJson('/api/panel/projects/'.$project->id.'/application-form', $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('fields.1.id');
+        $this->assertDatabaseCount('application_forms', 2);
     }
 
     public function test_public_project_detail_uses_active_period_application_form(): void
@@ -2516,6 +2744,123 @@ class PanelRegressionFixTest extends TestCase
             ->assertJsonPath('application_form.fields.0.id', 'active_question');
     }
 
+    public function test_public_program_form_matches_submission_and_rejects_stale_form(): void
+    {
+        $project = $this->project();
+        $project->update(['application_open' => true]);
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => 'Aktif Donem',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $programA = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Program A',
+            'start_at' => now()->addWeek(),
+            'end_at' => now()->addWeek()->addHour(),
+            'status' => 'scheduled',
+            'is_public' => true,
+        ]);
+        $programB = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Program B',
+            'start_at' => now()->addWeeks(2),
+            'end_at' => now()->addWeeks(2)->addHour(),
+            'status' => 'scheduled',
+            'is_public' => true,
+        ]);
+        $generalForm = ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'fields' => [['id' => 'general', 'type' => 'text', 'label' => 'Genel soru', 'required' => true]],
+            'is_active' => true,
+        ]);
+        $periodForm = ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'fields' => [['id' => 'period', 'type' => 'text', 'label' => 'Donem sorusu', 'required' => true]],
+            'is_active' => true,
+        ]);
+        $programForm = ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'program_id' => $programA->id,
+            'fields' => [['id' => 'program', 'type' => 'text', 'label' => 'Program A sorusu', 'required' => true]],
+            'require_consent' => true,
+            'consent_text' => 'Program A kosullari',
+            'is_active' => true,
+        ]);
+
+        $this->getJson('/api/projects/'.$project->slug)
+            ->assertOk()
+            ->assertJsonPath('application_form.id', $periodForm->id);
+        $this->getJson('/api/projects/'.$project->slug.'/application-form?program_id='.$programA->id)
+            ->assertOk()
+            ->assertJsonPath('application_form.id', $programForm->id)
+            ->assertJsonPath('application_form.consent_text', 'Program A kosullari');
+        $this->getJson('/api/projects/'.$project->slug.'/application-form?program_id='.$programB->id)
+            ->assertOk()
+            ->assertJsonPath('application_form.id', $periodForm->id);
+        $this->getJson('/api/projects/'.$project->slug.'/application-form')
+            ->assertOk()
+            ->assertJsonPath('application_form.id', $periodForm->id);
+
+        $student = User::factory()->create([
+            'surname' => 'Aday',
+            'role' => 'student',
+            'status' => 'active',
+            'kvkk_consent_at' => now(),
+        ]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/applications', [
+            'project_id' => $project->id,
+            'program_id' => $programB->id,
+            'application_form_id' => $periodForm->id,
+            'consent_accepted' => true,
+            'form_data' => ['program' => 'Yanlis program cevabi'],
+        ])->assertStatus(422)->assertJsonValidationErrors('period');
+
+        $periodForm->update(['is_active' => false]);
+        $newPeriodForm = ApplicationForm::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'fields' => [['id' => 'period_new', 'type' => 'text', 'label' => 'Yeni donem sorusu', 'required' => true]],
+            'is_active' => true,
+        ]);
+        $this->postJson('/api/applications', [
+            'project_id' => $project->id,
+            'program_id' => $programB->id,
+            'application_form_id' => $periodForm->id,
+            'consent_accepted' => true,
+            'form_data' => ['period' => 'Eski cevap'],
+        ])->assertStatus(422)->assertJsonValidationErrors('application_form_id');
+        $this->assertDatabaseCount('applications', 0);
+
+        $this->postJson('/api/applications', [
+            'project_id' => $project->id,
+            'program_id' => $programB->id,
+            'application_form_id' => $newPeriodForm->id,
+            'consent_accepted' => true,
+            'form_data' => ['period_new' => 'Yeni cevap'],
+        ])->assertCreated()->assertJsonPath('application.application_form_id', $newPeriodForm->id);
+        $this->assertDatabaseHas('applications', [
+            'user_id' => $student->id,
+            'program_id' => $programB->id,
+            'application_form_id' => $newPeriodForm->id,
+        ]);
+
+        $newPeriodForm->update(['is_active' => false]);
+        $this->getJson('/api/projects/'.$project->slug.'/application-form?program_id='.$programB->id)
+            ->assertOk()
+            ->assertJsonPath('application_form.id', $generalForm->id);
+    }
+
     public function test_public_application_requires_configured_consent_before_submission(): void
     {
         $project = $this->project();
@@ -2550,6 +2895,7 @@ class PanelRegressionFixTest extends TestCase
                 'phone' => '05550000000',
             ],
         ];
+        $payload['verification_code'] = $this->publicApplicationCode($project, $payload['applicant']['email']);
 
         $this->postJson('/api/applications/public', $payload)
             ->assertStatus(422)
@@ -2590,7 +2936,9 @@ class PanelRegressionFixTest extends TestCase
 
         $this->postJson('/api/applications/public', [
             'project_id' => $project->id,
+            'consent_accepted' => true,
             'form_data' => [],
+            'verification_code' => $this->publicApplicationCode($project, 'blocked-applicant@test.local'),
             'applicant' => [
                 'name' => 'Blocked',
                 'surname' => 'Applicant',
@@ -2632,7 +2980,9 @@ class PanelRegressionFixTest extends TestCase
 
         $this->postJson('/api/applications/public', [
             'project_id' => $project->id,
+            'consent_accepted' => true,
             'form_data' => [],
+            'verification_code' => $this->publicApplicationCode($project, 'waitlisted-applicant@test.local'),
             'applicant' => [
                 'name' => 'Wait',
                 'surname' => 'Listed',
@@ -3494,6 +3844,8 @@ class PanelRegressionFixTest extends TestCase
         $this->postJson("/api/volunteer/opportunities/{$opportunity->id}/apply", [
             'motivation_text' => 'Bu etkinlikte gonullu olarak aktif sorumluluk almak istiyorum.',
             'notes' => null,
+            'accepted_terms' => true,
+            'expected_consent_text' => app(\App\Services\ApplicationConsentService::class)->textWithAdditional(null),
         ])
             ->assertCreated()
             ->assertJsonPath('application.status', 'pending');

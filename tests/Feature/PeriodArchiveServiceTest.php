@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Period;
+use App\Models\Application;
 use App\Models\PeriodArchive;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\PeriodArchiveService;
+use App\Services\PeriodArchiveBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,6 +23,17 @@ class PeriodArchiveServiceTest extends TestCase
     {
         [$period, $actor] = $this->context();
         $service = app(PeriodArchiveService::class);
+        $application = Application::query()->create([
+            'user_id' => $actor->id,
+            'project_id' => $period->project_id,
+            'period_id' => $period->id,
+            'status' => 'waitlisted',
+            'interview_passed_at' => now()->subDay(),
+            'waitlist_order' => 1,
+            'waitlist_invited_at' => now()->subHour(),
+            'waitlist_invitation_expires_at' => now()->addDay(),
+            'waitlist_invitation_delivery_status' => 'sent',
+        ]);
 
         $first = DB::transaction(fn () => $service->createVersion(
             $period,
@@ -42,8 +55,12 @@ class PeriodArchiveServiceTest extends TestCase
         $this->assertSame(2, $second->archive_version);
         $this->assertSame($first->id, $second->previous_archive_id);
         $this->assertSame($first->integrity_hash, $second->previous_hash);
-        $this->assertSame(2, $second->schema_version);
+        $this->assertSame(PeriodArchiveBuilder::SCHEMA_VERSION, $second->schema_version);
         $this->assertNotEmpty($second->snapshot_json['domains']);
+        $archivedApplication = $second->snapshot_json['domains']['applications'][0];
+        $this->assertSame($application->id, $archivedApplication['id']);
+        $this->assertSame('sent', $archivedApplication['waitlist_invitation_delivery_status']);
+        $this->assertNotNull($archivedApplication['interview_passed_at']);
         $this->assertSame('verified', $service->verify($first->fresh(['previousArchive']), $actor)['status']);
         $this->assertSame('verified', $service->verify($second->fresh(['previousArchive']), $actor)['status']);
 

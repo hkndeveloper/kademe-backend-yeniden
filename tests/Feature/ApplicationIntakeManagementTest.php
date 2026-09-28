@@ -109,7 +109,7 @@ class ApplicationIntakeManagementTest extends TestCase
         $window = ApplicationWindow::query()->where('project_id', $project->id)->firstOrFail();
         $window->update(['starts_at' => now()->subMinute()]);
 
-        $applicationId = $this->postJson('/api/applications', ['project_id' => $project->id])
+        $applicationId = $this->postJson('/api/applications', ['project_id' => $project->id, 'consent_accepted' => true])
             ->assertCreated()
             ->assertJsonPath('application.application_window_id', $window->id)
             ->json('application.id');

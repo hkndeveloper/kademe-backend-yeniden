@@ -83,7 +83,7 @@ class CommunityProgramAuthorizationTest extends TestCase
 
     public function test_community_coordinator_manages_only_unit_owned_shared_events_with_minimized_fields(): void
     {
-        $core = $this->program('Core Project Program', now()->addDay(), Program::KIND_CORE_PROGRAM);
+        $core = $this->program('Core Project Program', now()->addDays(2), Program::KIND_CORE_PROGRAM);
         Sanctum::actingAs($this->communityCoordinator);
 
         $created = $this->postJson('/api/panel/programs/community-events', [
@@ -124,6 +124,8 @@ class CommunityProgramAuthorizationTest extends TestCase
         $this->putJson('/api/panel/programs/'.$created['id'].'/community-event', [
             'title' => 'Updated Community Culture Day',
             'credit_deduction' => 50,
+            'start_at' => now()->addDays(2)->addMinutes(15)->toIso8601String(),
+            'end_at' => now()->addDays(2)->addMinutes(45)->toIso8601String(),
         ])->assertOk();
         $this->assertDatabaseHas('programs', ['id' => $created['id'], 'title' => 'Updated Community Culture Day', 'credit_deduction' => 0]);
     }

@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Enums\PeriodWriteAction;
+use App\Models\Attendance;
 use App\Models\Participant;
 use App\Models\CreditLog;
 use App\Models\Program;
+use App\Models\ProgramAbsence;
 use App\Models\SystemNotification;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -56,14 +58,18 @@ class CreditService
         ));
     }
 
-    public function deductOnceForProgram(Participant $participant, Program $program, ?int $adminId = null, ?string $reason = null): ?CreditLog
+    public function deductOnceForProgram(Participant $participant, Program $program, ?int $adminId = null, ?string $reason = null, ?bool $attended = null): ?CreditLog
     {
         $amount = max((int) ($program->credit_deduction ?? 0), 0);
         if ($amount === 0) {
+            if ($attended === false) {
+                $this->recordZeroCreditAbsence($participant, $program, $adminId);
+            }
+
             return null;
         }
 
-        return DB::transaction(function () use ($participant, $program, $adminId, $reason, $amount) {
+        return DB::transaction(function () use ($participant, $program, $adminId, $reason, $amount, $attended) {
             $creditBefore = (int) $participant->credit;
             $alreadyDeducted = CreditLog::query()
                 ->where('participant_id', $participant->id)
@@ -81,7 +87,8 @@ class CreditService
                 'deduction',
                 $reason ?: 'Etkinlik tamamlandi, degerlendirme bekleniyor',
                 $program->id,
-                $adminId
+                $adminId,
+                $attended === false
             );
 
             $this->checkThresholdAndBlacklist($participant->fresh(['period', 'user', 'project.coordinators']), $creditBefore);
@@ -133,6 +140,10 @@ class CreditService
 
         $creditDeduction = max((int) ($program->credit_deduction ?? 0), 0);
         if ($creditDeduction === 0) {
+            if (! $isValid) {
+                $this->recordZeroCreditAbsence($participant, $program, $adminId);
+            }
+
             return null;
         }
 
@@ -156,7 +167,8 @@ class CreditService
                     ? 'Manuel yoklama katildi olarak duzeltildi, degerlendirme bekleniyor'
                     : 'Manuel yoklama gelmedi olarak duzeltildi, kredi dusumu uygulandi',
                 $program->id,
-                $adminId
+                $adminId,
+                ! $isValid
             );
 
             $this->checkThresholdAndBlacklist($participant->fresh(['period', 'user', 'project.coordinators']), $creditBefore);
@@ -165,7 +177,41 @@ class CreditService
         });
     }
 
-    private function createLogAndApplyDelta(Participant $participant, int $delta, string $type, string $reason, ?int $programId = null, ?int $adminId = null): CreditLog
+    private function recordZeroCreditAbsence(Participant $participant, Program $program, ?int $adminId): void
+    {
+        if ($program->status !== 'completed') {
+            return;
+        }
+
+        DB::transaction(function () use ($participant, $program, $adminId) {
+            if (Attendance::query()->where('program_id', $program->id)
+                ->where('user_id', $participant->user_id)->where('is_valid', true)->exists()) {
+                return;
+            }
+
+            $participant->loadMissing('period');
+            if ($participant->period) {
+                $this->periodWritePolicy->assertAllowed(
+                    $adminId ? User::query()->find($adminId) : null,
+                    $participant->period,
+                    PeriodWriteAction::RESOLVE_OPERATION,
+                );
+            }
+
+            ProgramAbsence::query()->createOrFirst(
+                ['participant_id' => $participant->id, 'program_id' => $program->id],
+                [
+                    'user_id' => $participant->user_id,
+                    'project_id' => $participant->project_id,
+                    'period_id' => $participant->period_id,
+                    'recorded_by' => $adminId,
+                ]
+            );
+            $this->checkThresholdAndBlacklist($participant->fresh(['period', 'user', 'project.coordinators']));
+        });
+    }
+
+    private function createLogAndApplyDelta(Participant $participant, int $delta, string $type, string $reason, ?int $programId = null, ?int $adminId = null, bool $absenceConfirmed = false): CreditLog
     {
         $participant->loadMissing('period');
         if ($participant->period) {
@@ -185,6 +231,7 @@ class CreditService
             'amount' => $delta,
             'type' => $type,
             'reason' => $reason,
+            'absence_confirmed' => $absenceConfirmed,
             'program_id' => $programId,
             'created_by' => $adminId,
         ]);
@@ -213,6 +260,27 @@ class CreditService
             );
         }
         $log->update(['excused' => $excused]);
+        if (! $excused && $log->absence_confirmed) {
+            $this->checkThresholdAndBlacklist($log->participant()->firstOrFail()->load(['period', 'user', 'project.coordinators']));
+        }
+    }
+
+    public function markProgramAbsenceExcused(ProgramAbsence $absence, bool $excused, string $reason, User $actor): void
+    {
+        $participant = $absence->participant()->with(['period', 'user', 'project.coordinators'])->firstOrFail();
+        if ($participant->period) {
+            $this->periodWritePolicy->assertAllowed($actor, $participant->period, PeriodWriteAction::RESOLVE_OPERATION);
+        }
+
+        $absence->update([
+            'excused' => $excused,
+            'excuse_reason' => trim($reason),
+            'reviewed_by' => $actor->id,
+            'reviewed_at' => now(),
+        ]);
+        if (! $excused) {
+            $this->checkThresholdAndBlacklist($participant->fresh(['period', 'user', 'project.coordinators']));
+        }
     }
 
     /**
@@ -226,35 +294,28 @@ class CreditService
     {
         $threshold = $participant->period?->credit_threshold ?? 75;
 
-        if ($participant->credit >= $threshold) {
-            return;
-        }
-
         $user = $participant->user;
 
         // Kural 1: Dusuk kredi uyarisi (SMS gateway kapsam disi olsa bile log + event olustur)
-        Log::info('credit.low_threshold_warning', [
-            'user_id'        => $user->id,
-            'participant_id' => $participant->id,
-            'project_id'     => $participant->project_id,
-            'credit'         => $participant->credit,
-            'threshold'      => $threshold,
-        ]);
+        if ($participant->credit < $threshold) {
+            Log::info('credit.low_threshold_warning', [
+                'user_id'        => $user->id,
+                'participant_id' => $participant->id,
+                'project_id'     => $participant->project_id,
+                'credit'         => $participant->credit,
+                'threshold'      => $threshold,
+            ]);
 
-        // Event dispatch: ileride SMS, bildirim, e-posta listener'lari baglanabilir.
-        event(new \App\Events\CreditThresholdReached($participant, $threshold));
+            // Event dispatch: ileride SMS, bildirim, e-posta listener'lari baglanabilir.
+            event(new \App\Events\CreditThresholdReached($participant, $threshold));
 
-        if ($creditBefore === null || $creditBefore >= $threshold) {
-            $this->notifyLowCredit($participant, $threshold);
+            if ($creditBefore === null || $creditBefore >= $threshold) {
+                $this->notifyLowCredit($participant, $threshold);
+            }
         }
 
-        // Kural 2: Mazeretsiz 3 devamsizlik → 6 ay kara liste
-        $unexcusedAbsenceCount = CreditLog::query()
-            ->where('participant_id', $participant->id)
-            ->where('type', 'deduction')
-            ->whereNotNull('program_id')
-            ->where('excused', false)
-            ->count();
+        // Kural 2: Yalniz kesinlesmis, iade edilmemis ve mazeretsiz katilmama sayilir.
+        $unexcusedAbsenceCount = $this->confirmedAbsenceCount($participant);
 
         if ($unexcusedAbsenceCount >= 3) {
             Log::warning('credit.unexcused_absence_blacklist', [
@@ -277,7 +338,7 @@ class CreditService
         }
 
         // Kural 3: Kredi <= 30 → aninda kara liste
-        if ($participant->credit <= 30) {
+        if ($participant->credit < $threshold && $participant->credit <= 30) {
             Log::warning('credit.hard_limit_blacklist', [
                 'user_id'        => $user->id,
                 'participant_id' => $participant->id,
@@ -294,6 +355,40 @@ class CreditService
                 $this->notifyBlacklisted($participant, 'Krediniz kritik alt limite dustu.');
             }
         }
+    }
+
+    public function confirmedAbsenceCount(Participant $participant): int
+    {
+        $creditProgramIds = CreditLog::query()
+            ->where('participant_id', $participant->id)
+            ->where('type', 'deduction')
+            ->where('absence_confirmed', true)
+            ->where('excused', false)
+            ->whereNotNull('program_id')
+            ->whereHas('program', fn ($query) => $query->where('status', 'completed'))
+            ->whereNotIn('program_id', CreditLog::query()
+                ->select('program_id')
+                ->where('participant_id', $participant->id)
+                ->where('type', 'restore')
+                ->whereNotNull('program_id'))
+            ->whereNotIn('program_id', Attendance::query()
+                ->select('program_id')
+                ->where('user_id', $participant->user_id)
+                ->where('is_valid', true))
+            ->distinct()
+            ->pluck('program_id');
+        $zeroCreditProgramIds = ProgramAbsence::query()
+            ->where('participant_id', $participant->id)
+            ->where('excused', false)
+            ->whereNotNull('program_id')
+            ->whereHas('program', fn ($query) => $query->where('status', 'completed'))
+            ->whereNotIn('program_id', Attendance::query()
+                ->select('program_id')
+                ->where('user_id', $participant->user_id)
+                ->where('is_valid', true))
+            ->pluck('program_id');
+
+        return $creditProgramIds->merge($zeroCreditProgramIds)->unique()->count();
     }
 
     private function notifyLowCredit(Participant $participant, int $threshold): void

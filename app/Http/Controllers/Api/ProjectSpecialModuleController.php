@@ -22,6 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @group Project Special Modules
@@ -265,7 +266,7 @@ class ProjectSpecialModuleController extends Controller
             'sort_order' => (int) $module->sort_order,
             'is_active' => (bool) $module->is_active,
             'application_open' => (bool) $module->application_open,
-            'requires_consent' => (bool) $module->requires_consent,
+            'requires_consent' => true,
             'consent_checkbox_label' => $module->consent_checkbox_label,
             'warning_text' => $module->warning_text,
             'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
@@ -281,6 +282,7 @@ class ProjectSpecialModuleController extends Controller
                 'participant_id' => $row->participant_id,
                 'status' => $row->status,
                 'consented_at' => optional($row->consented_at)?->toIso8601String(),
+                'consent_text_snapshot' => $row->consent_text_snapshot,
                 'reviewed_at' => optional($row->reviewed_at)?->toIso8601String(),
                 'note' => $row->note,
                 'user' => $row->user ? [
@@ -308,7 +310,7 @@ class ProjectSpecialModuleController extends Controller
      * @bodyParam sort_order integer Optional display order. Example: 1
      * @bodyParam is_active boolean Optional active flag. Example: true
      * @bodyParam application_open boolean Optional student enrollment flag. Example: true
-     * @bodyParam requires_consent boolean Optional consent requirement. Example: true
+     * @bodyParam requires_consent boolean Optional legacy field; module information consent is always required. Example: true
      * @bodyParam consent_checkbox_label string Optional consent label.
      * @bodyParam warning_text string Optional warning text.
      * @bodyParam requires_coordinator_approval boolean Optional review requirement. Example: false
@@ -325,6 +327,7 @@ class ProjectSpecialModuleController extends Controller
         abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
 
         $validated = $this->validatedKademeModule($request, true);
+        $validated['requires_consent'] = true;
         if (! empty($validated['period_id'])) {
             abort_unless(
                 \App\Models\Period::query()->whereKey((int) $validated['period_id'])->where('project_id', $projectId)->exists(),
@@ -371,6 +374,7 @@ class ProjectSpecialModuleController extends Controller
         abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
         $module = ProjectModule::query()->where('project_id', $projectId)->findOrFail($id);
         $validated = $this->validatedKademeModule($request, false);
+        $validated['requires_consent'] = true;
         if (! empty($validated['period_id'])) {
             abort_unless(
                 \App\Models\Period::query()->whereKey((int) $validated['period_id'])->where('project_id', $projectId)->exists(),
@@ -403,9 +407,19 @@ class ProjectSpecialModuleController extends Controller
     {
         $project = $this->project($request, $projectId, 'projects.rewards.manage');
         abort_unless(ProjectSpecialModuleCatalog::supportsKademeModuleWorkflow($project), 422, 'Bu proje turu KADEME+ modullerini desteklemiyor.');
-        $module = ProjectModule::query()->where('project_id', $projectId)->findOrFail($id);
-        $this->assertPeriodWritable($request, $module->period_id);
-        $module->delete();
+        DB::transaction(function () use ($request, $projectId, $id) {
+            $module = ProjectModule::query()
+                ->where('project_id', $projectId)
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $this->assertPeriodWritable($request, $module->period_id);
+            abort_if(
+                $module->enrollments()->exists(),
+                422,
+                'Başvurusu bulunan modül silinemez. Başvuruyu kapatabilir veya modülü pasife alabilirsiniz.'
+            );
+            $module->delete();
+        });
 
         return response()->json(['message' => 'KADEME+ modulu silindi.']);
     }

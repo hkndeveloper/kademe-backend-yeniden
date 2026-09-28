@@ -69,7 +69,7 @@ class Yf8MigrationInvariantTest extends TestCase
         $unsafe = CoordinationUnitPermissionRule::query()->create([
             'unit_id' => $projectUnit->id,
             'position' => 'coordinator',
-            'permission_name' => 'financial.view',
+            'permission_name' => 'financial.approve',
             'effect' => CoordinationUnitPermissionRule::EFFECT_ALLOW,
             'scope_source' => CoordinationUnitPermissionRule::SCOPE_LINKED_PROJECT,
             'status' => CoordinationUnitPermissionRule::STATUS_ACTIVE,

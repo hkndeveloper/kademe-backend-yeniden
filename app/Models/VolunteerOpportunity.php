@@ -14,6 +14,7 @@ class VolunteerOpportunity extends Model
         'period_id',
         'title',
         'description',
+        'consent_text',
         'location',
         'start_at',
         'end_at',

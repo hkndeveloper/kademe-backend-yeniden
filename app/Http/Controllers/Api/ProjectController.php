@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectResource;
-use App\Models\ApplicationForm;
 use App\Models\EurodeskProject;
 use App\Models\Internship;
 use App\Models\KpdRoom;
@@ -13,6 +12,8 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\RewardTier;
 use App\Services\ApplicationIntakeService;
+use App\Services\ApplicationFormResolver;
+use App\Services\ApplicationConsentService;
 use App\Support\MediaStorage;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\Request;
@@ -22,7 +23,11 @@ use Illuminate\Http\Request;
  */
 class ProjectController extends Controller
 {
-    public function __construct(private readonly ApplicationIntakeService $intakeService) {}
+    public function __construct(
+        private readonly ApplicationIntakeService $intakeService,
+        private readonly ApplicationFormResolver $applicationFormResolver,
+        private readonly ApplicationConsentService $applicationConsentService,
+    ) {}
 
     /**
      * List public active projects.
@@ -103,15 +108,56 @@ class ProjectController extends Controller
         $currentPeriod = $project->currentPeriodOrLegacy();
         $applicationWindow = $this->intakeService->windowFor($project, $currentPeriod);
         $applicationForm = $this->intakeService->isOpen($project, $currentPeriod, $applicationWindow)
-            ? $this->activeApplicationForm($project, $currentPeriod)
+            ? $this->applicationFormResolver->forApplication($project, $currentPeriod)
             : null;
 
         return response()->json([
             'project' => new ProjectResource($project),
             'current_period' => $currentPeriod,
-            'application_form' => $applicationForm,
+            'application_form' => $applicationForm?->makeHidden('auto_reject_rules'),
+            'application_consent_text' => $this->applicationConsentService->textFor($applicationForm),
             'programs' => $this->publicProgramPayload($project),
             'project_specials' => $this->publicSpecialModules($project),
+        ]);
+    }
+
+    /**
+     * Get the form shown to a visitor for the selected project program.
+     *
+     * @unauthenticated
+     * @queryParam program_id integer Optional public program in the active period.
+     * @response 200 {"application_form":{"id":1,"fields":[]}}
+     */
+    public function applicationForm(Request $request, string $slug)
+    {
+        $validated = $request->validate(['program_id' => 'nullable|integer|exists:programs,id']);
+        $project = Project::query()
+            ->where('slug', $slug)
+            ->where('status', 'active')
+            ->where('is_public', true)
+            ->firstOrFail();
+        $period = $project->currentPeriodOrLegacy();
+
+        abort_unless($this->intakeService->isOpen($project, $period), 422, 'Bu proje icin basvurular su an kapali.');
+
+        $program = null;
+        if (! empty($validated['program_id'])) {
+            $program = Program::query()
+                ->whereKey($validated['program_id'])
+                ->where('project_id', $project->id)
+                ->where('period_id', $period->id)
+                ->whereIn('status', ['scheduled', 'active'])
+                ->publiclyVisible()
+                ->first();
+
+            abort_unless($program, 422, 'Secilen program basvuruya uygun degil.');
+        }
+
+        $form = $this->applicationFormResolver->forApplication($project, $period, $program);
+
+        return response()->json([
+            'application_form' => $form?->makeHidden('auto_reject_rules'),
+            'application_consent_text' => $this->applicationConsentService->textFor($form),
         ]);
     }
 
@@ -171,27 +217,6 @@ class ProjectController extends Controller
             'calendar' => $calendar,
             'calendar_months' => $calendarMonths,
         ];
-    }
-
-    private function activeApplicationForm(Project $project, mixed $currentPeriod): ?ApplicationForm
-    {
-        if ($currentPeriod) {
-            $periodForm = ApplicationForm::where('project_id', $project->id)
-                ->where('period_id', $currentPeriod->id)
-                ->where('is_active', true)
-                ->latest()
-                ->first();
-
-            if ($periodForm) {
-                return $periodForm;
-            }
-        }
-
-        return ApplicationForm::where('project_id', $project->id)
-            ->whereNull('period_id')
-            ->where('is_active', true)
-            ->latest()
-            ->first();
     }
 
     private function formatPublicProgram(Program $program): array

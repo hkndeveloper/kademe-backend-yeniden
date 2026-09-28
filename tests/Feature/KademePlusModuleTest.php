@@ -98,12 +98,16 @@ class KademePlusModuleTest extends TestCase
         $row = $projects->firstWhere('project.id', $project->id);
         $this->assertNotNull($row);
         $this->assertNotEmpty($row['kademe_modules']);
+        $moduleInformation = collect($row['kademe_modules'])->firstWhere('id', $moduleId);
+        $this->assertNotNull($moduleInformation);
 
         $enroll = $this->postJson("/api/dashboard/projects/{$project->id}/kademe-modules/{$moduleId}/enroll", [
             'accepted_terms' => true,
+            'expected_consent_hash' => $moduleInformation['application_consent_hash'],
         ]);
         $enroll->assertCreated();
         $this->assertSame('approved', $enroll->json('enrollment.status'));
+        $this->assertSame($moduleInformation['application_consent_text'], $enroll->json('enrollment.consent_text_snapshot'));
 
         $board = $this->getJson("/api/dashboard/projects/{$project->id}/badge-leaderboard");
         $board->assertOk();

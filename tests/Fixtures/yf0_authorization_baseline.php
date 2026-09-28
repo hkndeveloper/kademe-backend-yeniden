@@ -10,10 +10,10 @@
 return [
     'inventory_counts' => [
         'routes' => [
-            'total' => 594,
-            'api_total' => 585,
-            'api/panel/' => 275,
-            'api/admin/' => 196,
+            'total' => 612,
+            'api_total' => 603,
+            'api/panel/' => 283,
+            'api/admin/' => 203,
             'api/coordinator/' => 10,
             'api/staff/' => 9,
         ],

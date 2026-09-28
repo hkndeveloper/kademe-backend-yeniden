@@ -17,6 +17,7 @@ return [
         'programs' => 'required_period_fact',
         'assignments' => 'required_period_fact',
         'credit_logs' => 'required_period_fact',
+        'program_absences' => 'operational_review',
         'waitlist_invitations' => 'required_period_fact',
         'application_windows' => 'required_period_fact',
         'period_archives' => 'archive',

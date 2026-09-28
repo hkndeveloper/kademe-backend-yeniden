@@ -52,7 +52,8 @@ class NotificationService
         ?int $projectId = null,
         ?int $senderId = null,
         ?string $attachmentPath = null,
-        ?string $htmlBody = null
+        ?string $htmlBody = null,
+        ?string $logBody = null
     ): int {
         $recipients = collect($emails)
             ->filter(fn ($email) => is_string($email) && trim($email) !== '')
@@ -66,7 +67,7 @@ class NotificationService
                 'sender_id' => $senderId,
                 'recipients_count' => 0,
                 'subject' => $subject,
-                'content' => mb_substr($body, 0, 2000),
+                'content' => mb_substr($logBody ?? $body, 0, 2000),
                 'attachment_path' => $attachmentPath,
                 'status' => 'failed',
                 'project_id' => $projectId,
@@ -104,7 +105,7 @@ class NotificationService
                 'sender_id' => $senderId,
                 'recipients_count' => 0,
                 'subject' => $subject,
-                'content' => mb_substr($body, 0, 2000),
+                'content' => mb_substr($logBody ?? $body, 0, 2000),
                 'attachment_path' => $attachmentPath,
                 'status' => 'failed',
                 'project_id' => $projectId,
@@ -168,7 +169,7 @@ class NotificationService
             'sender_id' => $senderId,
             'recipients_count' => $successCount,
             'subject' => $subject,
-            'content' => mb_substr($body, 0, 2000),
+            'content' => mb_substr($logBody ?? $body, 0, 2000),
             'attachment_path' => $attachmentPath,
             'status' => $successCount > 0 ? 'sent' : 'failed',
             'project_id' => $projectId,
@@ -183,6 +184,7 @@ class NotificationService
 
         return $successCount;
     }
+
     public function sendTemplatedEmail(
         array $emails,
         string $subject,

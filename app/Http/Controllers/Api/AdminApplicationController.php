@@ -6,16 +6,21 @@ use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
-use App\Models\Participant;
+use App\Services\ApplicationDecisionService;
+use App\Services\ApplicationEnrollmentService;
+use App\Services\ApplicationScheduleService;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Services\WaitlistService;
+use App\Support\ApplicationFileStorage;
 use App\Support\AdminExportResponder;
-use App\Support\MediaStorage;
 use App\Support\IstanbulDateTime;
+use App\Support\ApplicationMailLinks;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -31,6 +36,9 @@ class AdminApplicationController extends Controller
         private readonly PermissionResolver $permissionResolver,
         private readonly NotificationService $notificationService,
         private readonly WaitlistService $waitlistService,
+        private readonly ApplicationEnrollmentService $applicationEnrollmentService,
+        private readonly ApplicationDecisionService $applicationDecisionService,
+        private readonly ApplicationScheduleService $applicationScheduleService,
     ) {}
 
     private function applicationStatusLabel(string $status): string
@@ -39,46 +47,114 @@ class AdminApplicationController extends Controller
             'accepted' => 'Kabul edildi',
             'rejected' => 'Reddedildi',
             'waitlisted' => 'Yedek liste',
-            'interview_planned' => 'Mulakat planlandi',
-            'interview_passed' => 'Mulakat olumlu',
-            'interview_failed' => 'Mulakat olumsuz',
-            default => 'Degerlendirme bekliyor',
+            'interview_planned' => 'Mülakat planlandı',
+            'interview_passed' => 'Mülakat olumlu',
+            'interview_failed' => 'Mülakat olumsuz',
+            'pending' => 'Değerlendirme bekliyor',
+            default => $status,
         };
     }
 
-    private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): void
+    private function applyApplicationListFilters(Builder $query, array $filters): Builder
     {
-        $email = $application->user?->email;
-        if (! $email) {
-            return;
+        if (! empty($filters['status'])) {
+            $query->where('status', $filters['status']);
         }
 
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $query->where(function (Builder $builder) use ($search) {
+                $builder
+                    ->whereHas('user', function (Builder $userQuery) use ($search) {
+                        $userQuery
+                            ->where('name', 'like', "%$search%")
+                            ->orWhere('surname', 'like', "%$search%")
+                            ->orWhere('email', 'like', "%$search%")
+                            ->orWhere('phone', 'like', "%$search%");
+                    })
+                    ->orWhereHas('project', function (Builder $projectQuery) use ($search) {
+                        $projectQuery->where('name', 'like', "%$search%");
+                    });
+            });
+        }
+
+        return $query;
+    }
+
+    private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): bool
+    {
+        $user = $application->user()->first(['id', 'email', 'role']);
+        $email = $user?->email;
+        if (! $email) {
+            return false;
+        }
+
+        $application->loadMissing(['project:id,name', 'period:id,name', 'program:id,title']);
+        $followUpUrl = ApplicationMailLinks::portal($user, 'applications');
         $lines = [
             ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+            ['label' => 'Dönem', 'value' => $application->period?->name ?? '-'],
             ['label' => 'Durum', 'value' => $this->applicationStatusLabel((string) $application->status)],
         ];
+        if ($application->program) {
+            $lines[] = ['label' => 'Program', 'value' => $application->program->title];
+        }
 
         if ($application->interview_at) {
-            $lines[] = ['label' => 'Mulakat tarihi', 'value' => IstanbulDateTime::format($application->interview_at)];
+            $lines[] = ['label' => 'Mülakat tarihi', 'value' => IstanbulDateTime::format($application->interview_at).' (Türkiye saati)'];
         }
         if ($application->rejection_reason) {
-            $lines[] = ['label' => 'Gerekce', 'value' => $application->rejection_reason];
+            $lines[] = ['label' => 'Gerekçe', 'value' => $application->rejection_reason];
         }
 
-        $this->notificationService->sendTemplatedEmail(
-            [$email],
-            $subject,
-            'emails.application-status',
-            [
-                'title' => $subject,
-                'preheader' => 'Basvuru durumunuz guncellendi.',
-                'intro' => $body,
-                'lines' => $lines,
-                'plain_text' => $body,
-            ],
-            $application->project_id,
-            $senderId
-        );
+        try {
+            return $this->notificationService->sendTemplatedEmail(
+                [$email],
+                $subject,
+                'emails.application-status',
+                [
+                    'title' => $subject,
+                    'preheader' => 'Başvuru durumunuz güncellendi.',
+                    'intro' => $body,
+                    'lines' => $lines,
+                    'action_url' => $followUpUrl,
+                    'action_text' => $followUpUrl ? 'Başvurularımı görüntüle' : null,
+                    'plain_text' => "Proje: ".($application->project?->name ?? '-')."\nDönem: ".($application->period?->name ?? '-').($application->program ? "\nProgram: {$application->program->title}" : '')."\nDurum: ".$this->applicationStatusLabel((string) $application->status)."\n{$body}".($followUpUrl ? "\nBaşvurularım: {$followUpUrl}" : ''),
+                ],
+                $application->project_id,
+                $senderId
+            ) > 0;
+        } catch (\Throwable $exception) {
+            Log::warning('application.status_notification_failed', [
+                'application_id' => $application->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function sendPasswordLink(Application $application): bool
+    {
+        if (! $application->user?->email) {
+            return false;
+        }
+
+        try {
+            $sent = Password::sendResetLink(['email' => $application->user->email]) === Password::RESET_LINK_SENT;
+            if (! $sent) {
+                Log::warning('application.password_link_not_sent', ['application_id' => $application->id]);
+            }
+
+            return $sent;
+        } catch (\Throwable $exception) {
+            Log::warning('application.password_link_failed', [
+                'application_id' => $application->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /** @return int[] */
@@ -114,42 +190,6 @@ class AdminApplicationController extends Controller
                 'status' => ['Bu basvuru akisi icin secilen durum gecislerine izin verilmiyor.'],
             ]);
         }
-    }
-
-    private function assertProjectHasSeatFor(Application $application): void
-    {
-        $quota = $application->program?->application_quota ?? $application->projectQuota();
-        if ($quota === null || (int) $quota <= 0) {
-            return;
-        }
-
-        if ($application->program?->application_quota !== null) {
-            $acceptedCount = Application::query()
-                ->where('project_id', $application->project_id)
-                ->where('period_id', $application->period_id)
-                ->where('program_id', $application->program_id)
-                ->where('status', 'accepted')
-                ->where('user_id', '!=', $application->user_id)
-                ->count();
-        } else {
-            $acceptedCount = Participant::query()
-                ->where('project_id', $application->project_id)
-                ->where('period_id', $application->period_id)
-                ->where('status', 'active')
-                ->where('user_id', '!=', $application->user_id)
-                ->count();
-        }
-
-        if ($acceptedCount >= (int) $quota) {
-            throw ValidationException::withMessages([
-                'status' => ['Kontenjan dolu. Basvuruyu kabul etmeden once kontenjan acin veya yedek listede birakin.'],
-            ]);
-        }
-    }
-
-    private function isUrl(string $path): bool
-    {
-        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
     private function formEntries(Application $application): array
@@ -196,11 +236,20 @@ class AdminApplicationController extends Controller
             'waitlist_order' => $application->waitlist_order,
             'waitlist_invited_at' => optional($application->waitlist_invited_at)?->toISOString(),
             'waitlist_invitation_expires_at' => optional($application->waitlist_invitation_expires_at)?->toISOString(),
+            'waitlist_invitation_delivery_status' => $application->waitlist_invitation_delivery_status,
             'created_at' => optional($application->created_at)?->toISOString(),
             'interview_at' => optional($application->interview_at)?->toISOString(),
             'evaluation_note' => $application->evaluation_note,
             'rejection_reason' => $application->rejection_reason,
+            'auto_rejected' => (bool) $application->auto_rejected,
+            'auto_rejection_reason' => $application->auto_rejection_reason,
+            'screening_review_reason' => $application->screening_review_reason,
+            'auto_rejection_corrected_at' => optional($application->auto_rejection_corrected_at)?->toISOString(),
+            'auto_rejection_corrected_by_name' => $application->auto_rejection_corrected_by_name,
+            'auto_rejection_correction_reason' => $application->auto_rejection_correction_reason,
             'form_entries' => $this->formEntries($application),
+            'consent_text_snapshot' => $application->consent_text_snapshot,
+            'consent_accepted_at' => optional($application->consent_accepted_at)?->toISOString(),
             'available_statuses' => $this->allowedStatusesFor($application),
             'workflow' => [
                 'has_interview' => $application->usesInterview(),
@@ -232,7 +281,7 @@ class AdminApplicationController extends Controller
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam status string Optional application status filter. Example: accepted
-     * @queryParam search string Optional applicant search. Example: ayse
+     * @queryParam search string Optional applicant or project search. Example: ayse
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
      * @response 200 binary Applications export file.
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
@@ -256,23 +305,11 @@ class AdminApplicationController extends Controller
         $query = Application::query()->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota']);
         $this->applyProjectPeriodContext($query, $context);
 
-        if (! empty($validated['status'])) {
-            $query->where('status', $validated['status']);
-        }
+        $this->applyApplicationListFilters($query, $validated);
 
-        if (! empty($validated['search'])) {
-            $search = $validated['search'];
-            $query->whereHas('user', function ($builder) use ($search) {
-                $builder
-                    ->where('name', 'like', "%$search%")
-                    ->orWhere('surname', 'like', "%$search%")
-                    ->orWhere('email', 'like', "%$search%");
-            });
-        }
+        $applications = $query->orderByDesc('created_at')->orderByDesc('id')->get();
 
-        $applications = $query->orderByDesc('created_at')->get();
-
-        $headings = ['ID', 'Proje', 'Donem', 'Program', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Yedek Sira', 'Degerlendirme Notu', 'Ret Nedeni', 'Basvuru Tarihi'];
+        $headings = ['ID', 'Proje', 'Dönem', 'Program', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Yedek Sıra', 'Değerlendirme Notu', 'Ret Nedeni', 'Başvuru Tarihi (İstanbul)'];
         $rows = $applications->map(fn (Application $application) => [
             $application->id,
             $application->project->name ?? '-',
@@ -282,11 +319,11 @@ class AdminApplicationController extends Controller
             $application->user->surname ?? '-',
             $application->user->email ?? '-',
             $application->user->phone ?? '-',
-            $application->status,
+            $this->applicationStatusLabel((string) $application->status),
             $application->waitlist_order ?? '-',
             $application->evaluation_note ?? '-',
             $application->rejection_reason ?? '-',
-            $application->created_at?->format('d.m.Y H:i') ?? '-',
+            IstanbulDateTime::format($application->created_at),
         ])->all();
 
         return AdminExportResponder::download(
@@ -307,7 +344,7 @@ class AdminApplicationController extends Controller
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam status string Optional application status filter. Example: pending
-     * @queryParam search string Optional applicant search. Example: hakan
+     * @queryParam search string Optional applicant or project search. Example: hakan
      * @response 200 {"applications":{"data":[]}}
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
      */
@@ -330,22 +367,10 @@ class AdminApplicationController extends Controller
             ->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota']);
         $this->applyProjectPeriodContext($query, $context);
 
-        if (! empty($validated['status'])) {
-            $query->where('status', $validated['status']);
-        }
-
-        if (! empty($validated['search'])) {
-            $search = $validated['search'];
-            $query->whereHas('user', function ($builder) use ($search) {
-                $builder
-                    ->where('name', 'like', "%$search%")
-                    ->orWhere('surname', 'like', "%$search%")
-                    ->orWhere('email', 'like', "%$search%");
-            });
-        }
+        $this->applyApplicationListFilters($query, $validated);
 
         return response()->json([
-            'applications' => $query->orderByDesc('created_at')->paginate(20),
+            'applications' => $query->orderByDesc('created_at')->orderByDesc('id')->paginate(20),
         ]);
     }
 
@@ -358,7 +383,7 @@ class AdminApplicationController extends Controller
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam status string Optional application status filter. Example: accepted
-     * @queryParam search string Optional applicant search. Example: ayse
+     * @queryParam search string Optional applicant or project search. Example: ayse
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: csv
      * @response 200 binary Staff applications export file.
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
@@ -383,23 +408,11 @@ class AdminApplicationController extends Controller
             ->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota']);
         $this->applyProjectPeriodContext($query, $context);
 
-        if (! empty($validated['status'])) {
-            $query->where('status', $validated['status']);
-        }
+        $this->applyApplicationListFilters($query, $validated);
 
-        if (! empty($validated['search'])) {
-            $search = $validated['search'];
-            $query->whereHas('user', function ($builder) use ($search) {
-                $builder
-                    ->where('name', 'like', "%$search%")
-                    ->orWhere('surname', 'like', "%$search%")
-                    ->orWhere('email', 'like', "%$search%");
-            });
-        }
+        $applications = $query->orderByDesc('created_at')->orderByDesc('id')->get();
 
-        $applications = $query->orderByDesc('created_at')->get();
-
-        $headings = ['ID', 'Proje', 'Donem', 'Program', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Yedek Sira', 'Basvuru Tarihi'];
+        $headings = ['ID', 'Proje', 'Dönem', 'Program', 'Ad', 'Soyad', 'E-posta', 'Telefon', 'Durum', 'Yedek Sıra', 'Başvuru Tarihi (İstanbul)'];
         $rows = $applications->map(fn (Application $application) => [
             $application->id,
             $application->project->name ?? '-',
@@ -409,9 +422,9 @@ class AdminApplicationController extends Controller
             $application->user->surname ?? '-',
             $application->user->email ?? '-',
             $application->user->phone ?? '-',
-            $application->status,
+            $this->applicationStatusLabel((string) $application->status),
             $application->waitlist_order ?? '-',
-            $application->created_at?->format('d.m.Y H:i') ?? '-',
+            IstanbulDateTime::format($application->created_at),
         ])->all();
 
         return AdminExportResponder::download(
@@ -449,6 +462,41 @@ class AdminApplicationController extends Controller
         return $this->updateStatus($request, $id);
     }
 
+    /** Save an internal evaluation note without changing the application decision or notifying the applicant. */
+    public function saveEvaluationNote(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.update_status');
+        if (is_string($request->input('evaluation_note'))) {
+            $request->merge(['evaluation_note' => trim($request->input('evaluation_note'))]);
+        }
+        $validated = $request->validate(['evaluation_note' => 'required|string|min:1|max:5000']);
+        $application = Application::query()->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.update_status', (int) $application->project_id),
+            403,
+            'Bu başvuru için yetkiniz bulunmuyor.'
+        );
+
+        $application = $this->applicationDecisionService->runLocked($application, function (Application $current) use ($request, $validated) {
+            $this->assertPeriodResolvable($request, $current->period_id);
+            $current->update(['evaluation_note' => trim($validated['evaluation_note'])]);
+        });
+        $request->attributes->set('audit.subject', $application);
+        $request->attributes->set('audit.event', 'application.evaluation_note_saved');
+        $request->attributes->set('audit.description', 'application.evaluation_note_saved');
+        $request->attributes->set('audit.properties', [
+            'application_id' => $application->id,
+            'project_id' => $application->project_id,
+            'period_id' => $application->period_id,
+            'note_length' => mb_strlen($application->evaluation_note),
+        ]);
+
+        return response()->json([
+            'message' => 'İç değerlendirme notu kaydedildi.',
+            'application' => ['id' => $application->id, 'evaluation_note' => $application->evaluation_note],
+        ]);
+    }
+
     /**
      * List panel applications.
      *
@@ -484,29 +532,11 @@ class AdminApplicationController extends Controller
             ->with(['user:id,name,surname,email,phone', 'period', 'applicationWindow:id,has_interview,quota', 'program:id,title,start_at', 'project:id,name,has_interview,quota', 'form:id,fields']);
         $this->applyProjectPeriodContext($query, $context);
 
-        if (! empty($validated['status'])) {
-            $query->where('status', $validated['status']);
-        }
-
-        if (! empty($validated['search'])) {
-            $search = $validated['search'];
-            $query->where(function ($builder) use ($search) {
-                $builder
-                    ->whereHas('user', function ($userQuery) use ($search) {
-                        $userQuery
-                            ->where('name', 'like', "%$search%")
-                            ->orWhere('surname', 'like', "%$search%")
-                            ->orWhere('email', 'like', "%$search%")
-                            ->orWhere('phone', 'like', "%$search%");
-                    })
-                    ->orWhereHas('project', function ($projectQuery) use ($search) {
-                        $projectQuery->where('name', 'like', "%$search%");
-                    });
-            });
-        }
+        $this->applyApplicationListFilters($query, $validated);
 
         $applications = $query
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate($validated['per_page'] ?? 20)
             ->withQueryString();
 
@@ -520,17 +550,16 @@ class AdminApplicationController extends Controller
     /**
      * Download an application form file.
      *
-     * Requires permission: `applications.view` and project access for the application project. If direct public downloads are configured, the endpoint returns a JSON `download_url`; otherwise it streams the stored file.
+     * Requires permission: `applications.view` and project access for the application project. Streams the file after authorization.
      *
      * @authenticated
      * @urlParam id integer required Application ID. Example: 12
      * @urlParam field string required Dynamic form field key containing the uploaded file. Example: cv_file
-     * @response 200 {"download_url":"https://cdn.example.com/applications/cv.pdf"}
      * @response 200 binary Application form file stream.
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 404 {"message":"Basvuru dosyasi bulunamadi."}
      */
-    public function downloadFormFile(Request $request, int $id, string $field): JsonResponse|StreamedResponse
+    public function downloadFormFile(Request $request, int $id, string $field): StreamedResponse
     {
         $this->abortUnlessAllowed($request, 'applications.view');
 
@@ -542,22 +571,10 @@ class AdminApplicationController extends Controller
         );
 
         $fieldKey = rawurldecode($field);
-        $value = ($application->form_data ?? [])[$fieldKey] ?? null;
+        $file = ApplicationFileStorage::fileForField($application, $fieldKey);
+        abort_unless($file, 404, 'Başvuru dosyası bulunamadı.');
 
-        abort_unless(is_array($value) && ! empty($value['path']), 404, 'Basvuru dosyasi bulunamadi.');
-
-        $path = (string) $value['path'];
-        if ($this->isUrl($path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
-            return response()->json(['download_url' => MediaStorage::url($path)]);
-        }
-
-        if (! MediaStorage::exists($path)) {
-            return response()->json(['message' => 'Basvuru dosyasi depolamada bulunamadi.'], 404);
-        }
-
-        $filename = $value['original_name'] ?? ('basvuru_dosyasi_'.$application->id);
-
-        return MediaStorage::disk()->download($path, $filename);
+        return ApplicationFileStorage::download($file, 'basvuru_dosyasi_'.$application->id);
     }
 
     /**
@@ -586,109 +603,182 @@ class AdminApplicationController extends Controller
         $validated = $request->validate([
             'status' => 'required|in:accepted,rejected,waitlisted,interview_planned,interview_passed,interview_failed',
             'interview_at' => 'nullable|date|after:now',
-            'rejection_reason' => 'nullable|string',
-            'evaluation_note' => 'nullable|string',
+            'rejection_reason' => 'nullable|string|max:2000',
+            'evaluation_note' => 'nullable|string|max:5000',
         ]);
 
         $application = Application::with(['period', 'applicationWindow:id,has_interview,quota', 'program:id,title,application_quota', 'project:id,name,has_interview,quota'])->findOrFail($id);
 
         $ids = $this->manageableProjectIdList($request, 'applications.update_status');
         abort_unless(in_array((int) $application->project_id, $ids, true), 403, 'Bu basvuru icin yetkiniz bulunmuyor.');
-        $this->assertPeriodResolvable($request, $application->period_id);
-        $this->assertStatusAllowed($application, $validated['status']);
-
-        if ($validated['status'] === 'interview_planned' && empty($validated['interview_at']) && empty($application->interview_at)) {
-            throw ValidationException::withMessages([
-                'interview_at' => ['Mulakat tarihi zorunludur.'],
-            ]);
-        }
-
-        DB::beginTransaction();
         try {
-            $application->update([
-                'status' => $validated['status'],
-                'interview_at' => $validated['status'] === 'interview_planned'
-                    ? ($validated['interview_at'] ?? $application->interview_at)
-                    : $application->interview_at,
-                'rejection_reason' => $validated['rejection_reason'] ?? $application->rejection_reason,
-                'evaluation_note' => $validated['evaluation_note'] ?? $application->evaluation_note,
-            ]);
+            $application = $this->applicationDecisionService->runLocked($application, function (Application $application) use ($request, $validated) {
+                $this->assertPeriodResolvable($request, $application->period_id);
+                $this->assertStatusAllowed($application, $validated['status']);
 
-            if ($validated['status'] === 'accepted') {
-                $application->loadMissing('user');
-                $this->assertProjectHasSeatFor($application);
-
-                $hasAnotherActiveProject = Participant::query()
-                    ->where('user_id', $application->user_id)
-                    ->where('status', 'active')
-                    ->where('project_id', '!=', $application->project_id)
-                    ->exists();
-
-                if ($hasAnotherActiveProject) {
+                if ($validated['status'] === 'interview_planned' && empty($validated['interview_at']) && empty($application->interview_at)) {
                     throw ValidationException::withMessages([
-                        'status' => ['Bu kullanici aktif olarak baska bir projede yer aldigi icin kabul edilemez.'],
+                        'interview_at' => ['Mulakat tarihi zorunludur.'],
                     ]);
                 }
 
-                Participant::updateOrCreate([
-                    'user_id' => $application->user_id,
-                    'project_id' => $application->project_id,
-                    'period_id' => $application->period_id,
-                ], [
-                    'status' => 'active',
-                    'credit' => $application->period->credit_start_amount ?? 100,
-                    'enrolled_at' => now(),
+                if ($validated['status'] === 'accepted') {
+                    $this->applicationScheduleService->assertNoConflict(
+                        (int) $application->user_id,
+                        $application->program,
+                        (int) $application->id,
+                        'status',
+                    );
+                }
+
+                $application->update([
+                    'status' => $validated['status'],
+                    'interview_at' => $validated['status'] === 'interview_planned'
+                        ? ($validated['interview_at'] ?? $application->interview_at)
+                        : $application->interview_at,
+                    'interview_passed_at' => match ($validated['status']) {
+                        'interview_passed' => now(),
+                        'interview_planned', 'interview_failed' => null,
+                        default => $application->interview_passed_at,
+                    },
+                    'rejection_reason' => $validated['rejection_reason'] ?? $application->rejection_reason,
+                    'evaluation_note' => $validated['evaluation_note'] ?? $application->evaluation_note,
                 ]);
 
-                if ($application->user) {
-                    // UserProfile satırı yoksa oluştur
-                    $application->user->profile()->firstOrCreate(
-                        ['user_id' => $application->user->id],
-                        []
-                    );
-
-                    if (! in_array($application->user->role, ['student', 'alumni'], true)) {
-                        $application->user->update([
-                            'role' => 'student',
-                            'status' => 'active',
-                        ]);
-                        $application->user->syncRoles(['student']);
-                    } elseif ($application->user->status !== 'active' && $application->user->role === 'student') {
-                        $application->user->update(['status' => 'active']);
-                    }
-
-                    // Kullanıcı onaylandığında/kabul edildiğinde şifre belirleme maili (reset linki) gönder
-                    \Illuminate\Support\Facades\Password::sendResetLink(['email' => $application->user->email]);
+                if ($validated['status'] === 'accepted') {
+                    $this->applicationEnrollmentService->enroll($application);
                 }
-            }
-
-            DB::commit();
-
-            $application->loadMissing(['user:id,email', 'project:id,name']);
-            $this->notifyApplicationUser(
-                $application,
-                'Basvuru durumunuz guncellendi',
-                'Proje: '.($application->project?->name ?? '-')."\nYeni durum: {$application->status}",
-                $request->user()->id
-            );
-
-            if ($validated['status'] === 'rejected') {
-                $this->waitlistService->inviteNextIfSeatAvailable($application, $request->user()->id);
-            }
-
-            return response()->json([
-                'message' => 'Başvuru durumu başarıyla güncellendi.',
-                'application' => $application,
-            ]);
+            });
         } catch (ValidationException $e) {
-            DB::rollBack();
-
+            throw $e;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
             throw $e;
         } catch (\Exception $e) {
-            DB::rollBack();
-
             return response()->json(['message' => 'Bir hata oluştu.'], 500);
         }
+
+        // The decision is committed. A transport failure must not make the caller retry it.
+        $application->loadMissing(['user:id,email', 'project:id,name']);
+        $passwordLinkSent = null;
+        if ($validated['status'] === 'accepted') {
+            $passwordLinkSent = $this->sendPasswordLink($application);
+        }
+
+        $statusNotificationSent = $this->notifyApplicationUser(
+            $application,
+            'Basvuru durumunuz guncellendi',
+            'Proje: '.($application->project?->name ?? '-')."\nYeni durum: {$application->status}",
+            $request->user()->id
+        );
+
+        $nextWaitlistChecked = null;
+        if ($validated['status'] === 'rejected') {
+            try {
+                $this->waitlistService->inviteNextIfSeatAvailable($application, $request->user()->id);
+                $nextWaitlistChecked = true;
+            } catch (\Throwable $exception) {
+                $nextWaitlistChecked = false;
+                Log::warning('application.next_waitlist_check_failed', [
+                    'application_id' => $application->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Başvuru durumu başarıyla güncellendi.',
+            'application' => $application,
+            'follow_up' => [
+                'status_email_sent' => $statusNotificationSent,
+                'password_link_sent' => $passwordLinkSent,
+                'next_waitlist_checked' => $nextWaitlistChecked,
+            ],
+        ]);
+    }
+
+    /** Reopen only an erroneous automatic rejection for ordinary human review. */
+    public function reopenAutomaticRejection(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.update_status');
+        $validated = $request->validate([
+            'reason' => 'required|string|min:10|max:2000',
+        ]);
+        $application = Application::query()->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.update_status', (int) $application->project_id),
+            403,
+            'Bu başvuru için yetkiniz bulunmuyor.'
+        );
+
+        $application = $this->applicationDecisionService->runLocked($application, function (Application $application) use ($request, $validated) {
+            $this->assertPeriodResolvable($request, $application->period_id);
+            if ($application->status !== 'rejected' || ! $application->auto_rejected || $application->auto_rejection_corrected_at !== null) {
+                throw ValidationException::withMessages([
+                    'application' => ['Yalnız henüz düzeltilmemiş otomatik ret kararı yeniden incelemeye açılabilir.'],
+                ]);
+            }
+
+            $actor = $request->user();
+            $application->update([
+                'status' => 'pending',
+                'waitlist_order' => null,
+                'rejection_reason' => null,
+                'auto_rejection_corrected_at' => now(),
+                'auto_rejection_corrected_by' => $actor->id,
+                'auto_rejection_corrected_by_name' => mb_substr(trim($actor->name.' '.$actor->surname), 0, 255),
+                'auto_rejection_correction_reason' => trim($validated['reason']),
+            ]);
+        });
+
+        $application->loadMissing(['user:id,email', 'project:id,name']);
+        $sent = $this->notifyApplicationUser(
+            $application,
+            'Başvurunuz yeniden değerlendirmeye alındı',
+            'Proje: '.($application->project?->name ?? '-')."\nÖnceki otomatik ret kararı düzeltilmiş ve başvurunuz yeniden değerlendirmeye alınmıştır.",
+            $request->user()->id,
+        );
+
+        return response()->json([
+            'message' => 'Otomatik ret düzeltildi; başvuru yeniden değerlendirmeye alındı.',
+            'application' => $this->formatApplication($application),
+            'follow_up' => ['status_email_sent' => $sent],
+        ]);
+    }
+
+    /** Retry delivery of the current decision without repeating the decision or enrollment. */
+    public function retryNotification(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.update_status');
+        $validated = $request->validate(['type' => 'required|in:status,password']);
+        $application = Application::query()->with(['user:id,email', 'project:id,name'])->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.update_status', (int) $application->project_id),
+            403,
+            'Bu basvuru icin yetkiniz bulunmuyor.'
+        );
+        abort_unless($application->status !== 'pending' || $application->auto_rejection_corrected_at !== null, 422, 'Henüz karara bağlanmamış başvuru için durum bildirimi yeniden gönderilemez.');
+
+        if ($validated['type'] === 'password') {
+            abort_unless($application->status === 'accepted', 422, 'Şifre bağlantısı yalnız kabul edilmiş başvuru için gönderilebilir.');
+            $sent = $this->sendPasswordLink($application);
+        } else {
+            $corrected = $application->status === 'pending' && $application->auto_rejection_corrected_at !== null;
+            $sent = $this->notifyApplicationUser(
+                $application,
+                $corrected ? 'Başvurunuz yeniden değerlendirmeye alındı' : 'Basvuru durumunuz guncellendi',
+                $corrected
+                    ? 'Proje: '.($application->project?->name ?? '-')."\nÖnceki otomatik ret kararı düzeltilmiş ve başvurunuz yeniden değerlendirmeye alınmıştır."
+                    : 'Proje: '.($application->project?->name ?? '-')."\nYeni durum: {$application->status}",
+                $request->user()->id
+            );
+        }
+
+        return response()->json([
+            'message' => $sent ? 'Bildirim yeniden gönderildi.' : 'Başvuru kararı değişmedi; bildirim gönderilemedi.',
+            'application_id' => $application->id,
+            'notification_type' => $validated['type'],
+            'sent' => $sent,
+        ]);
     }
 
     /**
@@ -710,6 +800,7 @@ class AdminApplicationController extends Controller
 
         $validated = $request->validate([
             'interview_at' => 'required|date|after:now',
+            'evaluation_note' => 'nullable|string|max:5000',
         ]);
 
         $application = Application::with(['project:id,name,has_interview', 'applicationWindow:id,has_interview'])->findOrFail($id);
@@ -724,17 +815,21 @@ class AdminApplicationController extends Controller
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
 
-        abort_unless($application->usesInterview(), 422, 'Bu basvuru mulakatli basvuru akisi kullanmiyor.');
-        $this->assertPeriodResolvable($request, $application->period_id);
-        $this->assertStatusAllowed($application, 'interview_planned');
+        $application = $this->applicationDecisionService->runLocked($application, function (Application $application) use ($request, $validated) {
+            abort_unless($application->usesInterview(), 422, 'Bu basvuru mulakatli basvuru akisi kullanmiyor.');
+            $this->assertPeriodResolvable($request, $application->period_id);
+            $this->assertStatusAllowed($application, 'interview_planned');
 
-        $application->update([
-            'status' => 'interview_planned',
-            'interview_at' => $validated['interview_at'],
-        ]);
+            $application->update([
+                'status' => 'interview_planned',
+                'interview_at' => $validated['interview_at'],
+                'interview_passed_at' => null,
+                'evaluation_note' => $validated['evaluation_note'] ?? $application->evaluation_note,
+            ]);
+        });
 
         $application->loadMissing(['user:id,email', 'project:id,name']);
-        $this->notifyApplicationUser(
+        $statusNotificationSent = $this->notifyApplicationUser(
             $application,
             'Mulakat planlandi',
             'Proje: '.($application->project?->name ?? '-')."\nMulakat tarihi: ".IstanbulDateTime::format($validated['interview_at']),
@@ -744,6 +839,7 @@ class AdminApplicationController extends Controller
         return response()->json([
             'message' => 'Mülakat tarihi başarıyla planlandı.',
             'application' => $application,
+            'follow_up' => ['status_email_sent' => $statusNotificationSent],
         ]);
     }
 
@@ -775,17 +871,19 @@ class AdminApplicationController extends Controller
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
 
-        $this->assertPeriodResolvable($request, $application->period_id);
-        $this->assertStatusAllowed($application, 'waitlisted');
+        $application = $this->applicationDecisionService->runLocked($application, function (Application $application) use ($request) {
+            $this->assertPeriodResolvable($request, $application->period_id);
+            $this->assertStatusAllowed($application, 'waitlisted');
 
-        $application->update([
-            'status' => 'waitlisted',
-            'waitlist_order' => $application->waitlist_order ?: $this->nextWaitlistOrder($application),
-            'evaluation_note' => $request->evaluation_note ?? $application->evaluation_note,
-        ]);
+            $application->update([
+                'status' => 'waitlisted',
+                'waitlist_order' => $application->waitlist_order ?: $this->nextWaitlistOrder($application),
+                'evaluation_note' => $request->evaluation_note ?? $application->evaluation_note,
+            ]);
+        });
 
         $application->loadMissing(['user:id,email', 'project:id,name']);
-        $this->notifyApplicationUser(
+        $statusNotificationSent = $this->notifyApplicationUser(
             $application,
             'Basvurunuz yedek listeye alindi',
             'Proje: '.($application->project?->name ?? '-')."\nDurum: yedek listede.",
@@ -795,6 +893,7 @@ class AdminApplicationController extends Controller
         return response()->json([
             'message' => 'Başvuru yedeğe alındı.',
             'application' => $application,
+            'follow_up' => ['status_email_sent' => $statusNotificationSent],
         ]);
     }
 
@@ -823,10 +922,39 @@ class AdminApplicationController extends Controller
             403,
             'Bu basvuru icin yetkiniz bulunmuyor.'
         );
-        $this->assertPeriodResolvable($request, $application->period_id);
-        abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular siralanabilir.');
+        $application = $this->applicationDecisionService->runLocked($application, function (Application $application) use ($request, $validated) {
+            $this->assertPeriodResolvable($request, $application->period_id);
+            abort_unless($application->status === 'waitlisted', 422, 'Sadece yedek listedeki basvurular siralanabilir.');
 
-        $application->update(['waitlist_order' => (int) $validated['waitlist_order']]);
+            $list = Application::query()
+                ->where('project_id', $application->project_id)
+                ->where('period_id', $application->period_id)
+                ->when($application->program_id,
+                    fn ($query) => $query->where('program_id', $application->program_id),
+                    fn ($query) => $query->whereNull('program_id'))
+                ->where('status', 'waitlisted')
+                ->orderByRaw('waitlist_order IS NULL')
+                ->orderBy('waitlist_order')
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            abort_if($list->contains(fn (Application $item) => $item->waitlist_invited_at
+                && (in_array($item->waitlist_invitation_delivery_status, ['pending', 'failed', 'unknown'], true)
+                    || $item->waitlist_invitation_expires_at === null
+                    || $item->waitlist_invitation_expires_at->isFuture())),
+                422, 'Aktif yedek daveti varken sıra değiştirilemez.');
+
+            $ordered = $list->reject(fn (Application $item) => $item->id === $application->id)->values();
+            $position = min((int) $validated['waitlist_order'], $list->count()) - 1;
+            $ordered->splice($position, 0, [$application]);
+            foreach ($ordered as $index => $item) {
+                if ($item->waitlist_order !== $index + 1) {
+                    $item->update(['waitlist_order' => $index + 1]);
+                }
+            }
+        });
 
         return response()->json([
             'message' => 'Yedek liste sirasi guncellendi.',
@@ -873,8 +1001,39 @@ class AdminApplicationController extends Controller
         }
 
         return response()->json([
-            'message' => 'Yedek liste daveti gonderildi.',
+            'message' => match ($application->waitlist_invitation_delivery_status) {
+                'sent' => 'Yedek liste daveti gonderildi.',
+                'unknown' => 'Yedek daveti kaydedildi; e-postanin sonucu dogrulanamadi. Sure baslamadi.',
+                default => 'Yedek daveti kaydedildi; e-posta gonderilemedi. Sure baslamadi.',
+            },
             'application' => $application,
+            'invitation_email_sent' => $application->waitlist_invitation_delivery_status === 'sent',
+        ]);
+    }
+
+    public function retryWaitlistInvitation(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.waitlist.manage');
+        $application = Application::query()->findOrFail($id);
+        abort_unless(
+            $this->permissionResolver->canAccessProject($request->user(), 'applications.waitlist.manage', (int) $application->project_id),
+            403,
+            'Bu basvuru icin yetkiniz bulunmuyor.'
+        );
+        $this->assertPeriodResolvable($request, $application->period_id);
+
+        try {
+            $application = $this->waitlistService->retryFailedInvitation($application, $request->user()->id);
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        $sent = $application->waitlist_invitation_delivery_status === 'sent';
+
+        return response()->json([
+            'message' => $sent ? 'Yedek daveti e-postasi yeniden gonderildi.' : 'E-posta gonderilemedi; davet suresi baslamadi.',
+            'application' => $application,
+            'invitation_email_sent' => $sent,
         ]);
     }
 
@@ -908,6 +1067,7 @@ class AdminApplicationController extends Controller
             'message' => 'Yedek davet sureleri guncellendi.',
             'expired_count' => $expiredCount,
             'auto_invited_application_id' => $invited?->id,
+            'invitation_email_sent' => $invited ? $invited->waitlist_invitation_delivery_status === 'sent' : null,
         ]);
     }
 

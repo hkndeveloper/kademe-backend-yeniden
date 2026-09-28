@@ -193,25 +193,39 @@ class User extends Authenticatable implements CanResetPasswordContract
         $resetUrl = $frontend.'/auth/reset-password?token='.urlencode($token).'&email='.urlencode($this->email);
         $loginUrl = $frontend.'/auth/login';
 
-        $body = implode("\n", [
-            "Merhaba {$this->name} {$this->surname},",
-            '',
-            'KADEME portal hesabiniz yonetici tarafindan acildi.',
-            "E-posta (giris): {$this->email}",
-            '',
-            'Guvenliginiz icin asagidaki baglanti ile kendi sifrenizi belirlemeniz gerekmektedir. Bu adimi tamamlamadan panele ve uygulama ozelliklerine erisemezsiniz.',
-            '',
-            "Sifre belirle: {$resetUrl}",
-            '',
-            "Sifre belirledikten sonra giris sayfasi: {$loginUrl}",
-            '',
-            'Baglanti sinirli sure icin gecerlidir. Bu e-postayi beklemiyorsaniz yok sayabilirsiniz.',
-        ]);
+        $isInitialSetup = (bool) $this->must_change_password;
+        $subject = $isInitialSetup
+            ? 'KADEME - Hesabınız için şifre belirleyin'
+            : 'KADEME - Şifrenizi yenileyin';
+        $intro = $isInitialSetup
+            ? 'KADEME hesabınız için kendi şifrenizi belirlemeniz gerekiyor.'
+            : 'KADEME hesabınız için şifre yenileme bağlantısı istendi.';
+        $body = 'Bağlantı sınırlı süre için geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.';
 
-        app(NotificationService::class)->sendEmail(
+        app(NotificationService::class)->sendTemplatedEmail(
             [$this->email],
-            'KADEME - Hesabiniz acildi, sifrenizi belirleyin',
-            $body,
+            $subject,
+            'emails.application-status',
+            [
+                'title' => $subject,
+                'preheader' => $subject,
+                'intro' => $intro,
+                'lines' => [
+                    ['label' => 'Ad soyad', 'value' => trim($this->name.' '.$this->surname)],
+                    ['label' => 'Giriş e-postası', 'value' => $this->email],
+                ],
+                'body' => $body,
+                'action_url' => $resetUrl,
+                'action_text' => $isInitialSetup ? 'Şifremi belirle' : 'Şifremi yenile',
+                'plain_text' => implode("\n", [
+                    "Merhaba {$this->name} {$this->surname},",
+                    $intro,
+                    "Giriş e-postası: {$this->email}",
+                    "Şifre bağlantısı: {$resetUrl}",
+                    "Giriş sayfası: {$loginUrl}",
+                    $body,
+                ]),
+            ],
             null,
             null
         );

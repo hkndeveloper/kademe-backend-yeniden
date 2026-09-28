@@ -28,6 +28,8 @@ class PeriodAuditCommandTest extends TestCase
         $this->assertTrue($report['summary']['healthy']);
         $this->assertSame(0, $report['summary']['anomaly_count']);
         $this->assertContains('applications', array_column($report['period_tables'], 'table'));
+        $absenceAudit = collect($report['period_tables'])->firstWhere('table', 'program_absences');
+        $this->assertSame('operational_review', $absenceAudit['classification'] ?? null);
 
         $this->artisan('periods:audit', ['--report-only' => true, '--strict' => true])
             ->expectsOutputToContain('kritik anomali bulunamadi')

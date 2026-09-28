@@ -124,18 +124,22 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
 Route::prefix('projects')->group(function () {
     // Herkese aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±k (ZiyaretÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§iler dahil) projeleri listeleme
     Route::get('/', [ProjectController::class, 'index']);
+    Route::get('/{slug}/application-form', [ProjectController::class, 'applicationForm']);
     Route::get('/{slug}', [ProjectController::class, 'show']);
 });
 
 // BaÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸vuru iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemleri (Oturum gerektirir)
 Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'kvkk', 'audit.action'])->prefix('applications')->group(function () {
     Route::get('/', [ApplicationController::class, 'myApplications']);
+    Route::get('/{id}/form-files/{field}', [ApplicationController::class, 'downloadFormFile']);
     Route::get('/{id}', [ApplicationController::class, 'show']);
     Route::post('/{id}/waitlist-response', [ApplicationController::class, 'respondWaitlistInvitation']);
     Route::post('/', [ApplicationController::class, 'store']);
 });
 
 // Public project application endpoint (guest users can apply).
+Route::post('/applications/public/verification', [ApplicationController::class, 'requestPublicVerification'])
+    ->middleware('throttle:5,10');
 Route::post('/applications/public', [ApplicationController::class, 'storePublic'])
     ->middleware('throttle:10,1');
 
@@ -215,16 +219,21 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/applications/export', [AdminApplicationController::class, 'export']);
     Route::get('/applications/{id}/form-files/{field}', [AdminApplicationController::class, 'downloadFormFile']);
     Route::put('/applications/{id}/status', [AdminApplicationController::class, 'updateStatus']);
+    Route::put('/applications/{id}/evaluation-note', [AdminApplicationController::class, 'saveEvaluationNote']);
+    Route::post('/applications/{id}/reopen-auto-rejection', [AdminApplicationController::class, 'reopenAutomaticRejection']);
+    Route::post('/applications/{id}/notification-retry', [AdminApplicationController::class, 'retryNotification'])->middleware('throttle:6,1');
     Route::put('/applications/{id}/interview', [AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [AdminApplicationController::class, 'addToWaitlist']);
     Route::put('/applications/{id}/waitlist-order', [AdminApplicationController::class, 'updateWaitlistOrder']);
     Route::post('/applications/{id}/waitlist-invite', [AdminApplicationController::class, 'inviteFromWaitlist']);
+    Route::post('/applications/{id}/waitlist-invite-retry', [AdminApplicationController::class, 'retryWaitlistInvitation'])->middleware('throttle:6,1');
     Route::post('/applications/{id}/waitlist-refresh', [AdminApplicationController::class, 'refreshWaitlistInvitations']);
 
     // Etkinlik (Program) ve QR YÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶netimi
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
     Route::get('/programs/{id}', [AdminProgramController::class, 'show'])->whereNumber('id');
+    Route::get('/programs/{id}/application-conflicts', [AdminProgramController::class, 'applicationConflicts'])->whereNumber('id');
     Route::get('/programs/{id}/qr-context', [AdminProgramController::class, 'qrContext'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
@@ -235,6 +244,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::post('/programs/{id}/complete', [AdminProgramController::class, 'complete']);
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
     Route::put('/programs/{id}/attendances/{participantId}', [AdminProgramController::class, 'markManualAttendance']);
+    Route::put('/programs/{id}/attendances/{participantId}/excuse', [AdminProgramController::class, 'updateZeroCreditAbsence']);
     Route::get('/programs/{id}/attendances/export', [AdminProgramController::class, 'exportAttendanceDetails']);
     Route::get('/programs/feedback-summary', [AdminProgramController::class, 'feedbackSummary']);
     Route::get('/programs/feedback-summary/export', [AdminProgramController::class, 'exportFeedbackSummary']);
@@ -287,6 +297,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::put('/projects/{id}/gallery', [ProjectContentController::class, 'updateGallery']);
     Route::get('/projects/{id}/application-form', [ProjectContentController::class, 'applicationForm']);
     Route::put('/projects/{id}/application-form', [ProjectContentController::class, 'updateApplicationForm']);
+    Route::post('/projects/{id}/application-form/screening-preview', [ProjectContentController::class, 'previewApplicationScreening']);
     Route::get('/periods', [PeriodController::class, 'index']);
     Route::get('/periods/export', [PeriodController::class, 'export']);
     Route::post('/periods', [PeriodController::class, 'store']);
@@ -439,6 +450,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/programs', [AdminProgramController::class, 'index']);
     Route::get('/programs/export', [AdminProgramController::class, 'export']);
     Route::get('/programs/{id}', [AdminProgramController::class, 'show'])->whereNumber('id');
+    Route::get('/programs/{id}/application-conflicts', [AdminProgramController::class, 'applicationConflicts'])->whereNumber('id');
     Route::get('/programs/{id}/qr-context', [AdminProgramController::class, 'qrContext'])->whereNumber('id');
     Route::post('/programs', [AdminProgramController::class, 'store']);
     Route::put('/programs/{id}', [AdminProgramController::class, 'update']);
@@ -449,6 +461,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::post('/programs/{id}/generate-qr', [AdminProgramController::class, 'generateQr']);
     Route::get('/programs/{id}/attendances', [AdminProgramController::class, 'attendanceDetails']);
     Route::put('/programs/{id}/attendances/{participantId}', [AdminProgramController::class, 'markManualAttendance']);
+    Route::put('/programs/{id}/attendances/{participantId}/excuse', [AdminProgramController::class, 'updateZeroCreditAbsence']);
     Route::get('/programs/{id}/attendances/export', [AdminProgramController::class, 'exportAttendanceDetails']);
     Route::get('/programs/feedback-summary', [AdminProgramController::class, 'feedbackSummary']);
     Route::get('/programs/feedback-summary/export', [AdminProgramController::class, 'exportFeedbackSummary']);
@@ -469,10 +482,14 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/applications/export', [AdminApplicationController::class, 'export']);
     Route::get('/applications/{id}/form-files/{field}', [AdminApplicationController::class, 'downloadFormFile']);
     Route::put('/applications/{id}/status', [AdminApplicationController::class, 'updateStatus']);
+    Route::put('/applications/{id}/evaluation-note', [AdminApplicationController::class, 'saveEvaluationNote']);
+    Route::post('/applications/{id}/reopen-auto-rejection', [AdminApplicationController::class, 'reopenAutomaticRejection']);
+    Route::post('/applications/{id}/notification-retry', [AdminApplicationController::class, 'retryNotification'])->middleware('throttle:6,1');
     Route::put('/applications/{id}/interview', [AdminApplicationController::class, 'planInterview']);
     Route::post('/applications/{id}/waitlist', [AdminApplicationController::class, 'addToWaitlist']);
     Route::put('/applications/{id}/waitlist-order', [AdminApplicationController::class, 'updateWaitlistOrder']);
     Route::post('/applications/{id}/waitlist-invite', [AdminApplicationController::class, 'inviteFromWaitlist']);
+    Route::post('/applications/{id}/waitlist-invite-retry', [AdminApplicationController::class, 'retryWaitlistInvitation'])->middleware('throttle:6,1');
     Route::post('/applications/{id}/waitlist-refresh', [AdminApplicationController::class, 'refreshWaitlistInvitations']);
 
     Route::post('/credits/adjust', [AdminCreditController::class, 'adjustCredit']);
@@ -483,6 +500,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::post('/volunteer/opportunities', [VolunteerController::class, 'panelStore']);
     Route::put('/volunteer/opportunities/{id}', [VolunteerController::class, 'panelUpdate']);
     Route::put('/volunteer/applications/{id}', [VolunteerController::class, 'panelUpdateApplication']);
+    Route::post('/volunteer/applications/{id}/notification-retry', [VolunteerController::class, 'panelRetryNotification'])->middleware('throttle:6,1');
     Route::delete('/volunteer/opportunities/{id}', [VolunteerController::class, 'panelDestroy']);
 
     Route::get('/periods', [PeriodController::class, 'index']);
@@ -540,6 +558,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::put('/projects/{id}/gallery', [ProjectContentController::class, 'updateGallery']);
     Route::get('/projects/{id}/application-form', [ProjectContentController::class, 'applicationForm']);
     Route::put('/projects/{id}/application-form', [ProjectContentController::class, 'updateApplicationForm']);
+    Route::post('/projects/{id}/application-form/screening-preview', [ProjectContentController::class, 'previewApplicationScreening']);
 
     Route::get('/trainers/export', [TrainerController::class, 'export']);
     Route::get('/trainers', [TrainerController::class, 'index']);

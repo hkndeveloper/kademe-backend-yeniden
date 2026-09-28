@@ -428,7 +428,7 @@ class ProjectFamilyPanelController extends Controller
             'sort_order' => (int) $module->sort_order,
             'is_active' => (bool) $module->is_active,
             'application_open' => (bool) $module->application_open,
-            'requires_consent' => (bool) $module->requires_consent,
+            'requires_consent' => true,
             'consent_checkbox_label' => $module->consent_checkbox_label,
             'warning_text' => $module->warning_text,
             'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
@@ -444,6 +444,7 @@ class ProjectFamilyPanelController extends Controller
                 'participant_id' => $row->participant_id ? (int) $row->participant_id : null,
                 'status' => $row->status,
                 'consented_at' => optional($row->consented_at)?->toIso8601String(),
+                'consent_text_snapshot' => $row->consent_text_snapshot,
                 'reviewed_at' => optional($row->reviewed_at)?->toIso8601String(),
                 'note' => $row->note,
                 'user' => $row->user ? [

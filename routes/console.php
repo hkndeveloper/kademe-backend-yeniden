@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\RotateQrTokenJob;
+use App\Models\ApplicationEmailVerification;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -16,10 +17,23 @@ Schedule::job(new RotateQrTokenJob)->everyMinute();
 // Dönemlik Kredi Reset: Her gün gece yarısı, bugün başlayan dönemlerin katılımcı kredilerini resetler.
 Schedule::command('kademe:reset-period-credits')->dailyAt('00:05');
 
+// Keep short-lived application verification records out of long-term storage.
+Schedule::call(fn () => ApplicationEmailVerification::query()
+    ->where('expires_at', '<', now()->subDay())
+    ->delete())->dailyAt('03:45');
+
 if (config('period_lifecycle.monitoring.archive_verify_schedule_enabled', true)) {
     Schedule::command('periods:verify-archives')
         ->dailyAt(config('period_lifecycle.monitoring.archive_verify_time', '03:15'))
         ->timezone(config('period_lifecycle.monitoring.archive_verify_timezone', 'Europe/Istanbul'))
         ->withoutOverlapping((int) config('period_lifecycle.monitoring.archive_verify_lock_minutes', 120))
+        ->onOneServer();
+}
+
+if (config('application_waitlist.auto_schedule_enabled', false)
+    && config('application_waitlist.auto_project_ids', []) !== []) {
+    Schedule::command('applications:advance-waitlists --send')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping(30)
         ->onOneServer();
 }

@@ -128,6 +128,8 @@ class PeriodController extends Controller
                 'total' => (clone $applications)->count(),
                 'pending' => (clone $applications)->where('status', 'pending')->count(),
                 'interview_planned' => (clone $applications)->where('status', 'interview_planned')->count(),
+                'interview_passed' => (clone $applications)->where('status', 'interview_passed')->count(),
+                'interview_failed' => (clone $applications)->where('status', 'interview_failed')->count(),
                 'waitlisted' => (clone $applications)->where('status', 'waitlisted')->count(),
                 'accepted' => (clone $applications)->where('status', 'accepted')->count(),
                 'rejected' => (clone $applications)->where('status', 'rejected')->count(),
@@ -178,7 +180,7 @@ class PeriodController extends Controller
 
         $warnings = [
             'open_programs' => (clone $programs)->whereIn('status', ['scheduled', 'active'])->count(),
-            'pending_applications' => (clone $applications)->whereIn('status', ['pending', 'interview_planned', 'waitlisted'])->count(),
+            'pending_applications' => (clone $applications)->whereIn('status', ['pending', 'interview_planned', 'interview_passed', 'interview_failed', 'waitlisted'])->count(),
             'pending_financials' => (clone $financials)->where('status', 'pending')->count(),
         ];
 

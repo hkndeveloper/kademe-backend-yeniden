@@ -29,7 +29,7 @@ class CoreOperationsChecker implements PeriodClosureChecker
             $this->result(
                 'unresolved_applications',
                 Application::query()->where('period_id', $periodId)
-                    ->whereIn('status', ['pending', 'interview_planned', 'waitlisted', 'interview_passed'])
+                    ->whereIn('status', ['pending', 'interview_planned', 'waitlisted', 'interview_passed', 'interview_failed'])
                     ->count(),
                 'Kesin karara baglanmamis basvurular var.',
             ),

@@ -16,6 +16,15 @@ class VolunteerApplication extends Model
         'notes',
         'status',
         'evaluation_note',
+        'consent_text_snapshot',
+        'consent_accepted_at',
+        'receipt_email_status',
+        'decision_email_status',
+        'decision_email_key',
+    ];
+
+    protected $casts = [
+        'consent_accepted_at' => 'datetime',
     ];
 
     public function opportunity()

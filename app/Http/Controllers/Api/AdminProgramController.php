@@ -11,9 +11,12 @@ use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
+use App\Models\ProgramAbsence;
 use App\Models\ProgramPhoto;
 use App\Models\User;
 use App\Services\CommunityProgramAccessService;
+use App\Services\ApplicationScheduleService;
+use App\Services\ApplicationAudienceService;
 use App\Services\CreditService;
 use App\Services\PeriodLifecycleService;
 use App\Services\PermissionResolver;
@@ -42,7 +45,9 @@ class AdminProgramController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
         private readonly CreditService $creditService,
-        private readonly CommunityProgramAccessService $communityProgramAccess
+        private readonly CommunityProgramAccessService $communityProgramAccess,
+        private readonly ApplicationScheduleService $applicationScheduleService,
+        private readonly ApplicationAudienceService $applicationAudienceService,
     ) {}
 
     private function clearPublicHomepageCache(): void
@@ -112,6 +117,30 @@ class AdminProgramController extends Controller
         ]);
     }
 
+    /** List this program's applicants whose other live program applications overlap its current time. */
+    public function applicationConflicts(Request $request, int $id): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'applications.view');
+        $program = Program::query()->findOrFail($id);
+        $this->abortUnlessProjectAllowed($request, 'applications.view', (int) $program->project_id);
+
+        return response()->json([
+            'program_id' => $program->id,
+            'applications' => $this->applicationScheduleService->affectedApplications($program)
+                ->map(fn ($application) => [
+                    'id' => $application->id,
+                    'status' => $application->status,
+                    'candidate' => trim(($application->user?->name ?? '').' '.($application->user?->surname ?? '')),
+                ])->values(),
+            'audience_mismatches' => $this->applicationAudienceService->audienceMismatches($program)
+                ->map(fn ($application) => [
+                    'id' => $application->id,
+                    'status' => $application->status,
+                    'candidate' => trim(($application->user?->name ?? '').' '.($application->user?->surname ?? '')),
+                ])->values(),
+        ]);
+    }
+
     /**
      * Return the minimum scoped context needed by the QR attendance screen.
      */
@@ -169,7 +198,7 @@ class AdminProgramController extends Controller
     /**
      * Create a panel program.
      *
-     * Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Program time ranges cannot overlap another non-cancelled program.
+     * Requires permission: `programs.create` for the selected project. Completed periods are locked unless the user also has archive update permission. Parallel programs are allowed; applicant schedule conflicts are checked during application.
      *
      * @authenticated
      *
@@ -206,7 +235,6 @@ class AdminProgramController extends Controller
         $v = $this->validatedProgramData($request, true);
         $this->abortUnlessProjectAllowed($request, 'programs.create', (int) $v['project_id']);
         $this->assertPeriodWritable($request, (int) $v['period_id']);
-        $this->assertNoOverlap($v['start_at'], $v['end_at'] ?? null, null, $v['status'] ?? 'scheduled');
         $program = Program::query()->create($v + ['created_by' => $request->user()->id]);
         $this->clearPublicHomepageCache();
 
@@ -216,7 +244,7 @@ class AdminProgramController extends Controller
     /**
      * Update a panel program.
      *
-     * Requires permission: `programs.update` for the program project. If `period_id` changes, completed-period archive lock is checked against the target period. Time ranges cannot overlap another non-cancelled program.
+     * Requires permission: `programs.update` for the program project. If `period_id` changes, completed-period archive lock is checked against the target period. Parallel programs are allowed.
      *
      * @authenticated
      *
@@ -252,7 +280,6 @@ class AdminProgramController extends Controller
         } else {
             $this->assertPeriodWritable($request, $periodId);
         }
-        $this->assertNoOverlap($v['start_at'] ?? $program->start_at, $v['end_at'] ?? $program->end_at, $program->id, $v['status'] ?? $program->status);
         $program->update($v);
         if (array_key_exists('is_public', $v)) {
             $program->publicVisibilityOverride()->delete();
@@ -272,7 +299,6 @@ class AdminProgramController extends Controller
         );
         abort_unless($unit, 403, 'Bu proje icin ortak etkinlik olusturma yetkiniz bulunmuyor.');
         $this->assertPeriodWritable($request, (int) $v['period_id']);
-        $this->assertNoOverlap($v['start_at'], $v['end_at'] ?? null, null, $v['status'] ?? 'scheduled');
         $program = Program::query()->create($v + [
             'program_kind' => Program::KIND_COMMUNITY_EVENT,
             'managing_unit_id' => $unit->id,
@@ -316,7 +342,6 @@ class AdminProgramController extends Controller
         }
         $periodId = array_key_exists('period_id', $v) ? (int) $v['period_id'] : (int) $program->period_id;
         $this->assertPeriodWritable($request, $periodId);
-        $this->assertNoOverlap($v['start_at'] ?? $program->start_at, $v['end_at'] ?? $program->end_at, $program->id, $v['status'] ?? $program->status);
         $program->update($v);
         $this->clearPublicHomepageCache();
 
@@ -416,16 +441,17 @@ class AdminProgramController extends Controller
         $validUserIds = Attendance::query()->where('program_id', $program->id)->where('is_valid', true)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
         $deducted = 0;
         DB::transaction(function () use ($program, $participants, $validUserIds, $request, &$deducted) {
+            $program->update(['status' => 'completed']);
             foreach ($participants as $participant) {
                 if (! $this->participantHasCreditImpact($participant)) {
                     continue;
                 }
-                $log = $this->creditService->deductOnceForProgram($participant, $program, $request->user()->id, in_array((int) $participant->user_id, $validUserIds, true) ? 'Etkinlik yoklamasi alindi, degerlendirme bekleniyor' : 'Etkinlik tamamlandi, katilim kaydi bulunamadi');
+                $attended = in_array((int) $participant->user_id, $validUserIds, true);
+                $log = $this->creditService->deductOnceForProgram($participant, $program, $request->user()->id, $attended ? 'Etkinlik yoklamasi alindi, degerlendirme bekleniyor' : 'Etkinlik tamamlandi, katilim kaydi bulunamadi', $attended);
                 if ($log) {
                     $deducted++;
                 }
             }
-            $program->update(['status' => 'completed']);
         });
         $request->attributes->set('audit.subject', $program);
         $request->attributes->set('audit.event', 'program.completed');
@@ -452,7 +478,7 @@ class AdminProgramController extends Controller
         $program = Program::query()->with(['project:id,name', 'period:id,name,status'])->findOrFail($id);
         $attendancePermission = $this->authorizeAttendance($request, $program, 'view');
         $minimal = $attendancePermission === 'programs.community_event.attendance.view';
-        $records = $this->attendanceRecords($program, $minimal);
+        $records = $this->attendanceRecords($program, $minimal, $this->canAccessAttendance($request->user(), $program, 'manage'));
         $present = $records->filter(fn ($r) => (bool) $r['is_valid'] && $r['recorded_at'])->count();
         $summary = [
             'attendance_count' => $present,
@@ -516,6 +542,54 @@ class AdminProgramController extends Controller
             'method' => $attendance->method,
             'recorded_at' => optional($attendance->created_at)?->toIso8601String(),
         ]]);
+    }
+
+    public function updateZeroCreditAbsence(Request $request, int $id, int $participantId): JsonResponse
+    {
+        $program = Program::query()->findOrFail($id);
+        $this->authorizeAttendance($request, $program, 'manage');
+        $this->assertPeriodResolvable($request, $program->period_id);
+        abort_unless($program->status === 'completed', 422, 'Mazeret yalnız tamamlanan program için güncellenebilir.');
+        $validated = $request->validate([
+            'excused' => ['required', 'boolean'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+        ]);
+        $participant = $this->programParticipantsQuery($program)->whereKey($participantId)->firstOrFail();
+        $absence = DB::transaction(function () use ($program, $participant, $validated, $request) {
+            $absence = ProgramAbsence::query()
+                ->where('program_id', $program->id)
+                ->where('participant_id', $participant->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $this->creditService->markProgramAbsenceExcused(
+                $absence,
+                (bool) $validated['excused'],
+                $validated['reason'],
+                $request->user()
+            );
+
+            return $absence->refresh();
+        });
+        $request->attributes->set('audit.subject', $absence);
+        $request->attributes->set('audit.event', 'program_absence.excuse_updated');
+        $request->attributes->set('audit.description', 'program_absence.excuse_updated');
+        $request->attributes->set('audit.properties', [
+            'project_id' => $program->project_id,
+            'period_id' => $program->period_id,
+            'program_id' => $program->id,
+            'participant_id' => $participant->id,
+            'excused' => (bool) $absence->excused,
+            'reason' => trim($validated['reason']),
+        ]);
+
+        return response()->json([
+            'message' => $absence->excused ? 'Mazeret kaydedildi.' : 'Mazeret kaldırıldı.',
+            'absence' => [
+                'id' => $absence->id,
+                'excused' => (bool) $absence->excused,
+                'reason' => $absence->excuse_reason,
+            ],
+        ]);
     }
 
     /**
@@ -930,33 +1004,6 @@ class AdminProgramController extends Controller
         return $v;
     }
 
-    private function assertNoOverlap(mixed $startAt, mixed $endAt, ?int $ignoreId, ?string $status): void
-    {
-        if ($status === 'cancelled') {
-            return;
-        }
-
-        $start = IstanbulDateTime::toUtc($startAt);
-        $end = IstanbulDateTime::toUtc($endAt);
-
-        if ($start === null || $end === null) {
-            return;
-        }
-
-        $overlapExists = Program::query()
-            ->where('status', '!=', 'cancelled')
-            ->when($ignoreId !== null, fn ($query) => $query->whereKeyNot($ignoreId))
-            ->where('start_at', '<', $end)
-            ->where('end_at', '>', $start)
-            ->exists();
-
-        if ($overlapExists) {
-            throw ValidationException::withMessages([
-                'start_at' => ['Bu saat araliginda baska bir program bulunuyor.'],
-            ])->status(422);
-        }
-    }
-
     private function programPayload(Program $p, ?User $user = null, ?string $workMode = null): array
     {
         $base = ['id' => $p->id, 'program_kind' => $p->program_kind ?: Program::KIND_CORE_PROGRAM, 'managing_unit' => $p->managingUnit ? ['id' => $p->managingUnit->id, 'name' => $p->managingUnit->name] : null, 'title' => $p->title, 'description' => $p->description, 'location' => $p->location, 'location_place_name' => $p->location_place_name, 'location_place_address' => $p->location_place_address, 'location_place_id' => $p->location_place_id, 'location_place_provider' => $p->location_place_provider, 'latitude' => $p->latitude, 'longitude' => $p->longitude, 'radius_meters' => $p->radius_meters, 'guest_info' => $p->guest_info, 'start_at' => optional($p->start_at)?->toIso8601String(), 'end_at' => optional($p->end_at)?->toIso8601String(), 'target_audience' => $p->targetAudience(), 'status' => $p->status, 'project_id' => $p->project_id, 'project' => $p->project ? ['id' => $p->project->id, 'name' => $p->project->name] : null, 'period' => $p->period ? ['id' => $p->period->id, 'name' => $p->period->name, 'status' => $p->period->status, 'lifecycle' => ['is_archive_mode' => PeriodLifecycleService::isArchiveStatus($p->period->status), 'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($p->period->status)]] : null, 'attendance_count' => $p->attendances_count ?? null];
@@ -997,13 +1044,15 @@ class AdminProgramController extends Controller
         return $p->user?->role !== 'alumni' && $p->status !== 'graduated' && $p->graduation_status !== 'graduated';
     }
 
-    private function attendanceRecords(Program $program, bool $minimal = false)
+    private function attendanceRecords(Program $program, bool $minimal = false, bool $includeAbsenceReview = false)
     {
         $att = Attendance::query()->where('program_id', $program->id)->get()->keyBy('user_id');
         $logsByUser = CreditLog::query()->where('program_id', $program->id)->get()->groupBy('user_id');
+        $zeroCreditAbsences = $minimal ? collect() : ProgramAbsence::query()
+            ->where('program_id', $program->id)->get()->keyBy('participant_id');
         $tokens = Feedback::query()->where('program_id', $program->id)->pluck('anonymous_token')->filter()->all();
 
-        return $this->programParticipantsQuery($program)->orderBy('id')->get()->map(function (Participant $p) use ($att, $logsByUser, $tokens, $program, $minimal) {
+        return $this->programParticipantsQuery($program)->orderBy('id')->get()->map(function (Participant $p) use ($att, $logsByUser, $zeroCreditAbsences, $tokens, $program, $minimal, $includeAbsenceReview) {
             $a = $att->get($p->user_id);
             $logs = $logsByUser->get($p->user_id, collect());
             $deducted = $logs->contains(fn (CreditLog $l) => $l->type === 'deduction' || (int) $l->amount < 0);
@@ -1014,7 +1063,9 @@ class AdminProgramController extends Controller
                 return $base;
             }
 
-            return $base + ['email' => $p->user?->email, 'credit_applicable' => $this->participantHasCreditImpact($p), 'latitude' => $a?->latitude, 'longitude' => $a?->longitude, 'feedback_submitted' => in_array($expected, $tokens, true) || $restored, 'credit_deducted' => $deducted, 'credit_restored' => $restored];
+            $zeroCreditAbsence = $zeroCreditAbsences->get($p->id);
+
+            return $base + ['email' => $p->user?->email, 'credit_applicable' => $this->participantHasCreditImpact($p), 'latitude' => $a?->latitude, 'longitude' => $a?->longitude, 'feedback_submitted' => in_array($expected, $tokens, true) || $restored, 'credit_deducted' => $deducted, 'credit_restored' => $restored, 'zero_credit_absence_id' => $zeroCreditAbsence?->id, 'zero_credit_absence_excused' => (bool) ($zeroCreditAbsence?->excused ?? false), 'zero_credit_absence_reason' => $includeAbsenceReview ? $zeroCreditAbsence?->excuse_reason : null];
         })->values();
     }
 

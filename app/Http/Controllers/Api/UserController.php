@@ -9,6 +9,7 @@ use App\Models\CreditLog;
 use App\Models\KvkkForgetRequest;
 use App\Models\User;
 use App\Services\PermissionResolver;
+use App\Services\ApplicationRestrictionReviewService;
 use App\Support\AdminExportResponder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * @group Users
@@ -26,7 +28,8 @@ class UserController extends Controller
     use AuthorizesGranularPermissions;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly ApplicationRestrictionReviewService $restrictionReviewService,
     ) {}
 
     /**
@@ -220,12 +223,32 @@ class UserController extends Controller
         $documents = $user->staffProfile?->personal_documents ?? [];
         $creditScore = CreditLog::where('user_id', $user->id)->sum('amount');
         $absentCount = Attendance::where('user_id', $user->id)->where('is_valid', false)->count();
+        $restrictionReviews = Activity::query()
+            ->with('causer:id,name,surname')
+            ->where('log_name', 'application_restrictions')
+            ->where('subject_type', User::class)
+            ->where('subject_id', $user->id)
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get()
+            ->map(fn (Activity $review) => [
+                'id' => $review->id,
+                'reason' => $review->properties->get('reason'),
+                'previous_status' => $review->properties->get('previous_status'),
+                'new_status' => $review->properties->get('new_status'),
+                'reviewed_by' => trim(($review->causer?->name ?? '').' '.($review->causer?->surname ?? '')),
+                'created_at' => optional($review->created_at)?->toIso8601String(),
+            ]);
 
         return response()->json([
             'user' => $user,
             'documents' => $documents,
             'credit_score' => $creditScore,
             'absent_count' => $absentCount,
+            'restriction_review' => $user->status === 'blacklisted'
+                ? $this->restrictionReviewService->forUser($user)
+                : null,
+            'restriction_reviews' => $restrictionReviews,
         ]);
     }
 
@@ -267,6 +290,7 @@ class UserController extends Controller
         $validated = $request->validate([
             'role' => 'sometimes|string|in:student,alumni|exists:roles,name',
             'status' => 'sometimes|in:active,passive,blacklisted,alumni,inactive,banned',
+            'restriction_review_reason' => 'sometimes|string|min:10|max:1000',
         ]);
 
         if (isset($validated['status'])) {
@@ -274,17 +298,63 @@ class UserController extends Controller
         }
 
         $columnUpdates = collect($validated)
-            ->except(['role'])
+            ->except(['role', 'restriction_review_reason'])
             ->toArray();
-        if ($columnUpdates !== []) {
-            $user->update($columnUpdates);
-        }
-
-        if (! empty($validated['role'])) {
-            $user->syncRoles([$validated['role']]);
-            if (array_key_exists($validated['role'], config('permission_catalog.role_labels', []))) {
-                $user->forceFill(['role' => $validated['role']])->save();
+        [$user, $releasingRestriction] = DB::transaction(function () use ($request, $user, $validated, $columnUpdates) {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $releasingRestriction = $user->status === 'blacklisted'
+                && isset($validated['status'])
+                && $validated['status'] !== 'blacklisted';
+            if ($releasingRestriction && ! filled(trim((string) ($validated['restriction_review_reason'] ?? '')))) {
+                throw ValidationException::withMessages([
+                    'restriction_review_reason' => ['Başvuru kısıtını kaldırma gerekçesini yazın.'],
+                ]);
             }
+            if (! $releasingRestriction && isset($validated['restriction_review_reason'])) {
+                throw ValidationException::withMessages([
+                    'status' => ['Başvuru kısıtının güncel durumunu yeniden kontrol edin.'],
+                ]);
+            }
+            if ($releasingRestriction) {
+                $review = $this->restrictionReviewService->forUser($user);
+                $previousUntil = optional($user->blacklisted_until)?->toIso8601String();
+                $columnUpdates['blacklisted_until'] = null;
+                activity()
+                    ->useLog('application_restrictions')
+                    ->causedBy($request->user())
+                    ->performedOn($user)
+                    ->event('application_restriction.reviewed')
+                    ->withProperties([
+                        'previous_status' => $user->status,
+                        'previous_until' => $previousUntil,
+                        'new_status' => $validated['status'],
+                        'reason' => trim($validated['restriction_review_reason']),
+                        'confirmed_absence_count' => $review['confirmed_absence_count'],
+                        'unclassified_deduction_count' => $review['unclassified_deduction_count'],
+                    ])
+                    ->log('application_restriction.reviewed');
+            }
+            if ($columnUpdates !== []) {
+                $user->update($columnUpdates);
+            }
+            if (! empty($validated['role'])) {
+                $user->syncRoles([$validated['role']]);
+                if (array_key_exists($validated['role'], config('permission_catalog.role_labels', []))) {
+                    $user->forceFill(['role' => $validated['role']])->save();
+                }
+            }
+            return [$user, $releasingRestriction];
+        });
+
+        if ($releasingRestriction) {
+            $request->attributes->set('audit.subject', $user);
+            $request->attributes->set('audit.event', 'application_restriction.reviewed');
+            $request->attributes->set('audit.properties', [
+                'user_id' => $user->id,
+                'previous_status' => 'blacklisted',
+                'new_status' => $validated['status'],
+                'review_recorded' => true,
+            ]);
         }
 
         return response()->json([

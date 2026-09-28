@@ -17,12 +17,14 @@ use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
 use App\Services\CoordinationUnitPermissionRuleSyncService;
+use App\Services\ApplicationScreeningService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -36,6 +38,7 @@ class ProjectContentController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver,
         private readonly CoordinationUnitPermissionRuleSyncService $permissionRuleSyncService,
+        private readonly ApplicationScreeningService $applicationScreeningService,
     ) {}
 
     /**
@@ -933,7 +936,7 @@ class ProjectContentController extends Controller
      * @bodyParam fields[].label string required Field label. Example: Motivasyon mektubu
      * @bodyParam fields[].required boolean required Whether the field is required. Example: true
      * @bodyParam fields[].options string[] Optional options for select/radio/checkbox fields. Example: ["A","B"]
-     * @bodyParam require_consent boolean Optional consent requirement. Example: true
+     * @bodyParam require_consent boolean Legacy field; application consent is always required. Example: true
      * @bodyParam consent_text string Optional consent text.
      * @bodyParam is_active boolean Optional active flag. Defaults to true. Example: true
      * @bodyParam auto_reject_rules object[] Optional automatic rejection rules.
@@ -951,7 +954,7 @@ class ProjectContentController extends Controller
             'period_id' => 'nullable|exists:periods,id',
             'program_id' => 'nullable|exists:programs,id',
             'fields' => 'required|array|min:1',
-            'fields.*.id' => 'required|string|max:100',
+            'fields.*.id' => 'required|string|max:100|distinct',
             'fields.*.type' => 'required|in:text,longtext,select,radio,checkbox,file',
             'fields.*.label' => 'required|string|max:255',
             'fields.*.required' => 'required|boolean',
@@ -965,7 +968,10 @@ class ProjectContentController extends Controller
             'auto_reject_rules.*.operator' => 'required_with:auto_reject_rules|string|in:equals,not_equals,contains,gt,lt,gte,lte',
             'auto_reject_rules.*.value' => 'required_with:auto_reject_rules|string|max:255',
             'auto_reject_rules.*.reason' => 'nullable|string|max:500',
+            'auto_reject_rules.*.mode' => 'sometimes|in:reject,review',
         ]);
+
+        $this->applicationScreeningService->validateRules($validated['fields'], $validated['auto_reject_rules'] ?? []);
 
         if (! empty($validated['period_id']) && ! $project->periods->contains('id', $validated['period_id'])) {
             abort(422, 'Secilen donem bu projeye ait degil.');
@@ -990,19 +996,19 @@ class ProjectContentController extends Controller
             $validated['period_id'] = $program->period_id;
         }
 
-        ApplicationForm::query()
-            ->where('project_id', $project->id)
-            ->where('period_id', $validated['period_id'] ?? null)
-            ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
-            ->update(['is_active' => false]);
+        $form = DB::transaction(function () use ($project, $program, $validated) {
+            Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
 
-        $form = ApplicationForm::updateOrCreate(
-            [
+            ApplicationForm::query()
+                ->where('project_id', $project->id)
+                ->where('period_id', $validated['period_id'] ?? null)
+                ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
+                ->update(['is_active' => false]);
+
+            return ApplicationForm::create([
                 'project_id' => $project->id,
                 'period_id' => $validated['period_id'] ?? null,
                 'program_id' => $program?->id,
-            ],
-            [
                 'fields' => array_map(function (array $field) {
                     $payload = [
                         'id' => $field['id'],
@@ -1017,7 +1023,7 @@ class ProjectContentController extends Controller
 
                     return $payload;
                 }, $validated['fields']),
-                'require_consent' => (bool) ($validated['require_consent'] ?? false),
+                'require_consent' => true,
                 'consent_text' => $validated['consent_text'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
                 'auto_reject_rules' => isset($validated['auto_reject_rules'])
@@ -1028,14 +1034,62 @@ class ProjectContentController extends Controller
                         'value' => $rule['value'],
                         'reason' => $rule['reason'] ?? null,
                         'message' => $rule['reason'] ?? null,
+                        'mode' => $rule['mode'] ?? 'reject',
                     ], $validated['auto_reject_rules'])
                     : null,
-            ]
-        );
+            ]);
+        });
 
         return response()->json([
             'message' => 'Basvuru formu kaydedildi.',
             'application_form' => $form->fresh(),
+        ]);
+    }
+
+    /** Try one unsaved screening rule against a sample answer without changing applications. */
+    public function previewApplicationScreening(Request $request, int $id): JsonResponse
+    {
+        $project = Project::query()->findOrFail($id);
+        $this->abortUnlessAllowedForProject($request, 'projects.application_form.update', $project);
+
+        $validated = $request->validate([
+            'field' => 'required|array',
+            'field.id' => 'required|string|max:100',
+            'field.type' => 'required|in:text,longtext,select,radio,checkbox',
+            'field.options' => 'nullable|array',
+            'field.options.*' => 'nullable|string|max:255',
+            'rule' => 'required|array',
+            'rule.field_id' => 'required|string|max:100',
+            'rule.operator' => 'required|in:equals,not_equals,contains,gt,lt,gte,lte',
+            'rule.value' => 'required|string|max:255',
+            'rule.reason' => 'nullable|string|max:500',
+            'rule.mode' => 'sometimes|in:reject,review',
+            'sample_answer' => 'present',
+        ]);
+
+        $field = $validated['field'];
+        $rule = $validated['rule'];
+        $this->applicationScreeningService->validateRules([$field], [$rule]);
+        $answer = $validated['sample_answer'];
+        $type = $field['type'];
+        $valid = $type === 'checkbox'
+            ? is_array($answer) && array_is_list($answer) && ! array_filter($answer, fn ($item) => ! is_string($item) || ! in_array($item, $field['options'] ?? [], true))
+            : is_string($answer) && (! in_array($type, ['select', 'radio'], true) || in_array($answer, $field['options'] ?? [], true));
+        if ($valid && in_array($rule['operator'], ['gt', 'lt', 'gte', 'lte'], true)) {
+            $valid = is_numeric($answer);
+        }
+        if (! $valid) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'sample_answer' => ['Örnek cevap seçilen sorunun türüne veya seçeneklerine uygun değil.'],
+            ]);
+        }
+
+        $match = $this->applicationScreeningService->firstMatch([$rule], [$field['id'] => $answer]);
+
+        return response()->json([
+            'matched' => $match !== null,
+            'result' => $match ? ($match['mode'] === 'review' ? 'review' : 'rejected') : 'no_match',
+            'reason' => $match['reason'] ?? null,
         ]);
     }
 }

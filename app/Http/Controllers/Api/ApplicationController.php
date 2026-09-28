@@ -12,18 +12,31 @@ use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\ApplicationDecisionService;
+use App\Services\ApplicationEmailVerificationService;
+use App\Services\ApplicationEnrollmentService;
+use App\Services\ApplicationConsentService;
+use App\Services\ApplicationFormResolver;
 use App\Services\ApplicationIntakeService;
+use App\Services\ApplicationNotificationRecipientService;
+use App\Services\ApplicationProjectPeriodGuard;
+use App\Services\ApplicationSubmissionService;
+use App\Services\ApplicationScreeningService;
+use App\Services\ApplicationScheduleService;
+use App\Services\ApplicationAudienceService;
 use App\Services\NotificationService;
 use App\Services\WaitlistService;
-use App\Support\MediaStorage;
-use Carbon\Carbon;
+use App\Support\ApplicationFileStorage;
+use App\Support\ApplicationMailLinks;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * @group Applications
@@ -36,6 +49,17 @@ class ApplicationController extends Controller
         private readonly NotificationService $notificationService,
         private readonly WaitlistService $waitlistService,
         private readonly ApplicationIntakeService $intakeService,
+        private readonly ApplicationEnrollmentService $applicationEnrollmentService,
+        private readonly ApplicationDecisionService $applicationDecisionService,
+        private readonly ApplicationSubmissionService $applicationSubmissionService,
+        private readonly ApplicationEmailVerificationService $emailVerificationService,
+        private readonly ApplicationFormResolver $applicationFormResolver,
+        private readonly ApplicationConsentService $applicationConsentService,
+        private readonly ApplicationScreeningService $applicationScreeningService,
+        private readonly ApplicationScheduleService $applicationScheduleService,
+        private readonly ApplicationAudienceService $applicationAudienceService,
+        private readonly ApplicationNotificationRecipientService $notificationRecipients,
+        private readonly ApplicationProjectPeriodGuard $projectPeriodGuard,
     ) {}
 
     private function resolveApplicantUser(array $applicant): User
@@ -47,36 +71,24 @@ class ApplicationController extends Controller
             return $existing;
         }
 
-        $user = User::create([
-            'name' => trim($applicant['name']),
-            'surname' => trim($applicant['surname']),
-            'email' => $email,
-            'phone' => ! empty($applicant['phone']) ? trim((string) $applicant['phone']) : null,
-            'password' => Hash::make(Str::random(32)),
-            'role' => 'student',
-            'status' => 'active',
-            'email_verified_at' => now(),
-            'must_change_password' => false,
-        ]);
-
-        $user->syncRoles(['student']);
-
-        return $user;
-    }
-
-    private function ensureSingleProjectRule(User $user, Project $project): void
-    {
-        $activeParticipationExists = Participant::query()
-            ->where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where('project_id', '!=', $project->id)
-            ->exists();
-
-        if ($activeParticipationExists) {
-            throw ValidationException::withMessages([
-                'project_id' => ['Aktif olarak baska bir projede yer aldiginiz icin bu projeye basvuru yapamazsiniz.'],
+        return DB::transaction(function () use ($applicant, $email) {
+            $user = User::firstOrCreate(['email' => $email], [
+                'name' => trim($applicant['name']),
+                'surname' => trim($applicant['surname']),
+                'phone' => ! empty($applicant['phone']) ? trim((string) $applicant['phone']) : null,
+                'password' => Hash::make(Str::random(32)),
+                'role' => 'student',
+                'status' => 'active',
+                'email_verified_at' => now(),
+                'must_change_password' => false,
             ]);
-        }
+
+            if ($user->wasRecentlyCreated) {
+                $user->syncRoles(['student']);
+            }
+
+            return $user;
+        });
     }
 
     private function ensureUserCanApply(User $user): void
@@ -88,8 +100,14 @@ class ApplicationController extends Controller
         }
     }
 
-    private function ensureProjectAcceptsApplications(Project $project): void
+    private function ensureProjectAcceptsApplications(Project $project, bool $publicSubmission = false): void
     {
+        if ($publicSubmission && ! $project->is_public) {
+            throw ValidationException::withMessages([
+                'project_id' => ['Bu proje halka açık başvuruya uygun değil.'],
+            ]);
+        }
+
         $period = $project->currentPeriodOrLegacy();
 
         if (! $period || $period->status !== 'active') {
@@ -134,7 +152,7 @@ class ApplicationController extends Controller
     {
         return [
             'path' => $path,
-            'url' => MediaStorage::url($path),
+            'storage' => 'application_private',
             'original_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getClientMimeType(),
             'size' => $file->getSize(),
@@ -154,63 +172,90 @@ class ApplicationController extends Controller
         };
     }
 
-    private function sendApplicationEmail(array $emails, string $subject, array $data, ?int $projectId = null, ?int $senderId = null): int
+    private function sendApplicationEmail(array $emails, string $subject, array $data, ?int $projectId = null, ?int $senderId = null, ?int $applicationId = null): int
     {
-        return $this->notificationService->sendTemplatedEmail(
-            $emails,
-            $subject,
-            'emails.application-status',
-            $data,
-            $projectId,
-            $senderId
-        );
-    }
-
-    /**
-     * Aynı tarih/saat aralığında başka aktif/kabul bekleyen bir başvurusu var mı kontrol eder.
-     * Şartname 14.2: Çakışma kontrolü.
-     */
-    private function ensureNoScheduleConflict(User $user, ?Program $program): void
-    {
-        if (! $program || ! $program->start_at || ! $program->end_at) {
-            return;
-        }
-
-        $conflictingApplication = Application::query()
-            ->join('programs', 'applications.program_id', '=', 'programs.id')
-            ->where('applications.user_id', $user->id)
-            ->whereIn('applications.status', ['pending', 'accepted', 'waitlisted'])
-            ->where('programs.start_at', '<', $program->end_at)
-            ->where('programs.end_at', '>', $program->start_at)
-            ->where('applications.program_id', '!=', $program->id)
-            ->whereNotNull('applications.program_id')
-            ->select('programs.title', 'programs.start_at', 'programs.end_at')
-            ->first();
-
-        if ($conflictingApplication) {
-            $startFormatted = optional(new Carbon($conflictingApplication->start_at))->format('d.m.Y H:i');
-            $endFormatted = optional(new Carbon($conflictingApplication->end_at))->format('d.m.Y H:i');
-
-            throw ValidationException::withMessages([
-                'program_id' => [
-                    "Saat cakismasi bulunmaktadir: \"{$conflictingApplication->title}\" ({$startFormatted} - {$endFormatted}) ile cakisiyor.",
-                ],
+        try {
+            return $this->notificationService->sendTemplatedEmail(
+                $emails,
+                $subject,
+                'emails.application-status',
+                $data,
+                $projectId,
+                $senderId
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('application.notification_failed', [
+                'application_id' => $applicationId,
+                'project_id' => $projectId,
+                'error' => $exception->getMessage(),
             ]);
+
+            return 0;
         }
     }
 
-    private function createApplicationForUser(User $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false, ?int $programId = null): Application
+    /** @return list<string>|null */
+    private function applicationCoordinatorEmails(Project $project, int $applicationId): ?array
     {
-        $this->ensureSingleProjectRule($user, $project);
-        $this->ensureUserCanApply($user);
+        try {
+            return $this->notificationRecipients->coordinatorEmailsFor($project);
+        } catch (\Throwable $exception) {
+            Log::warning('application.coordinator_recipient_resolution_failed', [
+                'application_id' => $applicationId,
+                'project_id' => $project->id,
+                'error_type' => $exception::class,
+            ]);
 
-        $currentPeriod = $project->currentPeriodOrLegacy();
+            return null;
+        }
+    }
+
+    /** @return array{Application, array{applicant_email_sent: bool, coordinators_email_sent: ?bool}} */
+    private function createApplicationForUser(User|\Closure $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false, ?int $programId = null, ?string $verificationCode = null, ?int $expectedFormId = null, ?string $expectedConsentText = null, bool $publicSubmission = false): array
+    {
+        $uploadedPaths = [];
+        try {
+            $submission = function (User $currentUser, Project $currentProject, ?Period $period) use ($formData, $formFiles, $consentAccepted, $programId, $verificationCode, $expectedFormId, $expectedConsentText, $publicSubmission, &$uploadedPaths) {
+                return $this->recordApplicationForUser(
+                    $currentUser, $currentProject, $period, $formData, $formFiles, $consentAccepted, $programId, $uploadedPaths, $verificationCode, $expectedFormId, $expectedConsentText, $publicSubmission
+                );
+            };
+            $application = $user instanceof User
+                ? $this->applicationSubmissionService->runLocked($user, $project, $submission)
+                : $this->applicationSubmissionService->runLockedForGuest($project, $user, $submission);
+        } catch (\Throwable $exception) {
+            // Only remove files created by this attempt, never client-supplied paths.
+            foreach ($uploadedPaths as $path) {
+                ApplicationFileStorage::delete($path);
+            }
+            throw $exception;
+        }
+
+        // Notification failures never turn a committed application into an apparent failed submission.
+        try {
+            $followUp = $this->notifyApplicationReceived($application);
+        } catch (\Throwable $exception) {
+            Log::warning('application.receipt_notification_failed', [
+                'application_id' => $application->id,
+                'error' => $exception->getMessage(),
+            ]);
+            $followUp = ['applicant_email_sent' => false, 'coordinators_email_sent' => false];
+        }
+
+        return [$application, $followUp];
+    }
+
+    private function recordApplicationForUser(User $user, Project $project, ?Period $currentPeriod, array $formData, array $formFiles, bool $consentAccepted, ?int $programId, array &$uploadedPaths, ?string $verificationCode, ?int $expectedFormId, ?string $expectedConsentText, bool $publicSubmission): Application
+    {
+        $this->ensureUserCanApply($user);
 
         if (! $currentPeriod || $currentPeriod->status !== 'active') {
             throw ValidationException::withMessages([
                 'project_id' => ['Bu proje icin aktif bir donem bulunamadi.'],
             ]);
         }
+
+        $this->projectPeriodGuard->assertNoOverlappingActiveProject($user->id, $project->id, $currentPeriod, 'project_id');
 
         $applicationWindow = $this->intakeService->windowFor($project, $currentPeriod);
         if (! $this->intakeService->isOpen($project, $currentPeriod, $applicationWindow)) {
@@ -234,7 +279,8 @@ class ApplicationController extends Controller
                 ]);
             }
 
-            $this->ensureNoScheduleConflict($user, $program);
+            $this->applicationAudienceService->assertCanSubmit($program, $user, $publicSubmission);
+            $this->applicationScheduleService->assertNoConflict($user->id, $program);
         }
 
         $existingApp = Application::where('user_id', $user->id)
@@ -249,24 +295,48 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $form = $this->activeFormForPeriod($project, $currentPeriod, $program);
+        $form = $this->applicationFormResolver->forApplication($project, $currentPeriod, $program);
 
-        if ($form?->require_consent && ! $consentAccepted) {
+        if ($expectedFormId !== null && $expectedFormId !== (int) ($form?->id ?? 0)) {
+            throw ValidationException::withMessages([
+                'application_form_id' => ['Basvuru formu guncellendi. Formu yeniden acip guncel sorulari kontrol edin.'],
+            ]);
+        }
+
+        $consentText = $this->applicationConsentService->textFor($form);
+        if ($expectedConsentText !== null && $expectedConsentText !== $consentText) {
+            throw ValidationException::withMessages([
+                'expected_consent_text' => ['Basvuru kosullari guncellendi. Metni yeniden okuyup onaylayin.'],
+            ]);
+        }
+
+        if (! $consentAccepted) {
             throw ValidationException::withMessages([
                 'consent_accepted' => ['Basvuru kosullarini kabul etmeniz gerekiyor.'],
             ]);
         }
 
-        $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles);
-        $autoRejectReason = $this->autoRejectReason($form, $normalizedFormData, $user);
+        $normalizedFormData = $this->validateDynamicFields($form, Arr::wrap($formData), $formFiles, $uploadedPaths);
+        $screeningMatch = $this->applicationScreeningService->firstMatch(
+            $form?->auto_reject_rules ?? [],
+            $normalizedFormData,
+            $user->email,
+            $user->phone,
+        );
+        $autoRejectReason = ($screeningMatch['mode'] ?? null) === 'reject' ? $screeningMatch['reason'] : null;
+        $reviewReason = ($screeningMatch['mode'] ?? null) === 'review' ? $screeningMatch['reason'] : null;
         $initialStatus = $autoRejectReason
             ? 'rejected'
-            : ($this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program, $applicationWindow) ? 'pending' : 'waitlisted');
+            : ($reviewReason || $this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program, $applicationWindow) ? 'pending' : 'waitlisted');
         $waitlistOrder = $initialStatus === 'waitlisted'
             ? $this->nextWaitlistOrder($project, $currentPeriod, $program)
             : null;
 
-        $application = Application::create([
+        if ($verificationCode !== null) {
+            $this->emailVerificationService->consume($project->id, $user->email, $verificationCode);
+        }
+
+        return Application::create([
             'user_id' => $user->id,
             'project_id' => $project->id,
             'period_id' => $currentPeriod->id,
@@ -274,98 +344,84 @@ class ApplicationController extends Controller
             'program_id' => $program?->id,
             'application_form_id' => $form?->id,
             'form_data' => $normalizedFormData,
+            'consent_text_snapshot' => $consentText,
+            'consent_accepted_at' => now(),
             'status' => $initialStatus,
             'waitlist_order' => $waitlistOrder,
             'auto_rejected' => (bool) $autoRejectReason,
             'auto_rejection_reason' => $autoRejectReason,
+            'screening_review_reason' => $reviewReason,
             'rejection_reason' => $autoRejectReason,
         ]);
+    }
 
-        $this->sendApplicationEmail(
+    /** @return array{applicant_email_sent: bool, coordinators_email_sent: ?bool} */
+    private function notifyApplicationReceived(Application $application): array
+    {
+        $user = $application->user()->firstOrFail();
+        $project = $application->project()->firstOrFail();
+        $period = $application->period()->first();
+        $program = $application->program()->first();
+        $autoRejectReason = $application->auto_rejection_reason;
+        $initialStatus = $application->status;
+        $followUpUrl = ApplicationMailLinks::portal($user, 'applications');
+
+        $applicantEmailSent = $this->sendApplicationEmail(
             array_filter([$user->email]),
-            'Basvurunuz alindi',
+            $autoRejectReason ? 'Başvurunuz değerlendirildi' : 'Başvurunuz alındı',
             [
-                'title' => $autoRejectReason ? 'Basvurunuz Degerlendirildi' : 'Basvurunuz Alindi',
-                'preheader' => "{$project->name} basvurunuz sisteme kaydedildi.",
+                'title' => $autoRejectReason ? 'Başvurunuz Değerlendirildi' : 'Başvurunuz Alındı',
+                'preheader' => "{$project->name} başvurunuz sisteme kaydedildi.",
                 'intro' => $autoRejectReason
-                    ? 'Basvurunuz otomatik degerlendirme kuraliyla sonuclandi.'
-                    : 'Basvurunuz basariyla alindi. Degerlendirme sureci tamamlandiginda bilgilendirileceksiniz.',
+                    ? 'Başvurunuz otomatik değerlendirme kuralıyla sonuçlandı.'
+                    : 'Başvurunuz başarıyla alındı. Değerlendirme süreci tamamlandığında bilgilendirileceksiniz.',
                 'lines' => array_values(array_filter([
                     ['label' => 'Proje', 'value' => $project->name],
+                    $period ? ['label' => 'Dönem', 'value' => $period->name] : null,
                     $program ? ['label' => 'Program', 'value' => $program->title] : null,
                     ['label' => 'Durum', 'value' => $this->applicationStatusLabel($initialStatus)],
-                    $initialStatus === 'waitlisted' ? ['label' => 'Not', 'value' => 'Kontenjan dolu oldugu icin basvurunuz yedek listeye alindi.'] : null,
-                    $autoRejectReason ? ['label' => 'Gerekce', 'value' => $autoRejectReason] : null,
+                    $initialStatus === 'waitlisted' ? ['label' => 'Not', 'value' => 'Kontenjan dolu olduğu için başvurunuz yedek listeye alındı.'] : null,
+                    $autoRejectReason ? ['label' => 'Gerekçe', 'value' => $autoRejectReason] : null,
                 ])),
-                'plain_text' => "Proje: {$project->name}\nDurum: ".$this->applicationStatusLabel($initialStatus).($autoRejectReason ? "\nGerekce: {$autoRejectReason}" : ''),
+                'action_url' => $followUpUrl,
+                'action_text' => $followUpUrl ? 'Başvurularımı görüntüle' : null,
+                'plain_text' => "Proje: {$project->name}".($period ? "\nDönem: {$period->name}" : '').($program ? "\nProgram: {$program->title}" : '')."\nDurum: ".$this->applicationStatusLabel($initialStatus).($autoRejectReason ? "\nGerekçe: {$autoRejectReason}" : '').($followUpUrl ? "\nBaşvurularım: {$followUpUrl}" : ''),
             ],
             $project->id,
-            $user->id
-        );
+            $user->id,
+            $application->id
+        ) > 0;
 
-        $project->loadMissing('coordinators:id,email,name,surname');
-        $coordinatorEmails = $project->coordinators
-            ->pluck('email')
-            ->filter()
-            ->values()
-            ->all();
+        $coordinatorEmails = $this->applicationCoordinatorEmails($project, $application->id);
 
-        if ($coordinatorEmails !== []) {
-            $this->sendApplicationEmail(
+        $coordinatorsEmailSent = $coordinatorEmails === null ? false : null;
+        if ($coordinatorEmails !== null && $coordinatorEmails !== []) {
+            $coordinatorsEmailSent = $this->sendApplicationEmail(
                 $coordinatorEmails,
-                'Yeni basvuru alindi',
+                'Yeni başvuru alındı',
                 [
-                    'title' => 'Yeni Basvuru Alindi',
-                    'preheader' => "{$project->name} icin yeni basvuru var.",
-                    'intro' => 'Yeni bir basvuru sisteme dustu.',
+                    'title' => 'Yeni Başvuru Alındı',
+                    'preheader' => "{$project->name} için yeni başvuru var.",
+                    'intro' => 'Yeni bir başvuru sisteme düştü.',
                     'lines' => array_values(array_filter([
-                        ['label' => 'Basvuru ID', 'value' => (string) $application->id],
+                        ['label' => 'Başvuru numarası', 'value' => (string) $application->id],
                         ['label' => 'Proje', 'value' => $project->name],
+                        $period ? ['label' => 'Dönem', 'value' => $period->name] : null,
                         $program ? ['label' => 'Program', 'value' => $program->title] : null,
                         ['label' => 'Aday', 'value' => trim($user->name.' '.$user->surname)],
                         ['label' => 'Durum', 'value' => $this->applicationStatusLabel($initialStatus)],
                     ])),
-                    'plain_text' => "Proje: {$project->name}\nYeni bir basvuru sisteme dustu. Basvuru ID: {$application->id}",
+                    'action_url' => ApplicationMailLinks::absolute('/panel/applications'),
+                    'action_text' => 'Başvuruları görüntüle',
+                    'plain_text' => "Proje: {$project->name}".($period ? "\nDönem: {$period->name}" : '').($program ? "\nProgram: {$program->title}" : '')."\nDurum: ".$this->applicationStatusLabel($initialStatus)."\nYeni başvuru: #{$application->id}".(ApplicationMailLinks::absolute('/panel/applications') ? "\nBaşvuru yönetimi: ".ApplicationMailLinks::absolute('/panel/applications') : ''),
                 ],
                 $project->id,
-                $user->id
-            );
+                $user->id,
+                $application->id
+            ) > 0;
         }
 
-        return $application;
-    }
-
-    private function activeFormForPeriod(Project $project, ?Period $period, ?Program $program = null): ?ApplicationForm
-    {
-        if ($program) {
-            $programForm = ApplicationForm::where('project_id', $project->id)
-                ->where('program_id', $program->id)
-                ->where('is_active', true)
-                ->latest()
-                ->first();
-
-            if ($programForm) {
-                return $programForm;
-            }
-        }
-
-        if ($period) {
-            $periodForm = ApplicationForm::where('project_id', $project->id)
-                ->where('period_id', $period->id)
-                ->where('is_active', true)
-                ->latest()
-                ->first();
-
-            if ($periodForm) {
-                return $periodForm;
-            }
-        }
-
-        return ApplicationForm::where('project_id', $project->id)
-            ->whereNull('period_id')
-            ->where('is_active', true)
-            ->latest()
-            ->first();
+        return ['applicant_email_sent' => $applicantEmailSent, 'coordinators_email_sent' => $coordinatorsEmailSent];
     }
 
     private function formEntriesForStudent(Application $application): array
@@ -378,7 +434,7 @@ class ApplicationController extends Controller
             });
 
         return collect($application->form_data ?? [])
-            ->map(function (mixed $value, string $key) use ($fields) {
+            ->map(function (mixed $value, string $key) use ($fields, $application) {
                 $field = $fields->get($key, []);
                 $isFile = is_array($value) && isset($value['path']);
 
@@ -391,6 +447,7 @@ class ApplicationController extends Controller
                         'original_name' => $value['original_name'] ?? basename((string) $value['path']),
                         'mime_type' => $value['mime_type'] ?? null,
                         'size' => $value['size'] ?? null,
+                        'download_url' => "/applications/{$application->id}/form-files/".rawurlencode($key),
                     ] : null,
                 ];
             })
@@ -409,21 +466,46 @@ class ApplicationController extends Controller
             'waitlist_order' => $application->waitlist_order,
             'waitlist_invited_at' => optional($application->waitlist_invited_at)?->toISOString(),
             'waitlist_invitation_expires_at' => optional($application->waitlist_invitation_expires_at)?->toISOString(),
+            'waitlist_invitation_delivery_status' => $application->waitlist_invitation_delivery_status,
             'waitlist_invitation_active' => $application->status === 'waitlisted'
                 && $application->waitlist_invited_at !== null
+                && ! in_array($application->waitlist_invitation_delivery_status, ['pending', 'failed', 'unknown'], true)
                 && ($application->waitlist_invitation_expires_at === null || $application->waitlist_invitation_expires_at->isFuture()),
             'created_at' => optional($application->created_at)?->toISOString(),
             'interview_at' => optional($application->interview_at)?->toISOString(),
             'rejection_reason' => $application->rejection_reason,
-            'auto_rejected' => (bool) $application->auto_rejected,
-            'auto_rejection_reason' => $application->auto_rejection_reason,
+            'auto_rejected' => $application->status === 'rejected' && (bool) $application->auto_rejected,
+            'auto_rejection_reason' => $application->status === 'rejected' ? $application->auto_rejection_reason : null,
             'form_entries' => $this->formEntriesForStudent($application),
+            'consent_text_snapshot' => $application->consent_text_snapshot,
+            'consent_accepted_at' => optional($application->consent_accepted_at)?->toISOString(),
         ];
+    }
+
+    private function applicationForResponse(Application $application): array
+    {
+        $data = $application->toArray();
+        unset(
+            $data['screening_review_reason'],
+            $data['auto_rejection_corrected_at'],
+            $data['auto_rejection_corrected_by'],
+            $data['auto_rejection_corrected_by_name'],
+            $data['auto_rejection_correction_reason'],
+        );
+        $data['form_data'] = collect($application->form_data ?? [])
+            ->map(fn (mixed $value) => is_array($value) && isset($value['path'])
+                ? array_diff_key($value, array_flip(['path', 'url', 'storage']))
+                : $value)
+            ->all();
+
+        return $data;
     }
 
     private function assertWaitlistInvitationOpen(Application $application): void
     {
-        if ($application->status !== 'waitlisted' || ! $application->waitlist_invited_at) {
+        if ($application->status !== 'waitlisted'
+            || ! $application->waitlist_invited_at
+            || in_array($application->waitlist_invitation_delivery_status, ['pending', 'failed', 'unknown', 'expired'], true)) {
             throw ValidationException::withMessages([
                 'application' => ['Bu basvuru icin aktif bir yedek liste daveti bulunmuyor.'],
             ]);
@@ -431,8 +513,7 @@ class ApplicationController extends Controller
 
         if ($application->waitlist_invitation_expires_at && now()->greaterThanOrEqualTo($application->waitlist_invitation_expires_at)) {
             $application->update([
-                'waitlist_invited_at' => null,
-                'waitlist_invitation_expires_at' => null,
+                'waitlist_invitation_delivery_status' => 'expired',
             ]);
 
             throw ValidationException::withMessages([
@@ -467,8 +548,16 @@ class ApplicationController extends Controller
         ]);
     }
 
-    private function validateDynamicFields(?ApplicationForm $form, array $formData, array $formFiles = []): array
+    private function validateDynamicFields(?ApplicationForm $form, array $formData, array $formFiles = [], array &$uploadedPaths = []): array
     {
+        foreach ($formData as $fieldId => $value) {
+            if (is_array($value) && array_key_exists('path', $value)) {
+                throw ValidationException::withMessages([
+                    $fieldId => ['Başvuru dosyası için yeni bir dosya yükleyin.'],
+                ]);
+            }
+        }
+
         if (! $form) {
             return $formData;
         }
@@ -509,25 +598,14 @@ class ApplicationController extends Controller
 
             if ($type === 'file') {
                 if ($uploadedFile instanceof UploadedFile) {
-                    $path = MediaStorage::putFile('application-files', $uploadedFile);
+                    $path = ApplicationFileStorage::putFile($uploadedFile);
+                    $uploadedPaths[] = $path;
                     $normalized[$fieldId] = $this->fileMetadata($path, $uploadedFile);
 
                     continue;
                 }
 
-                if (is_array($value) && isset($value['path'])) {
-                    $normalized[$fieldId] = $value;
-
-                    continue;
-                }
-
-                if (is_string($value)) {
-                    $normalized[$fieldId] = trim($value);
-
-                    continue;
-                }
-
-                $errors[$fieldId] = [$label.' icin gecerli bir dosya bekleniyor.'];
+                $errors[$fieldId] = [$label.' icin yeni bir dosya yukleyin.'];
 
                 continue;
             }
@@ -539,7 +617,19 @@ class ApplicationController extends Controller
                     continue;
                 }
 
-                $normalized[$fieldId] = array_values(array_filter($value, fn ($item) => $item !== null && $item !== ''));
+                $choices = array_values(array_filter($value, fn ($item) => $item !== null && $item !== ''));
+                if (array_filter($choices, fn ($item) => ! is_string($item) || ! in_array($item, $field['options'] ?? [], true))) {
+                    $errors[$fieldId] = [$label.' icin gecerli secenekleri secin.'];
+
+                    continue;
+                }
+                $normalized[$fieldId] = array_values(array_unique($choices));
+
+                continue;
+            }
+
+            if (! is_string($value)) {
+                $errors[$fieldId] = [$label.' icin gecerli bir cevap girin.'];
 
                 continue;
             }
@@ -555,55 +645,22 @@ class ApplicationController extends Controller
             $normalized[$fieldId] = is_string($value) ? trim($value) : $value;
         }
 
+        foreach (($form->auto_reject_rules ?? []) as $rule) {
+            if (! in_array($rule['operator'] ?? null, ['gt', 'lt', 'gte', 'lte'], true)) {
+                continue;
+            }
+            $fieldId = $rule['field'] ?? $rule['field_id'] ?? null;
+            $answer = $normalized[$fieldId] ?? null;
+            if ($answer !== null && $answer !== '' && ! is_numeric($answer)) {
+                $errors[$fieldId] = ['Bu soru için sayısal bir cevap girin.'];
+            }
+        }
+
         if (! empty($errors)) {
             throw ValidationException::withMessages($errors);
         }
 
         return $normalized;
-    }
-
-    private function autoRejectReason(?ApplicationForm $form, array $formData, User $user): ?string
-    {
-        foreach (($form?->auto_reject_rules ?? []) as $rule) {
-            $field = $rule['field'] ?? $rule['field_id'] ?? null;
-            $operator = $rule['operator'] ?? 'equals';
-            if (! is_string($field) || $field === '') {
-                continue;
-            }
-
-            $actual = match ($field) {
-                'email' => $user->email,
-                'phone' => $user->phone,
-                default => $formData[$field] ?? null,
-            };
-            $expected = $rule['value'] ?? null;
-            $actualText = is_array($actual) ? implode(' ', array_map('strval', $actual)) : (string) $actual;
-            $expectedText = is_array($expected) ? implode(' ', array_map('strval', $expected)) : (string) $expected;
-            $actualNumber = is_numeric($actualText) ? (float) $actualText : null;
-            $expectedNumber = is_numeric($expectedText) ? (float) $expectedText : null;
-
-            $matched = match ($operator) {
-                'not_equals' => $actualText !== $expectedText,
-                'contains' => is_array($actual)
-                    ? in_array($expected, $actual, true)
-                    : str_contains(mb_strtolower($actualText), mb_strtolower($expectedText)),
-                'gt' => $actualNumber !== null && $expectedNumber !== null && $actualNumber > $expectedNumber,
-                'lt' => $actualNumber !== null && $expectedNumber !== null && $actualNumber < $expectedNumber,
-                'gte' => $actualNumber !== null && $expectedNumber !== null && $actualNumber >= $expectedNumber,
-                'lte' => $actualNumber !== null && $expectedNumber !== null && $actualNumber <= $expectedNumber,
-                'in' => is_array($expected) && in_array($actual, $expected, true),
-                'not_in' => is_array($expected) && ! in_array($actual, $expected, true),
-                'empty' => $actual === null || $actual === '' || $actual === [],
-                'not_empty' => ! ($actual === null || $actual === '' || $actual === []),
-                default => $actualText === $expectedText,
-            };
-
-            if ($matched) {
-                return trim((string) ($rule['message'] ?? $rule['reason'] ?? 'Basvurunuz kriter uyumsuzlugu nedeniyle reddedilmistir.'));
-            }
-        }
-
-        return null;
     }
 
     private function nextWaitlistOrder(Project $project, Period $period, ?Program $program = null): int
@@ -631,7 +688,8 @@ class ApplicationController extends Controller
      * @bodyParam program_id integer Optional program id. Example: 5
      * @bodyParam form_data object Optional dynamic form answers keyed by field id. Example: {"motivation":"Projeye katilmak istiyorum"}
      * @bodyParam form_files object Optional dynamic form files keyed by field id.
-     * @bodyParam consent_accepted boolean Optional consent flag. Example: true
+     * @bodyParam consent_accepted boolean Required acceptance of the displayed application terms. Example: true
+     * @bodyParam expected_consent_text string Optional exact terms shown by the current public form. A changed text requires reopening the form.
      *
      * @response 201 {"message":"Basvurunuz basariyla alindi.","application":{"id":1,"project_id":1,"status":"pending"}}
      * @response 422 {"message":"Bu proje icin basvurular su an kapali.","errors":{"project_id":["Bu proje icin basvurular su an kapali."]}}
@@ -641,6 +699,8 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'program_id' => 'nullable|exists:programs,id',
+            'application_form_id' => 'sometimes|integer|min:0',
+            'expected_consent_text' => 'sometimes|string|max:10000',
             'form_data' => 'nullable|array',
             'form_files' => 'nullable|array',
             'form_files.*' => 'file|max:20480',
@@ -650,18 +710,22 @@ class ApplicationController extends Controller
         $project = Project::findOrFail($validated['project_id']);
         $this->ensureProjectAcceptsApplications($project);
 
-        $application = $this->createApplicationForUser(
+        [$application, $followUp] = $this->createApplicationForUser(
             $request->user(),
             $project,
             $validated['form_data'] ?? [],
             $request->file('form_files', []),
             (bool) ($validated['consent_accepted'] ?? false),
-            isset($validated['program_id']) ? (int) $validated['program_id'] : null
+            isset($validated['program_id']) ? (int) $validated['program_id'] : null,
+            null,
+            isset($validated['application_form_id']) ? (int) $validated['application_form_id'] : null,
+            $validated['expected_consent_text'] ?? null
         );
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',
-            'application' => $application,
+            'application' => $this->applicationForResponse($application),
+            'follow_up' => $followUp,
         ], 201);
     }
 
@@ -678,7 +742,8 @@ class ApplicationController extends Controller
      * @bodyParam program_id integer Optional program id. Example: 5
      * @bodyParam form_data object Optional dynamic form answers keyed by field id. Example: {"motivation":"Projeye katilmak istiyorum"}
      * @bodyParam form_files object Optional dynamic form files keyed by field id.
-     * @bodyParam consent_accepted boolean Optional consent flag. Example: true
+     * @bodyParam consent_accepted boolean Required acceptance of the displayed application terms. Example: true
+     * @bodyParam expected_consent_text string Optional exact terms shown by the current public form. A changed text requires reopening the form.
      * @bodyParam applicant.name string required Applicant first name. Example: Hakan
      * @bodyParam applicant.surname string required Applicant last name. Example: Kekec
      * @bodyParam applicant.email string required Applicant email. Example: hakan@example.com
@@ -693,6 +758,8 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'program_id' => 'nullable|exists:programs,id',
+            'application_form_id' => 'sometimes|integer|min:0',
+            'expected_consent_text' => 'sometimes|string|max:10000',
             'form_data' => 'nullable|array',
             'form_files' => 'nullable|array',
             'form_files.*' => 'file|max:20480',
@@ -701,24 +768,45 @@ class ApplicationController extends Controller
             'applicant.surname' => 'required|string|max:255',
             'applicant.email' => 'required|email|max:255',
             'applicant.phone' => 'nullable|string|max:30',
+            'verification_code' => ['required', 'regex:/^[0-9]{8}$/'],
         ]);
 
         $project = Project::findOrFail($validated['project_id']);
-        $this->ensureProjectAcceptsApplications($project);
-        $user = $this->resolveApplicantUser($validated['applicant']);
-        $application = $this->createApplicationForUser(
-            $user,
+        $this->ensureProjectAcceptsApplications($project, true);
+        $email = Str::lower(trim($validated['applicant']['email']));
+        $this->emailVerificationService->assertCode($project->id, $email, $validated['verification_code']);
+        [$application, $followUp] = $this->createApplicationForUser(
+            fn (): User => $this->resolveApplicantUser($validated['applicant']),
             $project,
             $validated['form_data'] ?? [],
             $request->file('form_files', []),
             (bool) ($validated['consent_accepted'] ?? false),
-            isset($validated['program_id']) ? (int) $validated['program_id'] : null
+            isset($validated['program_id']) ? (int) $validated['program_id'] : null,
+            $validated['verification_code'],
+            isset($validated['application_form_id']) ? (int) $validated['application_form_id'] : null,
+            $validated['expected_consent_text'] ?? null,
+            true
         );
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',
-            'application' => $application,
+            'application' => $this->applicationForResponse($application),
+            'follow_up' => $followUp,
         ], 201);
+    }
+
+    public function requestPublicVerification(Request $request)
+    {
+        $validated = $request->validate([
+            'project_id' => 'required|exists:projects,id',
+            'email' => 'required|email|max:255',
+        ]);
+
+        $project = Project::findOrFail($validated['project_id']);
+        $this->ensureProjectAcceptsApplications($project, true);
+        $this->emailVerificationService->sendCode($project, Str::lower(trim($validated['email'])));
+
+        return response()->json(['message' => 'Doğrulama kodu e-posta adresinize gönderildiyse gelen kutunuzu kontrol edin.']);
     }
 
     /**
@@ -747,10 +835,24 @@ class ApplicationController extends Controller
         ]);
     }
 
+    public function downloadFormFile(Request $request, int $id, string $field): StreamedResponse
+    {
+        $application = Application::query()
+            ->whereKey($id)
+            ->where('user_id', $request->user()->id)
+            ->with('form:id,fields')
+            ->firstOrFail();
+        $fieldKey = rawurldecode($field);
+        $file = ApplicationFileStorage::fileForField($application, $fieldKey);
+        abort_unless($file, 404, 'Başvuru dosyası bulunamadı.');
+
+        return ApplicationFileStorage::download($file, 'basvuru_dosyasi_'.$application->id);
+    }
+
     /**
      * Respond to a waitlist invitation.
      *
-     * Allows the current applicant to accept or reject an active waitlist invitation. Accepting may create or activate the participant record when quota rules allow it.
+     * Allows the current applicant to accept or reject an active waitlist invitation. Acceptance creates missing participation when quota rules allow it and preserves existing participation records.
      *
      * @group Applications
      *
@@ -775,43 +877,26 @@ class ApplicationController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        $this->assertPeriodResolvable($request, $application->period_id);
+        $invitationError = null;
+        $application = $this->applicationDecisionService->runLocked($application, function (Application $application) use ($request, $validated, &$invitationError) {
+            $this->assertPeriodResolvable($request, $application->period_id);
+            try {
+                $this->assertWaitlistInvitationOpen($application);
+            } catch (ValidationException $exception) {
+                // Keep expired invitation cleanup, but do not record a decision.
+                $invitationError = $exception;
 
-        $this->assertWaitlistInvitationOpen($application);
+                return;
+            }
 
-        DB::beginTransaction();
-        try {
             if ($validated['decision'] === 'accept') {
-                $hasAnotherActiveProject = Participant::query()
-                    ->where('user_id', $application->user_id)
-                    ->where('status', 'active')
-                    ->where('project_id', '!=', $application->project_id)
-                    ->exists();
-                if ($hasAnotherActiveProject) {
-                    throw ValidationException::withMessages([
-                        'decision' => ['Aktif olarak baska bir projede yer aldiginiz icin daveti kabul edemezsiniz.'],
-                    ]);
-                }
-
-                $quota = $application->program?->application_quota ?? $application->projectQuota();
-                if ($quota !== null && (int) $quota > 0) {
-                    $acceptedCount = Application::query()
-                        ->where('project_id', $application->project_id)
-                        ->where('period_id', $application->period_id)
-                        ->when(
-                            $application->program_id,
-                            fn ($query) => $query->where('program_id', $application->program_id),
-                            fn ($query) => $query->whereNull('program_id')
-                        )
-                        ->where('status', 'accepted')
-                        ->where('id', '!=', $application->id)
-                        ->count();
-                    if ($acceptedCount >= (int) $quota) {
-                        throw ValidationException::withMessages([
-                            'decision' => ['Kontenjan dolu oldugu icin davet su an kabul edilemiyor.'],
-                        ]);
-                    }
-                }
+                $this->applicationScheduleService->assertNoConflict(
+                    (int) $application->user_id,
+                    $application->program,
+                    (int) $application->id,
+                    'decision',
+                );
+                $this->applicationEnrollmentService->enroll($application, 'decision');
 
                 $application->update([
                     'status' => 'accepted',
@@ -819,25 +904,6 @@ class ApplicationController extends Controller
                     'waitlist_invitation_expires_at' => null,
                     'rejection_reason' => null,
                 ]);
-
-                Participant::updateOrCreate([
-                    'user_id' => $application->user_id,
-                    'project_id' => $application->project_id,
-                    'period_id' => $application->period_id,
-                ], [
-                    'status' => 'active',
-                    'credit' => $application->period->credit_start_amount ?? 100,
-                    'enrolled_at' => now(),
-                ]);
-
-                if ($application->user && ! in_array($application->user->role, ['student', 'alumni'], true)) {
-                    $application->user->update([
-                        'role' => 'student',
-                        'status' => 'active',
-                    ]);
-                    $application->user->syncRoles(['student']);
-                }
-                $scopeForNextInvitation = null;
             } else {
                 $application->update([
                     'status' => 'rejected',
@@ -845,62 +911,81 @@ class ApplicationController extends Controller
                     'waitlist_invited_at' => null,
                     'waitlist_invitation_expires_at' => null,
                 ]);
-                $scopeForNextInvitation = $application->fresh(['project:id,name,quota', 'program:id,title,application_quota']);
             }
+        });
 
-            DB::commit();
-        } catch (ValidationException $e) {
-            DB::rollBack();
-            throw $e;
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            throw $e;
+        if ($invitationError !== null) {
+            throw $invitationError;
         }
 
-        if (isset($scopeForNextInvitation) && $scopeForNextInvitation instanceof Application) {
-            $this->waitlistService->inviteNextIfSeatAvailable($scopeForNextInvitation);
+        $nextWaitlistChecked = null;
+        if ($validated['decision'] === 'reject') {
+            try {
+                $this->waitlistService->inviteNextIfSeatAvailable($application);
+                $nextWaitlistChecked = true;
+            } catch (\Throwable $exception) {
+                $nextWaitlistChecked = false;
+                Log::warning('application.next_waitlist_check_failed', [
+                    'application_id' => $application->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
-        $application->loadMissing(['project:id,name', 'project.coordinators:id,email,name,surname', 'period', 'program:id,title,start_at', 'form:id,fields', 'user:id,email,name,surname']);
+        $application->loadMissing(['project:id,name', 'period', 'program:id,title,start_at', 'form:id,fields', 'user:id,email,name,surname,role']);
+        $applicantUrl = ApplicationMailLinks::portal($application->user()->first(['id', 'role']), 'applications');
 
-        $this->sendApplicationEmail(
+        $applicantEmailSent = $this->sendApplicationEmail(
             array_filter([$application->user?->email]),
             $validated['decision'] === 'accept' ? 'Yedek liste davetiniz kabul edildi' : 'Yedek liste davetiniz reddedildi',
             [
                 'title' => $validated['decision'] === 'accept' ? 'Davet Kabul Edildi' : 'Davet Reddedildi',
-                'preheader' => 'Yedek liste daveti yanitiniz kaydedildi.',
+                'preheader' => 'Yedek liste daveti yanıtınız kaydedildi.',
                 'intro' => $validated['decision'] === 'accept'
-                    ? 'Yedek liste davetiniz kabul edildi ve basvurunuz onaylandi.'
-                    : 'Yedek liste daveti yanitiniz reddedildi olarak kaydedildi.',
-                'lines' => [
+                    ? 'Yedek liste davetiniz kabul edildi ve başvurunuz onaylandı.'
+                    : 'Yedek liste davetini reddettiğiniz kaydedildi.',
+                'lines' => array_values(array_filter([
                     ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+                    $application->period ? ['label' => 'Dönem', 'value' => $application->period->name] : null,
+                    $application->program ? ['label' => 'Program', 'value' => $application->program->title] : null,
                     ['label' => 'Durum', 'value' => $this->applicationStatusLabel((string) $application->status)],
-                ],
-                'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nDurum: ".($validated['decision'] === 'accept' ? 'Davet kabul edildi ve basvurunuz onaylandi.' : 'Davet reddedildi.'),
+                ])),
+                'action_url' => $applicantUrl,
+                'action_text' => $applicantUrl ? 'Başvurularımı görüntüle' : null,
+                'plain_text' => 'Proje: '.($application->project?->name ?? '-').($application->period ? "\nDönem: {$application->period->name}" : '').($application->program ? "\nProgram: {$application->program->title}" : '')."\nDurum: ".$this->applicationStatusLabel((string) $application->status).($applicantUrl ? "\nBaşvurularım: {$applicantUrl}" : ''),
             ],
             $application->project_id,
-            $request->user()->id
-        );
+            $request->user()->id,
+            $application->id
+        ) > 0;
 
-        $coordinatorEmails = $application->project?->coordinators?->pluck('email')->filter()->values()->all() ?? [];
-        if ($coordinatorEmails !== []) {
-            $this->sendApplicationEmail(
+        $coordinatorEmails = $application->project
+            ? $this->applicationCoordinatorEmails($application->project, $application->id)
+            : [];
+        $coordinatorsEmailSent = $coordinatorEmails === null ? false : null;
+        if ($coordinatorEmails !== null && $coordinatorEmails !== []) {
+            $coordinatorsEmailSent = $this->sendApplicationEmail(
                 $coordinatorEmails,
-                'Yedek liste daveti yanitlandi',
+                'Yedek liste daveti yanıtlandı',
                 [
-                    'title' => 'Yedek Liste Daveti Yanitlandi',
+                    'title' => 'Yedek Liste Daveti Yanıtlandı',
                     'preheader' => 'Bir aday yedek liste davetine yanit verdi.',
-                    'intro' => 'Yedek liste daveti yaniti sisteme kaydedildi.',
-                    'lines' => [
+                    'intro' => 'Yedek liste daveti yanıtı sisteme kaydedildi.',
+                    'lines' => array_values(array_filter([
                         ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
+                        $application->period ? ['label' => 'Dönem', 'value' => $application->period->name] : null,
+                        $application->program ? ['label' => 'Program', 'value' => $application->program->title] : null,
                         ['label' => 'Aday', 'value' => trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))],
-                        ['label' => 'Yanit', 'value' => $validated['decision'] === 'accept' ? 'Kabul' : 'Red'],
-                    ],
-                    'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nAday: ".trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))."\nYanit: ".($validated['decision'] === 'accept' ? 'Kabul' : 'Red'),
+                        ['label' => 'Yanıt', 'value' => $validated['decision'] === 'accept' ? 'Kabul' : 'Red'],
+                    ])),
+                    'action_url' => ApplicationMailLinks::absolute('/panel/applications'),
+                    'action_text' => 'Başvuruları görüntüle',
+                    'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nAday: ".trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))."\nYanıt: ".($validated['decision'] === 'accept' ? 'Kabul' : 'Red'),
                 ],
                 $application->project_id,
-                $request->user()->id
-            );
+                $request->user()->id,
+                $application->id
+            ) > 0;
         }
 
         return response()->json([
@@ -908,6 +993,11 @@ class ApplicationController extends Controller
                 ? 'Yedek liste daveti kabul edildi.'
                 : 'Yedek liste daveti reddedildi.',
             'application' => $this->formatStudentApplication($application),
+            'follow_up' => [
+                'applicant_email_sent' => $applicantEmailSent,
+                'coordinators_email_sent' => $coordinatorsEmailSent,
+                'next_waitlist_checked' => $nextWaitlistChecked,
+            ],
         ]);
     }
 }

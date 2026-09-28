@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\ApplicationConsentService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -20,6 +21,7 @@ class VolunteerOpportunityResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'description' => $this->description,
+            'application_consent_text' => app(ApplicationConsentService::class)->textWithAdditional($this->consent_text),
             'project_id' => $this->project_id,
             'period_id' => $this->period_id,
             'location' => $this->location,
@@ -48,6 +50,9 @@ class VolunteerOpportunityResource extends JsonResource
                 'motivation_text' => $application->motivation_text,
                 'notes' => $application->notes,
                 'evaluation_note' => $application->evaluation_note,
+                'consent_text_snapshot' => $application->consent_text_snapshot,
+                'consent_accepted_at' => optional($application->consent_accepted_at)?->toIso8601String(),
+                'receipt_email_status' => $application->receipt_email_status,
                 'created_at' => optional($application->created_at)?->toIso8601String(),
             ] : null,
         ];

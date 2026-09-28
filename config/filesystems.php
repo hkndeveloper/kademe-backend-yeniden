@@ -42,6 +42,19 @@ return [
             'report' => false,
         ],
 
+        'application_private' => [
+            'driver' => env('APPLICATION_FILES_DRIVER', 'local'),
+            'root' => env('APPLICATION_FILES_DRIVER', 'local') === 'local' ? storage_path('app/private') : '',
+            'key' => env('APPLICATION_FILES_ACCESS_KEY_ID', env('R2_ACCESS_KEY_ID')),
+            'secret' => env('APPLICATION_FILES_SECRET_ACCESS_KEY', env('R2_SECRET_ACCESS_KEY')),
+            'region' => env('APPLICATION_FILES_REGION', env('R2_DEFAULT_REGION', 'auto')),
+            'bucket' => env('APPLICATION_FILES_BUCKET'),
+            'endpoint' => env('APPLICATION_FILES_ENDPOINT', env('R2_ENDPOINT')),
+            'use_path_style_endpoint' => env('APPLICATION_FILES_PATH_STYLE', true),
+            'visibility' => 'private',
+            'throw' => true,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

@@ -78,4 +78,34 @@ class PeriodClosureReadinessTest extends TestCase
         $this->assertSame(1, collect($readiness['blockers'])->firstWhere('code', 'open_programs')['count']);
         $this->assertSame(1, collect($readiness['warnings'])->firstWhere('code', 'low_credit')['count']);
     }
+
+    public function test_interview_outcomes_require_a_final_application_decision_before_closure(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Interview closure', 'slug' => 'interview-closure',
+            'type' => 'other', 'status' => 'active',
+        ]);
+        $period = Period::query()->create([
+            'project_id' => $project->id, 'name' => 'Interview period',
+            'start_date' => now()->subMonth(), 'end_date' => now()->addMonth(),
+            'status' => 'closing',
+        ]);
+        $student = User::factory()->create(['surname' => 'Interview']);
+        $application = Application::query()->create([
+            'user_id' => $student->id, 'project_id' => $project->id,
+            'period_id' => $period->id, 'status' => 'interview_failed',
+        ]);
+
+        foreach (['interview_failed', 'interview_passed'] as $status) {
+            $application->update(['status' => $status]);
+            $readiness = app(PeriodClosureReadinessService::class)->evaluate($period);
+            $this->assertFalse($readiness['ready']);
+            $this->assertSame(1, collect($readiness['blockers'])->firstWhere('code', 'unresolved_applications')['count']);
+        }
+
+        $application->update(['status' => 'rejected']);
+        $readiness = app(PeriodClosureReadinessService::class)->evaluate($period);
+        $this->assertTrue($readiness['ready']);
+        $this->assertSame(0, collect($readiness['checks'])->firstWhere('code', 'unresolved_applications')['count']);
+    }
 }

@@ -17,10 +17,12 @@ use App\Models\ProjectModuleEnrollment;
 use App\Models\RewardTier;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Services\KademeModuleConsentService;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -409,6 +411,7 @@ class StudentDashboardController extends Controller
     public function projectSpecials(Request $request)
     {
         $user = $request->user();
+        $moduleConsentService = app(KademeModuleConsentService::class);
 
         $participations = $this->participationQueryFor($user)
             ->with(['project:id,name,slug,type', 'period:id,name'])
@@ -485,6 +488,7 @@ class StudentDashboardController extends Controller
                 $rewardTiersByProject,
                 $badgeCountsByProject,
                 $modulesByProject,
+                $moduleConsentService,
                 $enrollmentRows,
                 $uploadedFilesByProject
             ) {
@@ -582,7 +586,7 @@ class StudentDashboardController extends Controller
                     'kademe_modules' => in_array('participants_by_module', $moduleKeys, true)
                         ? ($modulesByProject->get($project->id) ?? collect())
                             ->filter(fn (ProjectModule $module) => $module->period_id === null || (int) $module->period_id === (int) $participation->period_id)
-                            ->map(function (ProjectModule $module) use ($enrollmentRows) {
+                            ->map(function (ProjectModule $module) use ($enrollmentRows, $moduleConsentService) {
                             $enrollment = $enrollmentRows->get($module->id);
 
                             return [
@@ -591,9 +595,11 @@ class StudentDashboardController extends Controller
                                 'description' => $module->description,
                                 'outcomes' => $module->outcomes ?? [],
                                 'instructors' => $module->instructors ?? [],
-                                'faq_items' => $module->faq_items ?? [],
-                                'warning_text' => $module->warning_text,
-                                'requires_consent' => (bool) $module->requires_consent,
+                                'faq_items' => $moduleConsentService->faqItemsFor($module),
+                                'warning_text' => $moduleConsentService->warningTextFor($module),
+                                'application_consent_text' => $moduleConsentService->textFor($module),
+                                'application_consent_hash' => $moduleConsentService->hashFor($module),
+                                'requires_consent' => true,
                                 'consent_checkbox_label' => $module->consent_checkbox_label,
                                 'application_open' => (bool) $module->application_open,
                                 'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
@@ -601,6 +607,7 @@ class StudentDashboardController extends Controller
                                     'id' => $enrollment->id,
                                     'status' => $enrollment->status,
                                     'consented_at' => optional($enrollment->consented_at)?->toIso8601String(),
+                                    'consent_text_snapshot' => $enrollment->consent_text_snapshot,
                                     'reviewed_at' => optional($enrollment->reviewed_at)?->toIso8601String(),
                                     'note' => $enrollment->note,
                                 ] : null,
@@ -622,7 +629,8 @@ class StudentDashboardController extends Controller
      *
      * @urlParam projectId integer required Project id. Example: 1
      * @urlParam moduleId integer required Module id. Example: 10
-     * @bodyParam accepted_terms boolean Optional, required when the module requires consent. Example: true
+     * @bodyParam accepted_terms boolean required Module information accepted. Example: true
+     * @bodyParam expected_consent_hash string required Hash of the displayed module information.
      * @response 201 {"message":"Basvurunuz koordinator onayina iletildi.","enrollment":{"id":1,"status":"pending","consented_at":"2026-06-30T12:00:00+03:00"}}
      * @response 403 {"message":"Bu projenin katilimcisi degilsiniz."}
      * @response 422 {"message":"Bu modul icin basvuru su an kapali."}
@@ -651,25 +659,47 @@ class StudentDashboardController extends Controller
             'Bu modul katildiginiz doneme ait degil.'
         );
 
-        if (ProjectModuleEnrollment::query()->where('project_module_id', $module->id)->where('user_id', $user->id)->exists()) {
-            throw ValidationException::withMessages(['module' => 'Bu modul icin zaten kayit bulunuyor.']);
-        }
-
-        if ($module->requires_consent) {
-            $request->validate([
-                'accepted_terms' => 'required|accepted',
-            ]);
-        }
-
-        $status = $module->requires_coordinator_approval ? 'pending' : 'approved';
-
-        $enrollment = ProjectModuleEnrollment::query()->create([
-            'project_module_id' => $module->id,
-            'user_id' => $user->id,
-            'participant_id' => $participant->id,
-            'status' => $status,
-            'consented_at' => now(),
+        $validated = $request->validate([
+            'accepted_terms' => 'required|accepted',
+            'expected_consent_hash' => 'required|string|size:64',
         ]);
+
+        $moduleConsentService = app(KademeModuleConsentService::class);
+        $enrollment = DB::transaction(function () use ($projectId, $moduleId, $user, $participant, $validated, $moduleConsentService) {
+            $currentModule = ProjectModule::query()
+                ->where('project_id', $projectId)
+                ->lockForUpdate()
+                ->findOrFail($moduleId);
+
+            abort_unless($currentModule->is_active && $currentModule->application_open, 422, 'Bu modul icin basvuru su an kapali.');
+            abort_unless(
+                $currentModule->period_id === null || (int) $currentModule->period_id === (int) $participant->period_id,
+                403,
+                'Bu modul katildiginiz doneme ait degil.'
+            );
+
+            if (ProjectModuleEnrollment::query()->where('project_module_id', $currentModule->id)->where('user_id', $user->id)->exists()) {
+                throw ValidationException::withMessages(['module' => 'Bu modul icin zaten kayit bulunuyor.']);
+            }
+
+            $consentText = $moduleConsentService->textFor($currentModule);
+            if (! hash_equals($moduleConsentService->hashFor($currentModule), $validated['expected_consent_hash'])) {
+                throw ValidationException::withMessages([
+                    'expected_consent_hash' => 'Modül bilgilendirmesi değişti. Güncel bilgileri yeniden okuyup onaylayın.',
+                ]);
+            }
+
+            return ProjectModuleEnrollment::query()->create([
+                'project_module_id' => $currentModule->id,
+                'user_id' => $user->id,
+                'participant_id' => $participant->id,
+                'status' => $currentModule->requires_coordinator_approval ? 'pending' : 'approved',
+                'consented_at' => now(),
+                'consent_text_snapshot' => $consentText,
+            ]);
+        });
+
+        $status = $enrollment->status;
 
         return response()->json([
             'message' => $status === 'approved'
@@ -679,6 +709,7 @@ class StudentDashboardController extends Controller
                 'id' => $enrollment->id,
                 'status' => $enrollment->status,
                 'consented_at' => optional($enrollment->consented_at)?->toIso8601String(),
+                'consent_text_snapshot' => $enrollment->consent_text_snapshot,
             ],
         ], 201);
     }

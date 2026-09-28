@@ -8,11 +8,11 @@ use Illuminate\Support\Facades\Schema;
 
 class PeriodArchiveBuilder
 {
-    public const SCHEMA_VERSION = 2;
+    public const SCHEMA_VERSION = 4;
 
     private const SNAPSHOT_TABLE_COLUMNS = [
         'participants' => ['id', 'user_id', 'project_id', 'period_id', 'status', 'graduation_status', 'graduation_note', 'credit', 'enrolled_at', 'graduated_at', 'updated_at'],
-        'applications' => ['id', 'user_id', 'project_id', 'period_id', 'application_window_id', 'application_form_id', 'program_id', 'status', 'auto_rejected', 'auto_rejection_reason', 'rejection_reason', 'evaluation_note', 'interview_at', 'waitlist_order', 'updated_at'],
+        'applications' => ['id', 'user_id', 'project_id', 'period_id', 'application_window_id', 'application_form_id', 'program_id', 'status', 'auto_rejected', 'auto_rejection_reason', 'screening_review_reason', 'auto_rejection_corrected_at', 'auto_rejection_corrected_by', 'auto_rejection_corrected_by_name', 'auto_rejection_correction_reason', 'rejection_reason', 'evaluation_note', 'interview_at', 'interview_passed_at', 'waitlist_order', 'waitlist_invited_at', 'waitlist_invitation_expires_at', 'waitlist_invitation_delivery_status', 'updated_at'],
         'programs' => ['id', 'project_id', 'period_id', 'title', 'start_at', 'end_at', 'status', 'credit_deduction', 'application_quota', 'target_audience', 'updated_at'],
         'assignments' => ['id', 'project_id', 'period_id', 'title', 'due_date', 'created_by', 'updated_at'],
         'certificates' => ['id', 'user_id', 'project_id', 'period_id', 'type', 'verification_code', 'certificate_path', 'issued_at', 'updated_at'],
