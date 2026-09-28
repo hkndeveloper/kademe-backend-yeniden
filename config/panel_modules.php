@@ -94,6 +94,7 @@ $modules = [
             'projects.view',
             'projects.content.update',
             'projects.gallery.update',
+            'projects.application_form.update',
             'applications.intake.view',
             'applications.intake.manage',
         ],

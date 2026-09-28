@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\RolePermissionScope;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
+use App\Services\PermissionResolver;
 use App\Support\PanelModuleCatalog;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,6 +109,49 @@ class PanelModuleCatalogTest extends TestCase
         $modules = collect($this->getJson('/api/panel/modules')->assertOk()->json('modules'));
 
         $this->assertFalse($modules->contains(fn (array $module) => $module['id'] === 'periods'));
+    }
+
+    public function test_single_project_manifest_exposes_form_builder_action_only_to_authorized_user(): void
+    {
+        $project = Project::query()->create([
+            'name' => 'Form Builder Project',
+            'slug' => 'form-builder-project',
+            'type' => 'other',
+            'status' => 'active',
+        ]);
+        $role = Role::findOrCreate('scoped_form_builder', 'web');
+        $role->givePermissionTo(['projects.view', 'projects.application_form.update']);
+        foreach (['projects.view', 'projects.application_form.update'] as $permission) {
+            RolePermissionScope::query()->create([
+                'role_name' => $role->name,
+                'permission_name' => $permission,
+                'scope_type' => 'selected_projects',
+                'scope_payload' => ['project_ids' => [$project->id]],
+            ]);
+        }
+
+        $coordinator = User::factory()->create(['role' => 'visitor', 'surname' => 'Coordinator']);
+        $coordinator->assignRole($role);
+        $modules = collect(app(PanelModuleCatalog::class)->visibleFor($coordinator)['modules']);
+        $myProject = $modules->firstWhere('id', 'my_project');
+
+        $this->assertNotNull($myProject);
+        $this->assertNull($modules->firstWhere('id', 'projects'));
+        $this->assertContains('projects.application_form.update', $myProject['enabled_actions']);
+
+        UserPermissionOverride::query()->create([
+            'user_id' => $coordinator->id,
+            'permission_name' => 'projects.application_form.update',
+            'effect' => 'deny',
+            'scope_type' => null,
+            'scope_payload' => [],
+        ]);
+        app(PermissionResolver::class)->flushRequestCache();
+        $deniedModules = collect(app(PanelModuleCatalog::class)->visibleFor($coordinator)['modules']);
+        $this->assertNotContains(
+            'projects.application_form.update',
+            $deniedModules->firstWhere('id', 'my_project')['enabled_actions'],
+        );
     }
 
     public function test_operational_view_permission_exposes_dashboard_module_without_dashboard_specific_permission(): void
