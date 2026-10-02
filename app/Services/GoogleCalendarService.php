@@ -85,7 +85,7 @@ class GoogleCalendarService
         $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
         $this->clearSyncError();
 
-        return $this->resolveFrontendRedirect($panel, 'connected');
+        return $this->resolveFrontendRedirect('connected');
     }
 
     public function syncAllPrograms(): array
@@ -223,18 +223,20 @@ class GoogleCalendarService
         return $token;
     }
 
-    private function resolveFrontendRedirect(string $panel, string $status): string
+    private function resolveFrontendRedirect(string $status): string
     {
-        $configured = config('services.google_calendar.frontend_redirect');
-        $origin = rtrim((string) preg_replace('#(/dashboard)?/(admin|coordinator|staff)/calendar$#', '', (string) $configured), '/');
+        $url = parse_url((string) config('services.google_calendar.frontend_redirect'));
+        abort_unless(
+            is_array($url)
+                && isset($url['scheme'], $url['host'])
+                && in_array($url['scheme'], ['http', 'https'], true),
+            500,
+            'Google Calendar donus adresi gecersiz.'
+        );
 
-        $path = match ($panel) {
-            'staff' => '/staff/calendar',
-            'coordinator' => '/coordinator/calendar',
-            default => '/admin/calendar',
-        };
+        $origin = $url['scheme'].'://'.$url['host'].(isset($url['port']) ? ':'.$url['port'] : '');
 
-        return "{$origin}{$path}?google_calendar={$status}";
+        return "{$origin}/panel/calendar?google_calendar=".rawurlencode($status);
     }
 
     private function calendarEventsBaseUrl(): string
