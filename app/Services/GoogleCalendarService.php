@@ -82,8 +82,6 @@ class GoogleCalendarService
         $this->putSetting('google_calendar_access_token', $payload['access_token'] ?? null);
         $this->putSetting('google_calendar_refresh_token', $payload['refresh_token'] ?? $this->getSetting('google_calendar_refresh_token'));
         $this->putSetting('google_calendar_token_expires_at', now()->addSeconds((int) ($payload['expires_in'] ?? 3600))->toIso8601String());
-        $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
-        $this->clearSyncError();
 
         return $this->resolveFrontendRedirect('connected');
     }

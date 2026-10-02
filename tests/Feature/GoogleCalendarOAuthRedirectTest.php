@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\SystemSetting;
 use App\Services\GoogleCalendarService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -16,6 +17,11 @@ class GoogleCalendarOAuthRedirectTest extends TestCase
         config()->set('services.google_calendar.client_id', 'test-client');
         config()->set('services.google_calendar.client_secret', 'test-secret');
         config()->set('services.google_calendar.redirect_uri', 'http://localhost:8000/google/calendar/callback');
+        SystemSetting::query()->create([
+            'key' => 'google_calendar_last_error',
+            'value' => 'Onceki senkron hatasi',
+            'group' => 'google_calendar',
+        ]);
 
         Http::fake([
             'https://oauth2.googleapis.com/token' => Http::response([
@@ -40,6 +46,13 @@ class GoogleCalendarOAuthRedirectTest extends TestCase
         $this->assertDatabaseHas('system_settings', [
             'key' => 'google_calendar_refresh_token',
             'value' => 'test-refresh-token',
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'key' => 'google_calendar_last_error',
+            'value' => 'Onceki senkron hatasi',
+        ]);
+        $this->assertDatabaseMissing('system_settings', [
+            'key' => 'google_calendar_last_synced_at',
         ]);
     }
 }
