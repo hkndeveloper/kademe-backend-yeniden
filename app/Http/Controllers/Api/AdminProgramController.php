@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * @group Programs & Attendance
@@ -74,7 +75,7 @@ class AdminProgramController extends Controller
         $permission = $this->programViewPermission($request);
         $workMode = $this->programWorkMode($request->user());
         $ctx = $this->resolveProjectPeriodContext($request, $permission, ! empty($v['project_id']) ? (int) $v['project_id'] : null, ! empty($v['period_id']) ? (int) $v['period_id'] : null);
-        $q = Program::query()->with(['project:id,name', 'period:id,name,status', 'managingUnit:id,name', 'publicVisibilityOverride'])->withCount(['attendances', 'feedbacks'])->orderByDesc('start_at');
+        $q = Program::query()->with(['project:id,name', 'period:id,name,status', 'managingUnit:id,name', 'publicVisibilityOverride'])->withCount(['attendances', 'feedbacks'])->orderByDesc('created_at')->orderByDesc('id');
         $this->applyProjectPeriodContext($q, $ctx);
         if ($workMode === 'community_event') {
             $this->communityProgramAccess->constrainToAccessibleEvents($q, $request->user(), $permission);
@@ -188,7 +189,7 @@ class AdminProgramController extends Controller
         $this->abortUnlessAllowed($request, 'programs.export');
         $v = $request->validate(['project_id' => 'nullable|integer|exists:projects,id', 'period_id' => 'nullable|integer|exists:periods,id']);
         $ctx = $this->resolveProjectPeriodContext($request, 'programs.export', ! empty($v['project_id']) ? (int) $v['project_id'] : null, ! empty($v['period_id']) ? (int) $v['period_id'] : null);
-        $q = Program::query()->with(['project:id,name', 'period:id,name,status'])->orderByDesc('start_at');
+        $q = Program::query()->with(['project:id,name', 'period:id,name,status'])->orderByDesc('created_at')->orderByDesc('id');
         $this->applyProjectPeriodContext($q, $ctx);
         $rows = $q->get()->map(fn (Program $p) => [$p->id, $p->project?->name ?? '-', $p->period?->name ?? '-', $p->title, $p->location ?? '-', IstanbulDateTime::format($p->start_at), IstanbulDateTime::format($p->end_at), $p->status, $p->credit_deduction ?? 0])->all();
 
@@ -234,6 +235,9 @@ class AdminProgramController extends Controller
     {
         $v = $this->validatedProgramData($request, true);
         $this->abortUnlessProjectAllowed($request, 'programs.create', (int) $v['project_id']);
+        if ($v['status'] === 'completed') {
+            throw ValidationException::withMessages(['status' => ['Program yalnız Tamamla işlemiyle tamamlanabilir.']]);
+        }
         $this->assertPeriodWritable($request, (int) $v['period_id']);
         $program = Program::query()->create($v + ['created_by' => $request->user()->id]);
         $this->clearPublicHomepageCache();
@@ -271,6 +275,19 @@ class AdminProgramController extends Controller
             'Ortak etkinligin cekirdek program alanlari bu endpoint uzerinden degistirilemez.'
         );
         $v = $this->validatedProgramData($request, false, $program);
+        if ($v['status'] === 'completed' && $program->status !== 'completed') {
+            throw ValidationException::withMessages(['status' => ['Program yalnız Tamamla işlemiyle tamamlanabilir.']]);
+        }
+        if ($program->status === 'completed' && $v['status'] !== 'completed') {
+            throw ValidationException::withMessages(['status' => ['Tamamlanmış programın durumu bu formdan değiştirilemez.']]);
+        }
+        if ($program->status === 'completed') {
+            foreach (['credit_deduction', 'project_id', 'period_id'] as $lockedField) {
+                if (array_key_exists($lockedField, $v) && (int) $v[$lockedField] !== (int) $program->{$lockedField}) {
+                    throw ValidationException::withMessages([$lockedField => ['Tamamlanmış programın kredi ve katılımcı kapsamı değiştirilemez.']]);
+                }
+            }
+        }
         if (array_key_exists('project_id', $v) && (int) $v['project_id'] !== (int) $program->project_id) {
             $this->abortUnlessProjectAllowed($request, 'programs.update', (int) $v['project_id']);
         }
@@ -405,6 +422,9 @@ class AdminProgramController extends Controller
         if (! $program->isAttendanceWindowOpen()) {
             throw ValidationException::withMessages(['start_at' => ['QR yoklama sadece program saat araliginda baslatilabilir.']])->status(422);
         }
+        if (! $program->hasAttendanceLocation()) {
+            throw ValidationException::withMessages(['latitude' => ['QR yoklama icin program konumu ve koordinatlari tanimlanmalidir.']])->status(422);
+        }
         $rotation = (int) ($v['rotation_seconds'] ?? $program->qr_rotation_seconds ?? 30);
         $token = 'prg_'.$program->id.'_'.Str::random(48);
         $expiresAt = now()->addSeconds($rotation);
@@ -464,7 +484,7 @@ class AdminProgramController extends Controller
     /**
      * List program attendance details.
      *
-     * Requires permission: `programs.attendance.view` for the program project. Returns participant attendance status, feedback state and credit impact summary for the selected program.
+     * Requires permission: `programs.attendance.view` for the program project. Returns participant attendance status, feedback state, credit impact and a 24-hour aggregate QR review for the selected program.
      *
      * @authenticated
      *
@@ -490,10 +510,36 @@ class AdminProgramController extends Controller
                 'feedback_count' => Feedback::query()->where('program_id', $program->id)->count(),
                 'deduction_count' => CreditLog::query()->where('program_id', $program->id)->where('type', 'deduction')->count(),
                 'restore_count' => CreditLog::query()->where('program_id', $program->id)->where(fn ($q) => $q->where('type', 'restore')->orWhere('amount', '>', 0))->count(),
+                'qr_review' => $this->qrReviewSummary($program),
             ];
         }
 
         return response()->json(['program' => ['id' => $program->id, 'title' => $program->title, 'project' => $program->project?->name, 'period' => $program->period?->name], 'summary' => $summary, 'records' => $records]);
+    }
+
+    private function qrReviewSummary(Program $program): array
+    {
+        $attempts = Activity::query()
+            ->where('event', 'attendance.qr.attempt')
+            ->where('subject_type', $program->getMorphClass())
+            ->where('subject_id', $program->id)
+            ->where('created_at', '>=', now()->subDay());
+        $outsideAttempts = (clone $attempts)
+            ->where('properties->domain->location_check', 'outside_radius');
+
+        return [
+            'window_hours' => 24,
+            'outside_radius_attempts' => (clone $outsideAttempts)->count(),
+            'repeat_outside_radius_users' => (clone $outsideAttempts)
+                ->whereNotNull('causer_id')
+                ->select('causer_id')
+                ->groupBy('causer_id')
+                ->havingRaw('COUNT(*) >= 3')
+                ->get()
+                ->count(),
+            'accuracy_reported_attempts' => (clone $attempts)->whereIn('properties->domain->accuracy_bucket', ['within_radius', 'over_radius'])->count(),
+            'reported_low_accuracy_attempts' => (clone $attempts)->where('properties->domain->accuracy_bucket', 'over_radius')->count(),
+        ];
     }
 
     /**
@@ -1006,7 +1052,7 @@ class AdminProgramController extends Controller
 
     private function programPayload(Program $p, ?User $user = null, ?string $workMode = null): array
     {
-        $base = ['id' => $p->id, 'program_kind' => $p->program_kind ?: Program::KIND_CORE_PROGRAM, 'managing_unit' => $p->managingUnit ? ['id' => $p->managingUnit->id, 'name' => $p->managingUnit->name] : null, 'title' => $p->title, 'description' => $p->description, 'location' => $p->location, 'location_place_name' => $p->location_place_name, 'location_place_address' => $p->location_place_address, 'location_place_id' => $p->location_place_id, 'location_place_provider' => $p->location_place_provider, 'latitude' => $p->latitude, 'longitude' => $p->longitude, 'radius_meters' => $p->radius_meters, 'guest_info' => $p->guest_info, 'start_at' => optional($p->start_at)?->toIso8601String(), 'end_at' => optional($p->end_at)?->toIso8601String(), 'target_audience' => $p->targetAudience(), 'status' => $p->status, 'project_id' => $p->project_id, 'project' => $p->project ? ['id' => $p->project->id, 'name' => $p->project->name] : null, 'period' => $p->period ? ['id' => $p->period->id, 'name' => $p->period->name, 'status' => $p->period->status, 'lifecycle' => ['is_archive_mode' => PeriodLifecycleService::isArchiveStatus($p->period->status), 'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($p->period->status)]] : null, 'attendance_count' => $p->attendances_count ?? null];
+        $base = ['id' => $p->id, 'program_kind' => $p->program_kind ?: Program::KIND_CORE_PROGRAM, 'managing_unit' => $p->managingUnit ? ['id' => $p->managingUnit->id, 'name' => $p->managingUnit->name] : null, 'title' => $p->title, 'description' => $p->description, 'location' => $p->location, 'location_place_name' => $p->location_place_name, 'location_place_address' => $p->location_place_address, 'location_place_id' => $p->location_place_id, 'location_place_provider' => $p->location_place_provider, 'latitude' => $p->latitude, 'longitude' => $p->longitude, 'radius_meters' => $p->radius_meters, 'guest_info' => $p->guest_info, 'created_at' => optional($p->created_at)?->toIso8601String(), 'start_at' => optional($p->start_at)?->toIso8601String(), 'end_at' => optional($p->end_at)?->toIso8601String(), 'target_audience' => $p->targetAudience(), 'status' => $p->status, 'project_id' => $p->project_id, 'project' => $p->project ? ['id' => $p->project->id, 'name' => $p->project->name] : null, 'period' => $p->period ? ['id' => $p->period->id, 'name' => $p->period->name, 'status' => $p->period->status, 'lifecycle' => ['is_archive_mode' => PeriodLifecycleService::isArchiveStatus($p->period->status), 'write_capabilities' => PeriodLifecycleService::writeCapabilitiesForStatus($p->period->status)]] : null, 'attendance_count' => $p->attendances_count ?? null];
         if ($user === null) {
             return $base + ['credit_deduction' => $p->credit_deduction, 'application_quota' => $p->application_quota, 'feedback_form_template_id' => $p->feedback_form_template_id, 'feedback_count' => $p->feedbacks_count ?? null, 'is_public' => $p->effectivePublicVisibility(), 'is_featured' => (bool) $p->is_featured, 'questions' => FeedbackFormResolver::forProgram($p)];
         }

@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 /**
@@ -257,7 +258,7 @@ class StudentDashboardController extends Controller
                 'issuer' => $certificate->issuer,
                 'project' => $certificate->project?->name,
                 'period' => $certificate->period?->name,
-                'verification_code' => $certificate->verification_code,
+                'verification_code' => $certificate->source === 'student_upload' ? null : $certificate->verification_code,
                 'issued_at' => optional($certificate->issued_at)?->toIso8601String(),
                 'included_in_cv' => (bool) $certificate->included_in_cv,
                 'source' => $certificate->source,
@@ -314,7 +315,7 @@ class StudentDashboardController extends Controller
             'form.projects' => 'nullable|array|max:50',
             'form.certificates' => 'nullable|array|max:50',
             'form.certificateIds' => 'nullable|array|max:100',
-            'form.certificateIds.*' => 'integer|exists:certificates,id',
+            'form.certificateIds.*' => ['integer', Rule::exists('certificates', 'id')->where('user_id', $request->user()->id)],
             'form.experience.*.id' => 'nullable|string|max:120',
             'form.experience.*.title' => 'required|string|max:255',
             'form.experience.*.subtitle' => 'required|string|max:255',
@@ -372,24 +373,37 @@ class StudentDashboardController extends Controller
     {
         $validated = $request->validate([
             'form' => 'required|array',
-            'approved' => 'nullable|array',
-            'projects' => 'nullable|array',
-            'badges' => 'nullable|array',
-            'certificates' => 'nullable|array',
-            'credit_history' => 'nullable|array',
+            'form.certificateIds' => 'nullable|array|max:100',
+            'form.certificateIds.*' => ['integer', Rule::exists('certificates', 'id')->where('user_id', $request->user()->id)],
         ]);
 
         $form = $validated['form'];
+        $certificateIds = array_values(array_unique($form['certificateIds'] ?? []));
+        $certificates = Certificate::query()
+            ->with(['project:id,name', 'period:id,name'])
+            ->where('user_id', $request->user()->id)
+            ->whereIn('id', $certificateIds)
+            ->get()
+            ->sortBy(fn (Certificate $certificate) => array_search($certificate->id, $certificateIds, true))
+            ->map(fn (Certificate $certificate) => [
+                'title' => $certificate->title,
+                'type' => $certificate->type,
+                'issuer' => $certificate->issuer,
+                'project' => $certificate->project?->name,
+                'period' => $certificate->period?->name,
+                'verification_code' => $certificate->source === 'student_upload' ? null : $certificate->verification_code,
+                'source' => $certificate->source,
+            ])->values()->all();
         $fullName = trim((string) ($form['fullName'] ?? 'KADEME Dijital CV')) ?: 'KADEME Dijital CV';
         $fileName = str($fullName)->lower()->replaceMatches('/[^a-z0-9]+/i', '-')->trim('-')->value() ?: 'kademe-dijital-cv';
 
         $pdf = Pdf::loadView('pdf.digital-cv', [
             'form' => $form,
-            'approved' => $validated['approved'] ?? [],
-            'projects' => $validated['projects'] ?? [],
-            'badges' => $validated['badges'] ?? [],
-            'certificates' => $validated['certificates'] ?? [],
-            'creditHistory' => $validated['credit_history'] ?? [],
+            'approved' => [],
+            'projects' => [],
+            'badges' => [],
+            'certificates' => $certificates,
+            'creditHistory' => [],
             'generatedAt' => now()->format('d.m.Y H:i'),
         ])->setPaper('a4');
 

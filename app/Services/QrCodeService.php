@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PeriodWriteAction;
 use App\Models\Program;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class QrCodeService
 {
@@ -24,6 +25,10 @@ class QrCodeService
                 $program->period,
                 PeriodWriteAction::RESOLVE_OPERATION,
             );
+        }
+
+        if (! $program->hasAttendanceLocation()) {
+            throw ValidationException::withMessages(['latitude' => ['QR yoklama icin program konumu ve koordinatlari tanimlanmalidir.']]);
         }
 
         $qrToken = 'prg_' . $program->id . '_' . Str::random(40);
@@ -55,8 +60,8 @@ class QrCodeService
      */
     public function validateLocation(Program $program, $userLat, $userLng): bool
     {
-        if (!$program->latitude || !$program->longitude || !$userLat || !$userLng) {
-            return true; // Lokasyon bilgisi eksikse varsayılan olarak doğru kabul et
+        if (! $program->hasAttendanceLocation() || $userLat === null || $userLng === null) {
+            return false;
         }
 
         $distance = $this->calculateHaversineDistance(

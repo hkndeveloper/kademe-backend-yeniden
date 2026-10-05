@@ -544,6 +544,13 @@ class AdminApplicationController extends Controller
 
         return response()->json([
             'applications' => $applications,
+            'waitlist_automation' => [
+                'schedule_enabled' => (bool) config('application_waitlist.auto_schedule_enabled', false),
+                'pilot_project_ids' => array_values(array_intersect(
+                    array_map('intval', config('application_waitlist.auto_project_ids', [])),
+                    $context->projectIdsForQuery()
+                )),
+            ],
         ]);
     }
 

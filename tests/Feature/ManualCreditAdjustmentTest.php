@@ -7,6 +7,7 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\RolePermissionScope;
+use App\Models\SystemNotification;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -57,6 +58,30 @@ class ManualCreditAdjustmentTest extends TestCase
             'reason' => 'Aylik manuel kredi guncellemesi',
             'created_by' => $actor->id,
         ]);
+    }
+
+    public function test_negative_manual_adjustment_runs_threshold_and_blacklist_rules_once(): void
+    {
+        config()->set('services.resend.key', '');
+        $project = $this->project('credit-threshold-project');
+        $period = $this->period($project);
+        $participant = $this->participant($project, $period, 100);
+        $this->actorWithParticipantManageAccess($project);
+
+        foreach ([-30, -5, -40] as $amount) {
+            $this->postJson('/api/panel/credits/adjust', [
+                'participant_id' => $participant->id,
+                'amount' => $amount,
+                'reason' => 'Manuel kredi duzeltmesi',
+            ])->assertOk();
+        }
+
+        $this->assertSame(25, (int) $participant->fresh()->credit);
+        $this->assertSame(1, SystemNotification::query()->where('user_id', $participant->user_id)->where('type', 'credit_low')->count());
+        $this->assertSame(1, SystemNotification::query()->where('user_id', $participant->user_id)->where('type', 'blacklist')->count());
+        $this->assertSame('blacklisted', $participant->user->fresh()->status);
+        $this->assertSame(3, CreditLog::query()->where('participant_id', $participant->id)->where('type', 'manual_adjust')->count());
+        $this->assertSame(0, CreditLog::query()->where('participant_id', $participant->id)->where('type', 'deduction')->count());
     }
 
     public function test_panel_credit_adjustment_rejects_unmanageable_project_participant(): void

@@ -107,7 +107,7 @@ class ApplicationAudienceSafetyTest extends TestCase
         ])->assertCreated();
     }
 
-    public function test_new_project_submission_only_blocks_an_overlapping_active_project_period(): void
+    public function test_new_project_submission_blocks_an_overlapping_enrolled_project_period(): void
     {
         [$project, , $program] = $this->scope();
         $otherProject = Project::query()->create([
@@ -136,6 +136,58 @@ class ApplicationAudienceSafetyTest extends TestCase
         ]);
         Sanctum::actingAs($overlapStudent);
         $this->submit($project, $program)->assertUnprocessable()->assertJsonValidationErrors('project_id');
+        $this->assertDatabaseCount('applications', 1);
+    }
+
+    public function test_completed_graduated_and_failed_participations_still_block_overlapping_applications(): void
+    {
+        [$project, $period, $program] = $this->scope();
+        $otherProject = Project::query()->create([
+            'name' => 'Earlier project', 'slug' => 'earlier-project', 'type' => 'other', 'status' => 'active',
+        ]);
+        $overlapPeriod = Period::query()->create([
+            'project_id' => $otherProject->id, 'name' => 'Different name and duration', 'status' => 'completed',
+            'start_date' => $period->start_date->subMonths(4), 'end_date' => $period->start_date,
+        ]);
+
+        foreach (['passive', 'graduated', 'failed'] as $status) {
+            $student = $this->user('student');
+            Participant::query()->create([
+                'user_id' => $student->id, 'project_id' => $otherProject->id,
+                'period_id' => $overlapPeriod->id, 'status' => $status, 'credit' => 100,
+            ]);
+            Sanctum::actingAs($student);
+            $this->submit($project, $program)->assertUnprocessable()->assertJsonValidationErrors('project_id');
+        }
+
+        $this->assertDatabaseCount('applications', 0);
+    }
+
+    public function test_adjacent_project_period_and_waitlist_record_do_not_block_application(): void
+    {
+        [$project, $period, $program] = $this->scope();
+        $otherProject = Project::query()->create([
+            'name' => 'Previous project', 'slug' => 'previous-project', 'type' => 'other', 'status' => 'active',
+        ]);
+        $pastPeriod = Period::query()->create([
+            'project_id' => $otherProject->id, 'name' => 'Previous', 'status' => 'completed',
+            'start_date' => $period->start_date->subMonths(4),
+            'end_date' => $period->start_date->subDay(),
+        ]);
+        $waitlistPeriod = Period::query()->create([
+            'project_id' => $otherProject->id, 'name' => 'Waiting', 'status' => 'planned',
+            'start_date' => $period->start_date, 'end_date' => $period->end_date,
+        ]);
+        $student = $this->user('student');
+        foreach ([[$pastPeriod, 'graduated'], [$waitlistPeriod, 'waitlist']] as [$otherPeriod, $status]) {
+            Participant::query()->create([
+                'user_id' => $student->id, 'project_id' => $otherProject->id,
+                'period_id' => $otherPeriod->id, 'status' => $status, 'credit' => 100,
+            ]);
+        }
+
+        Sanctum::actingAs($student);
+        $this->submit($project, $program)->assertCreated();
         $this->assertDatabaseCount('applications', 1);
     }
 

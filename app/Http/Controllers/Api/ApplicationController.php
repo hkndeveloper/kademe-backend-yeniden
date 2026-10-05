@@ -255,7 +255,7 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $this->projectPeriodGuard->assertNoOverlappingActiveProject($user->id, $project->id, $currentPeriod, 'project_id');
+        $this->projectPeriodGuard->assertNoOverlappingProjectParticipation($user->id, $project->id, $currentPeriod, 'project_id');
 
         $applicationWindow = $this->intakeService->windowFor($project, $currentPeriod);
         if (! $this->intakeService->isOpen($project, $currentPeriod, $applicationWindow)) {

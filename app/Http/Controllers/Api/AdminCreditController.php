@@ -5,11 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\AuthorizesGranularPermissions;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
-use App\Models\CreditLog;
 use App\Models\Participant;
+use App\Services\CreditService;
 use App\Services\PermissionResolver;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 /**
  * @group Credits & Rewards
@@ -20,7 +19,8 @@ class AdminCreditController extends Controller
     use ResolvesProjectPeriodContext;
 
     public function __construct(
-        private readonly PermissionResolver $permissionResolver
+        private readonly PermissionResolver $permissionResolver,
+        private readonly CreditService $creditService,
     ) {
     }
 
@@ -50,35 +50,19 @@ class AdminCreditController extends Controller
         );
         $this->assertPeriodResolvable($request, $participant->period_id);
 
-        DB::beginTransaction();
-        try {
-            $log = CreditLog::create([
-                'participant_id' => $participant->id,
-                'user_id' => $participant->user_id,
-                'project_id' => $participant->project_id,
-                'period_id' => $participant->period_id,
-                'amount' => $validated['amount'],
-                'type' => 'manual_adjust',
-                'reason' => $validated['reason'],
-                'created_by' => $request->user()->id,
-            ]);
+        $log = $this->creditService->adjustManually(
+            $participant,
+            (int) $validated['amount'],
+            $validated['reason'],
+            $request->user()->id
+        );
+        $log->load('creator:id,name,surname');
 
-            $participant->increment('credit', $validated['amount']);
-            $participant->refresh();
-            $log->load('creator:id,name,surname');
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'Kredi basariyla guncellendi.',
-                'current_credit' => (int) $participant->credit,
-                'log' => $log,
-            ]);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return response()->json(['message' => 'Bir hata olustu.'], 500);
-        }
+        return response()->json([
+            'message' => 'Kredi basariyla guncellendi.',
+            'current_credit' => (int) $participant->fresh()->credit,
+            'log' => $log,
+        ]);
     }
 
     /**

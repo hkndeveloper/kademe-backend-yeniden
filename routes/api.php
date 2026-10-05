@@ -25,9 +25,11 @@ use App\Http\Controllers\Api\FeedbackFormTemplateController;
 use App\Http\Controllers\Api\FinancialTransactionController;
 use App\Http\Controllers\Api\ForumController;
 use App\Http\Controllers\Api\InboxController;
+use App\Http\Controllers\Api\DirectMessageController;
 use App\Http\Controllers\Api\MediaUploadController;
 use App\Http\Controllers\Api\MotivationController;
 use App\Http\Controllers\Api\NewsletterController;
+use App\Http\Controllers\Api\OperationsStatusController;
 use App\Http\Controllers\Api\PanelModuleController;
 use App\Http\Controllers\Api\PeriodController;
 use App\Http\Controllers\Api\PermissionMatrixController;
@@ -169,12 +171,19 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::post('/forum/posts/{postId}/replies', [ForumController::class, 'reply'])->middleware('scoped.permission:participant.forum.view');
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages'])->middleware('scoped.permission:participant.inbox.view');
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState'])->middleware('scoped.permission:participant.inbox.view');
+    Route::get('/inbox/direct/recipients', [DirectMessageController::class, 'recipients'])->middleware('scoped.permission:participant.inbox.view');
+    Route::get('/inbox/direct/threads', [DirectMessageController::class, 'index'])->middleware('scoped.permission:participant.inbox.view');
+    Route::post('/inbox/direct/threads', [DirectMessageController::class, 'store'])->middleware(['scoped.permission:participant.inbox.view', 'throttle:10,1']);
+    Route::get('/inbox/direct/threads/{id}', [DirectMessageController::class, 'show'])->middleware('scoped.permission:participant.inbox.view');
+    Route::post('/inbox/direct/threads/{id}/replies', [DirectMessageController::class, 'reply'])->middleware(['scoped.permission:participant.inbox.view', 'throttle:20,1']);
+    Route::get('/inbox/direct/threads/{id}/messages/{messageId}/attachment', [DirectMessageController::class, 'attachment'])->middleware('scoped.permission:participant.inbox.view');
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
     Route::post('/social-sharing/post', [SocialSharingController::class, 'post'])->middleware('scoped.permission:participant.profile.manage');
 
     Route::get('/digital-bohca', [DigitalBohcaController::class, 'index'])->middleware('scoped.permission:participant.bohca.view');
     Route::get('/digital-bohca/{id}/download', [DigitalBohcaController::class, 'download'])->middleware('scoped.permission:participant.bohca.view');
     Route::get('/certificates', [CertificateController::class, 'index'])->middleware('scoped.permission:participant.certificates.view');
+    Route::get('/certificates/mine/{id}/download', [CertificateController::class, 'downloadMine'])->middleware('scoped.permission:participant.certificates.view');
     Route::post('/certificates', [CertificateController::class, 'store'])->middleware('scoped.permission:participant.certificates.view');
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->middleware('scoped.permission:participant.feedback.create');
     Route::post('/feedbacks', [FeedbackController::class, 'store'])->middleware('scoped.permission:participant.feedback.create');
@@ -211,6 +220,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     // Dashboard ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°statistikleri
     Route::get('/dashboard/stats', [AdminDashboardController::class, 'stats']);
     Route::get('/dashboard/activity-logs', [AdminDashboardController::class, 'activityLogs']);
+    Route::get('/dashboard/operations-status', [OperationsStatusController::class, 'index']);
     Route::get('/dashboard/activity-logs/export', [AdminDashboardController::class, 'exportActivityLogs']);
     Route::get('/dashboard/credit-risk/export', [AdminDashboardController::class, 'exportCreditRisk']);
 
@@ -354,11 +364,14 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/financials', [FinancialTransactionController::class, 'index']);
     Route::post('/financials', [FinancialTransactionController::class, 'store']);
     Route::get('/financials/{id}', [FinancialTransactionController::class, 'show']);
+    Route::put('/financials/{id}', [FinancialTransactionController::class, 'update']);
     Route::put('/financials/{id}/approve', [FinancialTransactionController::class, 'approve']);
     Route::put('/financials/{id}/reject', [FinancialTransactionController::class, 'reject']);
     Route::put('/financials/{id}/pay', [FinancialTransactionController::class, 'markPaid']);
     Route::delete('/financials/{id}', [FinancialTransactionController::class, 'destroy']);
     Route::get('/financials/{id}/invoice', [FinancialTransactionController::class, 'downloadInvoice']);
+    Route::get('/financials/{id}/invoice-revisions', [FinancialTransactionController::class, 'invoiceRevisions']);
+    Route::get('/financials/{id}/invoice-revisions/{revisionId}/download', [FinancialTransactionController::class, 'downloadInvoiceRevision']);
 
     // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PERSONEL YÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“NETÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°MÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
     Route::get('/staff/export', [StaffController::class, 'export']);
@@ -394,7 +407,14 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    Route::get('/inbox/direct/recipients', [DirectMessageController::class, 'recipients']);
+    Route::get('/inbox/direct/threads', [DirectMessageController::class, 'index']);
+    Route::post('/inbox/direct/threads', [DirectMessageController::class, 'store'])->middleware('throttle:10,1');
+    Route::get('/inbox/direct/threads/{id}', [DirectMessageController::class, 'show']);
+    Route::post('/inbox/direct/threads/{id}/replies', [DirectMessageController::class, 'reply'])->middleware('throttle:20,1');
+    Route::get('/inbox/direct/threads/{id}/messages/{messageId}/attachment', [DirectMessageController::class, 'attachment']);
     Route::get('/forum/posts', [ForumController::class, 'panelIndex']);
+    Route::put('/forum/posts/{postId}/pin', [ForumController::class, 'setPinned'])->whereNumber('postId');
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
     Route::post('/social-sharing/post', [SocialSharingController::class, 'post']);
 
@@ -595,6 +615,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/calendar/overview', [CalendarController::class, 'overview']);
     Route::get('/calendar/assignees', [CalendarController::class, 'assignees']);
     Route::get('/calendar/google/status', [CalendarController::class, 'googleStatus']);
+    Route::get('/calendar/google/external-events', [CalendarController::class, 'googleExternalEvents']);
     Route::get('/calendar/google/connect', [CalendarController::class, 'googleConnect']);
     Route::post('/calendar/google/sync', [CalendarController::class, 'googleSync']);
     Route::get('/calendar/export', [CalendarController::class, 'export']);
@@ -605,6 +626,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     // Dashboard
     Route::get('/dashboard/stats', [AdminDashboardController::class, 'stats']);
     Route::get('/dashboard/activity-logs', [AdminDashboardController::class, 'activityLogs']);
+    Route::get('/dashboard/operations-status', [OperationsStatusController::class, 'index']);
     Route::get('/dashboard/activity-logs/export', [AdminDashboardController::class, 'exportActivityLogs']);
     Route::get('/dashboard/credit-risk/export', [AdminDashboardController::class, 'exportCreditRisk']);
 
@@ -629,7 +651,14 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::get('/inbox/messages', [InboxController::class, 'recipientMessages']);
     Route::put('/inbox/messages/state', [InboxController::class, 'upsertState']);
+    Route::get('/inbox/direct/recipients', [DirectMessageController::class, 'recipients']);
+    Route::get('/inbox/direct/threads', [DirectMessageController::class, 'index']);
+    Route::post('/inbox/direct/threads', [DirectMessageController::class, 'store'])->middleware('throttle:10,1');
+    Route::get('/inbox/direct/threads/{id}', [DirectMessageController::class, 'show']);
+    Route::post('/inbox/direct/threads/{id}/replies', [DirectMessageController::class, 'reply'])->middleware('throttle:20,1');
+    Route::get('/inbox/direct/threads/{id}/messages/{messageId}/attachment', [DirectMessageController::class, 'attachment']);
     Route::get('/forum/posts', [ForumController::class, 'panelIndex']);
+    Route::put('/forum/posts/{postId}/pin', [ForumController::class, 'setPinned'])->whereNumber('postId');
     // -- SOSYAL MEDYA PAYLASIM WEBHOOK
     Route::post('/social-sharing/post', [SocialSharingController::class, 'post']);
 
@@ -748,11 +777,14 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/financials', [FinancialTransactionController::class, 'index']);
     Route::post('/financials', [FinancialTransactionController::class, 'store']);
     Route::get('/financials/{id}', [FinancialTransactionController::class, 'show']);
+    Route::put('/financials/{id}', [FinancialTransactionController::class, 'update']);
     Route::put('/financials/{id}/approve', [FinancialTransactionController::class, 'approve']);
     Route::put('/financials/{id}/reject', [FinancialTransactionController::class, 'reject']);
     Route::put('/financials/{id}/pay', [FinancialTransactionController::class, 'markPaid']);
     Route::delete('/financials/{id}', [FinancialTransactionController::class, 'destroy']);
     Route::get('/financials/{id}/invoice', [FinancialTransactionController::class, 'downloadInvoice']);
+    Route::get('/financials/{id}/invoice-revisions', [FinancialTransactionController::class, 'invoiceRevisions']);
+    Route::get('/financials/{id}/invoice-revisions/{revisionId}/download', [FinancialTransactionController::class, 'downloadInvoiceRevision']);
 
     // Unified aliases for role-specific pages under /panel/*
     Route::get('/participants', [CoordinatorParticipantController::class, 'index']);
@@ -805,6 +837,7 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
     Route::get('/overview', [CalendarController::class, 'overview']);
     Route::get('/assignees', [CalendarController::class, 'assignees']);
     Route::get('/google/status', [CalendarController::class, 'googleStatus']);
+    Route::get('/google/external-events', [CalendarController::class, 'googleExternalEvents']);
     Route::get('/google/connect', [CalendarController::class, 'googleConnect']);
     Route::post('/google/sync', [CalendarController::class, 'googleSync']);
     Route::post('/meetings', [CalendarController::class, 'storeMeeting']);

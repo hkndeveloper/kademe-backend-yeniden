@@ -305,7 +305,7 @@ class AnnouncementController extends Controller
                 $q->whereNull('expires_at')
                     ->orWhere('expires_at', '>=', now());
             })
-            ->latest();
+            ->latest()->orderByDesc('id');
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -380,7 +380,7 @@ class AnnouncementController extends Controller
                 $q->whereNull('expires_at')
                     ->orWhere('expires_at', '>=', now());
             })
-            ->latest();
+            ->latest()->orderByDesc('id');
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -420,7 +420,7 @@ class AnnouncementController extends Controller
                 $q->whereNull('expires_at')
                     ->orWhere('expires_at', '>=', now());
             })
-            ->latest();
+            ->latest()->orderByDesc('id');
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -472,7 +472,7 @@ class AnnouncementController extends Controller
             'period_id' => 'nullable|integer|exists:periods,id',
         ]);
         $periodId = $this->resolveAnnouncementPeriod($request, $validated, 'announcements.view');
-        $query = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->latest();
+        $query = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->latest()->orderByDesc('id');
         $query = $this->scopeManageableAnnouncements($request, $query, 'announcements.view');
 
         if (! empty($validated['category'])) {
@@ -512,7 +512,7 @@ class AnnouncementController extends Controller
             'period_id' => 'nullable|integer|exists:periods,id',
         ]);
         $periodId = $this->resolveAnnouncementPeriod($request, $validated, 'announcements.export');
-        $query = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->latest();
+        $query = Announcement::with(['project:id,name', 'period:id,name,status', 'creator:id,name,surname'])->latest()->orderByDesc('id');
         $query = $this->scopeManageableAnnouncements($request, $query, 'announcements.export');
 
         if (! empty($validated['category'])) {
@@ -913,7 +913,7 @@ class AnnouncementController extends Controller
         $query = CommunicationLog::query()
             ->with(['sender:id,name,surname,role', 'project:id,name'])
             ->whereIn('type', ['email', 'sms'])
-            ->latest();
+            ->latest()->orderByDesc('id');
 
         $query = $this->scopeCommunicationLogs($request, $query, 'announcements.view');
 
@@ -994,7 +994,7 @@ class AnnouncementController extends Controller
         $query = CommunicationLog::query()
             ->with(['sender:id,name,surname,role', 'project:id,name'])
             ->whereIn('type', ['email', 'sms'])
-            ->latest();
+            ->latest()->orderByDesc('id');
 
         $query = $this->scopeCommunicationLogs($request, $query, 'announcements.view');
 

@@ -2,6 +2,7 @@
 
 use App\Jobs\RotateQrTokenJob;
 use App\Models\ApplicationEmailVerification;
+use App\Models\SystemSetting;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -13,6 +14,12 @@ Artisan::command('inspire', function () {
 // --- KADEME OTOMASYON GÖREVLERİ --- //
 // QR Kod Rotasyonu: Ekran görüntüsü hilesine karşı 30-60 saniyede bir tetiklenir (Cron en sık dakikada bir çalışır, içeriğinde detaylı loop kurulabilir veya supervisor ile daemon olarak yönetilebilir)
 Schedule::job(new RotateQrTokenJob)->everyMinute();
+
+// The timestamp proves schedule:run reached the database; it does not claim that other jobs succeeded.
+Schedule::call(fn () => SystemSetting::query()->updateOrCreate(
+    ['key' => 'operations_scheduler_last_tick_at'],
+    ['value' => now()->toIso8601String(), 'group' => 'operations'],
+))->everyMinute();
 
 // Dönemlik Kredi Reset: Her gün gece yarısı, bugün başlayan dönemlerin katılımcı kredilerini resetler.
 Schedule::command('kademe:reset-period-credits')->dailyAt('00:05');

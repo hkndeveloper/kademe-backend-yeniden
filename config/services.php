@@ -50,8 +50,9 @@ return [
         'client_id' => env('GOOGLE_CALENDAR_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CALENDAR_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_CALENDAR_REDIRECT_URI'),
-        'frontend_redirect' => env('GOOGLE_CALENDAR_FRONTEND_REDIRECT', 'http://localhost:3000/admin/calendar'),
+        'frontend_redirect' => env('GOOGLE_CALENDAR_FRONTEND_REDIRECT', 'http://localhost:3000/panel/calendar'),
         'calendar_id' => env('GOOGLE_CALENDAR_ID'),
+        'external_read_enabled' => (bool) env('GOOGLE_CALENDAR_EXTERNAL_READ_ENABLED', false),
     ],
 
 ];

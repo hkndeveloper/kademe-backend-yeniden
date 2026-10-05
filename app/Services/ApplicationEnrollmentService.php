@@ -34,7 +34,7 @@ class ApplicationEnrollmentService
             ]);
         }
 
-        $this->projectPeriodGuard->assertNoOverlappingActiveProject(
+        $this->projectPeriodGuard->assertNoOverlappingProjectParticipation(
             $application->user_id,
             $application->project_id,
             $application->period,

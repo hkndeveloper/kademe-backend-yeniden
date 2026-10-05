@@ -96,6 +96,7 @@ class CertificateController extends Controller
     {
         $certificate = Certificate::with(['project:id,name,slug', 'period:id,name', 'user:id,name,surname'])
             ->where('verification_code', $verificationCode)
+            ->where('source', '!=', 'student_upload')
             ->firstOrFail();
 
         return response()->json([
@@ -126,13 +127,28 @@ class CertificateController extends Controller
     {
         $certificate = Certificate::query()
             ->where('verification_code', $verificationCode)
+            ->where('source', '!=', 'student_upload')
             ->firstOrFail();
 
+        return $this->streamCertificate($certificate);
+    }
+
+    public function downloadMine(Request $request, int $id): JsonResponse|StreamedResponse
+    {
+        $certificate = Certificate::query()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        return $this->streamCertificate($certificate);
+    }
+
+    private function streamCertificate(Certificate $certificate): JsonResponse|StreamedResponse
+    {
         if (! $certificate->certificate_path) {
             return response()->json(['message' => 'Sertifika dosyasi bulunamadi.'], 404);
         }
 
-        if (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured()) {
+        if ($certificate->source !== 'student_upload' && MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured()) {
             return response()->json([
                 'download_url' => MediaStorage::url($certificate->certificate_path),
             ]);

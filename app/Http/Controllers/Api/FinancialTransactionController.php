@@ -20,6 +20,7 @@ use App\Support\ProjectPeriodContext;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -197,7 +198,7 @@ class FinancialTransactionController extends Controller
         return $transaction;
     }
 
-    private function attachFinancialAudit(Request $request, FinancialTransaction $transaction, string $operation, ?string $statusBefore = null): void
+    private function attachFinancialAudit(Request $request, FinancialTransaction $transaction, string $operation, ?string $statusBefore = null, array $details = []): void
     {
         $request->attributes->set('audit.subject', $transaction);
         $request->attributes->set('audit.event', 'financial.'.$operation);
@@ -222,6 +223,7 @@ class FinancialTransactionController extends Controller
             'submitted_by' => $transaction->submitted_by,
             'approved_by' => $transaction->approved_by,
             'invoice_present' => ! empty($transaction->invoice_path),
+            ...$details,
         ]);
     }
 
@@ -261,7 +263,7 @@ class FinancialTransactionController extends Controller
             ! empty($validated['project_id']) ? (int) $validated['project_id'] : null,
             ! empty($validated['period_id']) ? (int) $validated['period_id'] : null,
         );
-        $query = FinancialTransaction::with([
+        $query = FinancialTransaction::withCount('invoiceRevisions')->with([
             'project:id,name',
             'period:id,name',
             'processingUnit:id,code,name',
@@ -273,7 +275,7 @@ class FinancialTransactionController extends Controller
 
         $this->applyFinancialFilters($query, $request, false);
 
-        $transactions = $query->latest('submitted_at')->paginate(20);
+        $transactions = $query->latest('submitted_at')->orderByDesc('id')->paginate(20);
         $transactions->getCollection()->transform(
             fn (FinancialTransaction $transaction) => $this->appendFinancialCapabilities($transaction, $user)
         );
@@ -439,6 +441,118 @@ class FinancialTransactionController extends Controller
     }
 
     /**
+     * Update the editable fields of a pending transaction. Project, period, type,
+     * submitter, processing unit, approval and payment state remain immutable.
+     * Replaced invoices are retained as scoped, downloadable revisions.
+     *
+     * @group Financials
+     * @authenticated
+     * @urlParam id integer required Financial transaction id. Example: 1
+     * @response 200 {"message":"Bekleyen mali kayit guncellendi.","transaction":{"id":1,"status":"pending"}}
+     * @response 422 {"message":"Yalniz bekleyen mali kayitlar duzenlenebilir."}
+     */
+    public function update(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'financial.update');
+        $validated = $request->validate([
+            'category' => 'sometimes|required|string|max:80',
+            'category_note' => 'sometimes|nullable|string|max:500',
+            'spending_unit' => 'sometimes|nullable|string|max:150',
+            'payee_name' => 'sometimes|required|string|max:255',
+            'amount' => 'sometimes|required|numeric|min:0.01',
+            'invoice_no' => 'sometimes|nullable|string|max:100',
+            'invoice' => 'sometimes|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'project_id' => 'missing',
+            'period_id' => 'missing',
+            'processing_unit_id' => 'missing',
+            'type' => 'missing',
+            'status' => 'missing',
+            'payment_date' => 'missing',
+            'payment_method' => 'missing',
+            'accounting_code' => 'missing',
+            'submitted_by' => 'missing',
+            'approved_by' => 'missing',
+        ]);
+        $editableFields = ['category', 'category_note', 'spending_unit', 'payee_name', 'amount', 'invoice_no'];
+        $updates = array_intersect_key($validated, array_flip($editableFields));
+        if ($updates === [] && ! $request->hasFile('invoice')) {
+            throw ValidationException::withMessages(['transaction' => ['Düzenlenecek bir alan gönderilmedi.']]);
+        }
+
+        $newInvoicePath = $request->hasFile('invoice')
+            ? MediaStorage::putFile('invoices', $request->file('invoice'))
+            : null;
+
+        try {
+            $transaction = DB::transaction(function () use ($request, $id, $updates, $newInvoicePath) {
+                $transaction = FinancialTransaction::query()->lockForUpdate()->findOrFail($id);
+                abort_unless(
+                    $this->financialAccess->canUpdate($request->user(), $transaction),
+                    403,
+                    'Bu bekleyen mali kaydi düzenleme yetkiniz bulunmuyor.'
+                );
+                abort_unless($transaction->status === 'pending', 422, 'Yalnız bekleyen mali kayıtlar düzenlenebilir.');
+                $this->assertPeriodWritable($request, $transaction->period_id);
+
+                $nextCategory = $updates['category'] ?? $transaction->category;
+                $nextNote = array_key_exists('category_note', $updates)
+                    ? $updates['category_note']
+                    : $transaction->category_note;
+                if ($nextCategory === 'other' && trim((string) $nextNote) === '') {
+                    throw ValidationException::withMessages(['category_note' => ['Diğer kategori için açıklama zorunludur.']]);
+                }
+                if ($nextCategory !== 'other') {
+                    $updates['category_note'] = null;
+                }
+
+                $revisionId = null;
+                if ($newInvoicePath !== null) {
+                    if ($transaction->invoice_path) {
+                        $revision = $transaction->invoiceRevisions()->create([
+                            'invoice_path' => $transaction->invoice_path,
+                            'replaced_by' => $request->user()->id,
+                            'replaced_at' => now(),
+                        ]);
+                        $revisionId = $revision->id;
+                    }
+                    $updates['invoice_path'] = $newInvoicePath;
+                }
+
+                $transaction->fill($updates);
+                $dirty = $transaction->getDirty();
+                if ($dirty === []) {
+                    throw ValidationException::withMessages(['transaction' => ['Kayitta bir değişiklik bulunamadı.']]);
+                }
+                $before = array_intersect_key($transaction->getOriginal(), $dirty);
+                $transaction->save();
+                $after = array_intersect_key($transaction->getAttributes(), $dirty);
+                $this->attachFinancialAudit($request, $transaction, 'updated', 'pending', [
+                    'changed_fields' => array_keys($dirty),
+                    'before' => $before,
+                    'after' => $after,
+                    'invoice_revision_id' => $revisionId,
+                ]);
+
+                return $transaction;
+            });
+        } catch (\Throwable $exception) {
+            if ($newInvoicePath !== null) {
+                MediaStorage::delete($newInvoicePath);
+            }
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => 'Bekleyen mali kayıt güncellendi.',
+            'transaction' => $this->appendFinancialCapabilities(
+                $transaction->load(['project:id,name', 'period:id,name', 'processingUnit:id,code,name', 'submitter:id,name,surname'])
+                    ->loadCount('invoiceRevisions'),
+                $request->user()
+            ),
+        ]);
+    }
+
+    /**
      * Show a financial transaction.
      *
      * Panel/admin endpoint exposed under `/admin/financials/{id}` and `/panel/financials/{id}`. Requires `financial.view` access to the transaction project; projectless records require the permission itself. Includes project, period, submitter, and approver summary data.
@@ -455,7 +569,7 @@ class FinancialTransactionController extends Controller
      */
     public function show(Request $request, int $id)
     {
-        $transaction = FinancialTransaction::with([
+        $transaction = FinancialTransaction::withCount('invoiceRevisions')->with([
             'project:id,name',
             'period:id,name',
             'processingUnit:id,code,name',
@@ -662,6 +776,9 @@ class FinancialTransactionController extends Controller
         if ($transaction->invoice_path) {
             MediaStorage::delete($transaction->invoice_path);
         }
+        foreach ($transaction->invoiceRevisions as $revision) {
+            MediaStorage::delete($revision->invoice_path);
+        }
 
         $this->attachFinancialAudit($request, $transaction, 'deleted', $transaction->status);
         $transaction->delete();
@@ -730,6 +847,65 @@ class FinancialTransactionController extends Controller
     }
 
     /**
+     * List older invoice files without exposing storage paths.
+     *
+     * @group Financials
+     * @authenticated
+     */
+    public function invoiceRevisions(Request $request, int $id)
+    {
+        $this->abortUnlessAllowed($request, 'financial.invoice.download');
+        $transaction = FinancialTransaction::findOrFail($id);
+        abort_unless(
+            $this->financialAccess->canDownloadInvoice($request->user(), $transaction),
+            403,
+            'Bu fatura geçmişine erişim yetkiniz yok.'
+        );
+
+        $revisions = $transaction->invoiceRevisions()
+            ->with('replacer:id,name,surname')
+            ->get()
+            ->map(fn ($revision) => [
+                'id' => $revision->id,
+                'replaced_at' => $revision->replaced_at,
+                'replacer' => $revision->replacer,
+            ]);
+
+        return response()->json(['invoice_revisions' => $revisions]);
+    }
+
+    /**
+     * Download an older invoice using the same record permission as the current invoice.
+     *
+     * @group Financials
+     * @authenticated
+     */
+    public function downloadInvoiceRevision(Request $request, int $id, int $revisionId)
+    {
+        $this->abortUnlessAllowed($request, 'financial.invoice.download');
+        $transaction = FinancialTransaction::findOrFail($id);
+        abort_unless(
+            $this->financialAccess->canDownloadInvoice($request->user(), $transaction),
+            403,
+            'Bu fatura geçmişine erişim yetkiniz yok.'
+        );
+        $revision = $transaction->invoiceRevisions()->findOrFail($revisionId);
+
+        if (MediaStorage::isUrl($revision->invoice_path)) {
+            return response()->json(['download_url' => $revision->invoice_path]);
+        }
+        if (! MediaStorage::exists($revision->invoice_path)) {
+            return response()->json(['message' => 'Fatura sürümü bulunamadı.'], 404);
+        }
+
+        return MediaStorage::disk()->download(
+            $revision->invoice_path,
+            'fatura_'.$transaction->id.'_surum_'.$revision->id.'_'.basename($revision->invoice_path),
+            ['Content-Type' => MediaStorage::mimeType($revision->invoice_path) ?? 'application/octet-stream']
+        );
+    }
+
+    /**
      * Export financial transactions.
      *
      * Panel/admin endpoint exposed under `/admin/financials/export` and `/panel/financials/export`. Requires `financial.export`; users with global scope export all matching transactions, while scoped users are limited to project ids resolved by the action+scope matrix. Project and period filters are validated through project-period context. The shared export responder accepts `csv`, `xlsx`, or `pdf` when enabled.
@@ -776,7 +952,7 @@ class FinancialTransactionController extends Controller
 
         $this->applyFinancialFilters($query, $request, false);
 
-        $transactions = $query->latest('submitted_at')->get();
+        $transactions = $query->latest('submitted_at')->orderByDesc('id')->get();
 
         $format = $request->get('format', 'csv');
         $headings = [
@@ -874,7 +1050,7 @@ class FinancialTransactionController extends Controller
             $query->where('submitted_at', '<=', $request->date_to.' 23:59:59');
         }
 
-        $transactions = $query->latest('submitted_at')->paginate(20);
+        $transactions = $query->latest('submitted_at')->orderByDesc('id')->paginate(20);
         $transactions->getCollection()->transform(
             fn (FinancialTransaction $transaction) => $this->appendFinancialCapabilities($transaction, $user)
         );
@@ -928,7 +1104,7 @@ class FinancialTransactionController extends Controller
 
         $this->applyFinancialFilters($query, $request);
 
-        $transactions = $query->latest('submitted_at')->get();
+        $transactions = $query->latest('submitted_at')->orderByDesc('id')->get();
         $headings = ['ID', 'Proje', 'Harcamayi Yapan Birim', 'Isleyen Koordinatorluk', 'Donem', 'Kategori', 'Diger Kategori Notu', 'Alici', 'Fatura No', 'Tutar', 'Durum', 'Odeme Tarihi', 'Odeme Yontemi', 'Muhasebe Kodu', 'Onaylayan', 'Gonderim Tarihi'];
         $rows = $transactions->map(fn (FinancialTransaction $transaction) => [
             $transaction->id,
