@@ -56,6 +56,7 @@ final class CoordinationUnitExclusivePermissionCatalog
         if (str_starts_with($unitCode, 'project_') && in_array($permissionName, [
             'financial.view',
             'financial.create',
+            'financial.update',
             'financial.export',
             'financial.invoice.download',
         ], true)) {

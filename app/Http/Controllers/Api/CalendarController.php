@@ -813,6 +813,21 @@ class CalendarController extends Controller
         return response()->json($googleCalendar->getStatus());
     }
 
+    /** Seçilen aralıktaki harici Google etkinliklerini salt okunur olarak döndürür. */
+    public function googleExternalEvents(Request $request, GoogleCalendarService $googleCalendar): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'calendar.view');
+        $validated = $request->validate([
+            'start_at' => ['required', 'date'],
+            'end_at' => ['required', 'date', 'after:start_at'],
+        ]);
+        $start = Carbon::parse($validated['start_at']);
+        $end = Carbon::parse($validated['end_at']);
+        abort_if($start->diffInSeconds($end) > 45 * 86400, 422, 'Google takvim araligi en fazla 45 gun olabilir.');
+
+        return response()->json($googleCalendar->listExternalEvents($start, $end));
+    }
+
     /**
      * Create a Google Calendar OAuth URL.
      *

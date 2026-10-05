@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Application;
 use App\Models\ApplicationForm;
+use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\Badge;
 use App\Models\BlogPost;
@@ -33,7 +34,9 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\VolunteerOpportunity;
+use App\Jobs\RotateQrTokenJob;
 use App\Services\NotificationService;
+use App\Services\QrCodeService;
 use App\Support\IstanbulDateTime;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -597,6 +600,48 @@ class PanelRegressionFixTest extends TestCase
         $this->get('/api/panel/financials/export?'.$query)
             ->assertOk()
             ->assertHeader('content-disposition');
+    }
+
+    public function test_financial_and_announcement_lists_match_csv_order_when_timestamps_tie(): void
+    {
+        $admin = $this->actingSuperAdmin();
+        $project = $this->project();
+        $submittedAt = now()->startOfSecond();
+        $financialIds = [];
+        foreach (['First', 'Second'] as $name) {
+            $financialIds[] = FinancialTransaction::query()->create([
+                'project_id' => $project->id,
+                'type' => 'expense', 'category' => 'food',
+                'payee_name' => $name, 'amount' => 100, 'status' => 'pending',
+                'submitted_by' => $admin->id, 'submitted_at' => $submittedAt,
+            ])->id;
+        }
+        $announcementIds = [];
+        foreach (['First', 'Second'] as $name) {
+            $announcement = Announcement::query()->create([
+                'title' => $name, 'content' => 'Ordering contract', 'category' => 'general',
+                'created_by' => $admin->id,
+            ]);
+            $announcement->forceFill(['created_at' => $submittedAt])->save();
+            $announcementIds[] = $announcement->id;
+        }
+
+        $this->getJson('/api/panel/financials')->assertOk()
+            ->assertJsonPath('transactions.data.0.id', $financialIds[1])
+            ->assertJsonPath('transactions.data.1.id', $financialIds[0]);
+        $this->getJson('/api/panel/announcements')->assertOk()
+            ->assertJsonPath('announcements.data.0.id', $announcementIds[1])
+            ->assertJsonPath('announcements.data.1.id', $announcementIds[0]);
+
+        foreach ([
+            ['/api/panel/financials/export?format=csv', $financialIds],
+            ['/api/panel/announcements/export?format=csv', $announcementIds],
+        ] as [$url, $ids]) {
+            $response = $this->get($url)->assertOk();
+            $rows = array_values(array_filter(explode("\n", trim($response->streamedContent()))));
+            $this->assertSame((string) $ids[1], str_getcsv($rows[1])[0]);
+            $this->assertSame((string) $ids[0], str_getcsv($rows[2])[0]);
+        }
     }
 
     public function test_financial_approval_and_payment_write_domain_audit_properties(): void
@@ -2014,6 +2059,8 @@ class PanelRegressionFixTest extends TestCase
             'credit_deduction' => 10,
             'qr_token' => 'guard-token',
             'qr_expires_at' => now()->addMinutes(5),
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
         ]);
         Attendance::query()->create([
             'program_id' => $previousProgram->id,
@@ -2044,6 +2091,8 @@ class PanelRegressionFixTest extends TestCase
 
         $this->postJson('/api/attendances/qr', [
             'qr_token' => 'guard-token',
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
         ])->assertOk();
 
         $this->assertDatabaseHas('attendances', [
@@ -2070,6 +2119,8 @@ class PanelRegressionFixTest extends TestCase
             'start_at' => now()->subMinutes(10),
             'end_at' => now()->addHour(),
             'status' => 'scheduled',
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
         ]);
 
         $this->postJson("/api/panel/programs/{$program->id}/generate-qr", [
@@ -2086,6 +2137,68 @@ class PanelRegressionFixTest extends TestCase
         $this->assertStringStartsWith('prg_'.$program->id.'_', $program->qr_token);
         $this->assertGreaterThan(30, strlen($program->qr_token));
         $this->assertNotNull($program->qr_expires_at);
+    }
+
+    public function test_qr_generation_and_scan_require_program_location_and_participant_location(): void
+    {
+        $this->actingSuperAdmin();
+        $project = $this->project();
+        $period = Period::query()->create([
+            'project_id' => $project->id,
+            'name' => '2026 Konumlu QR',
+            'start_date' => now()->subDay()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+        $program = Program::query()->create([
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'title' => 'Konumu Eksik Oturum',
+            'start_at' => now()->subMinute(),
+            'end_at' => now()->addHour(),
+            'status' => 'active',
+        ]);
+
+        $this->postJson("/api/panel/programs/{$program->id}/generate-qr")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('latitude');
+        (new RotateQrTokenJob())->handle(app(QrCodeService::class));
+        $this->assertNull($program->fresh()->qr_token);
+
+        // Eski bir konumsuz token da sunucu tarafında yoklama açmamalı.
+        $program->update(['qr_token' => 'legacy-no-location', 'qr_expires_at' => now()->addMinute()]);
+        $student = User::factory()->create(['role' => 'student', 'surname' => 'QrLocation', 'kvkk_consent_at' => now()]);
+        Role::findOrCreate('student', 'web');
+        $student->assignRole('student');
+        Participant::query()->create([
+            'user_id' => $student->id,
+            'project_id' => $project->id,
+            'period_id' => $period->id,
+            'status' => 'active',
+            'credit' => 100,
+        ]);
+        Sanctum::actingAs($student);
+        $this->postJson('/api/attendances/qr', [
+            'qr_token' => 'legacy-no-location',
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
+        ])->assertUnprocessable()->assertJsonPath('message', 'Program konumu tanimlanmadigi icin QR yoklama alinamiyor.');
+
+        $program->update(['latitude' => 41.0082, 'longitude' => 28.9784]);
+        $this->postJson('/api/attendances/qr', ['qr_token' => 'legacy-no-location'])
+            ->assertUnprocessable()->assertJsonPath('message', 'Bu yoklama icin konum izni zorunludur.');
+        $this->postJson('/api/attendances/qr', [
+            'qr_token' => 'legacy-no-location',
+            'latitude' => 41.1082,
+            'longitude' => 28.9784,
+        ])->assertUnprocessable()->assertJsonPath('message', 'Konumunuz etkinlik alani disinda. Yoklama alinmadi.');
+        $this->assertDatabaseCount('attendances', 0);
+        $this->postJson('/api/attendances/qr', [
+            'qr_token' => 'legacy-no-location',
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
+        ])->assertOk();
+        $this->assertDatabaseCount('attendances', 1);
     }
 
     public function test_panel_qr_generation_requires_program_attendance_window(): void
@@ -2206,12 +2319,16 @@ class PanelRegressionFixTest extends TestCase
             'target_audience' => ['alumni'],
             'qr_token' => 'alumni-qr-token',
             'qr_expires_at' => now()->addMinute(),
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
         ]);
 
         Sanctum::actingAs($alumni);
 
         $this->postJson('/api/attendances/qr', [
             'qr_token' => 'alumni-qr-token',
+            'latitude' => 41.0082,
+            'longitude' => 28.9784,
         ])->assertOk();
 
         $this->assertDatabaseHas('attendances', [

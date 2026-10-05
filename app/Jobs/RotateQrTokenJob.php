@@ -39,7 +39,7 @@ class RotateQrTokenJob implements ShouldQueue
 
         foreach ($activePrograms as $program) {
             // Eğer qr kodu yoksa veya süresi 5 saniyeden az kaldıysa yenisini üret
-            if (!$program->qr_expires_at || now()->diffInSeconds($program->qr_expires_at, false) < 5) {
+            if ($program->hasAttendanceLocation() && (!$program->qr_expires_at || now()->diffInSeconds($program->qr_expires_at, false) < 5)) {
                 $qrService->generateForProgram($program);
             }
         }

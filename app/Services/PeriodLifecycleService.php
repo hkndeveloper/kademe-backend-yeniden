@@ -25,7 +25,10 @@ class PeriodLifecycleService
 
     public const LEGACY_PASSIVE = 'passive';
 
-    public function __construct(private readonly PeriodLifecycleMonitor $monitor) {}
+    public function __construct(
+        private readonly PeriodLifecycleMonitor $monitor,
+        private readonly ApplicationProjectPeriodGuard $projectPeriodGuard,
+    ) {}
 
     public static function isArchiveStatus(?string $status): bool
     {
@@ -112,6 +115,10 @@ class PeriodLifecycleService
             unset($attributes['status'], $attributes['project_id'], $attributes['lifecycle_version']);
             $period->fill($attributes);
             $changedFields = array_keys($period->getDirty());
+
+            if ($period->isDirty(['start_date', 'end_date'])) {
+                $this->projectPeriodGuard->assertPeriodDateChangeDoesNotOverlap($period);
+            }
 
             if ($period->isDirty()) {
                 $period->lifecycle_version = ((int) $period->lifecycle_version) + 1;

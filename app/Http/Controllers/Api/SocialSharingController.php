@@ -42,7 +42,7 @@ class SocialSharingController extends Controller
      * @bodyParam url string Optional target URL. Example: https://kademe.example.com/blog/yeni-duyuru
      * @bodyParam image_url string Optional image URL. Example: https://kademe.example.com/image.jpg
      * @bodyParam platforms string[] Optional platform list. Example: ["instagram","linkedin"]
-     * @response 200 {"message":"Icerik sosyal medya platformlarina gonderildi.","shared":true,"http_code":200}
+     * @response 200 {"message":"Webhook icerigi kabul etti; sosyal medya yayini dogrulanmadi.","webhook_accepted":true,"publication_confirmed":false,"shared":true,"http_code":200}
      * @response 403 {"message":"Bu islem icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Sosyal medya webhook URL tanimli degil. Admin > Site Ayarlari > Sosyal Medya bolumunden tanimlayabilirsiniz.","shared":false}
      * @response 502 {"message":"Webhook gonderilemedi: timeout","shared":false}
@@ -84,18 +84,22 @@ class SocialSharingController extends Controller
         try {
             $response = Http::timeout(10)->post($webhookUrl, $payload);
 
-            Log::info('social_sharing.webhook_sent', [
+            Log::info('social_sharing.webhook_response', [
                 'status'  => $response->status(),
                 'payload' => $payload,
             ]);
 
+            $accepted = $response->successful();
+
             return response()->json([
-                'message' => $response->successful()
-                    ? 'Icerik sosyal medya platformlarina gonderildi.'
-                    : 'Webhook yanit vermedi: HTTP '.$response->status(),
-                'shared'    => $response->successful(),
+                'message' => $accepted
+                    ? 'Webhook icerigi kabul etti; sosyal medya yayini dogrulanmadi.'
+                    : 'Webhook istegi reddetti: HTTP '.$response->status(),
+                'webhook_accepted' => $accepted,
+                'publication_confirmed' => false,
+                'shared'    => $accepted, // Eski istemciler için webhook kabulü anlamında korunur.
                 'http_code' => $response->status(),
-            ]);
+            ], $accepted ? 200 : 502);
         } catch (\Throwable $exception) {
             Log::warning('social_sharing.webhook_failed', [
                 'error'   => $exception->getMessage(),
@@ -104,6 +108,8 @@ class SocialSharingController extends Controller
 
             return response()->json([
                 'message' => 'Webhook gonderilemedi: '.$exception->getMessage(),
+                'webhook_accepted' => false,
+                'publication_confirmed' => false,
                 'shared'  => false,
             ], 502);
         }

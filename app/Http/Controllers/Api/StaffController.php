@@ -130,6 +130,17 @@ class StaffController extends Controller
         }
 
         $unitIds = $this->permissionResolver->coordinationUnitIdsForPermission($actor, $permission);
+        // Legacy/shadow policy can authorize an active unit membership without
+        // placing its ID in scope_payload. Keep list visibility aligned with
+        // canReviewLeave instead of making an approvable request invisible.
+        $membershipUnitIds = $actor->coordinationUnitMemberships()
+            ->active()
+            ->whereHas('unit', fn ($unitQuery) => $unitQuery->where('status', 'active'))
+            ->pluck('unit_id')
+            ->filter(fn ($unitId) => $this->permissionResolver->canAccessCoordinationUnit($actor, $permission, (int) $unitId))
+            ->map(fn ($unitId) => (int) $unitId)
+            ->all();
+        $unitIds = array_values(array_unique(array_merge($unitIds, $membershipUnitIds)));
         $legacyUnit = $this->coordinatorUnit($actor, $permission);
 
         $query->where(function ($builder) use ($unitIds, $legacyUnit) {

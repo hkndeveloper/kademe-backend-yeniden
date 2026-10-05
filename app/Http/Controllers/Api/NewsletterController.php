@@ -47,7 +47,8 @@ class NewsletterController extends Controller
 
         $query = NewsletterSubscriber::query()
             ->whereNull('unsubscribed_at')
-            ->orderByDesc('subscribed_at');
+            ->orderByDesc('subscribed_at')
+            ->orderByDesc('id');
 
         if ($request->filled('search')) {
             $s = $request->string('search')->toString();
@@ -85,7 +86,7 @@ class NewsletterController extends Controller
             'E-bulten aboneleri icin tum sistem kapsami gerekir.'
         );
 
-        $query = NewsletterSubscriber::query()->orderByDesc('subscribed_at');
+        $query = NewsletterSubscriber::query()->orderByDesc('subscribed_at')->orderByDesc('id');
 
         if ($request->filled('search')) {
             $s = $request->string('search')->toString();

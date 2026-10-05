@@ -11,7 +11,7 @@ use App\Models\KpdReport;
 use App\Models\KpdRoom;
 use App\Models\Participant;
 use App\Models\User;
-use App\Support\MediaStorage;
+use App\Support\KpdReportStorage;
 use App\Support\IstanbulDateTime;
 use App\Support\ProjectSpecialModuleCatalog;
 use App\Services\NotificationService;
@@ -50,26 +50,17 @@ class StudentKpdController extends Controller
             return response()->json(['message' => 'Rapor dosyasi bulunamadi.'], 404);
         }
 
-        if ($this->isUrl($report->file_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
-            return response()->json(['download_url' => MediaStorage::url($report->file_path)]);
-        }
-
-        if (! MediaStorage::exists($report->file_path)) {
+        if (! KpdReportStorage::exists($report->file_path)) {
             return response()->json(['message' => 'Rapor dosyasi storage uzerinde bulunamadi.'], 404);
         }
 
         $extension = pathinfo($report->file_path, PATHINFO_EXTENSION);
         $filename = 'kpd_raporu_' . $report->id;
 
-        return MediaStorage::disk()->download(
+        return KpdReportStorage::download(
             $report->file_path,
             $filename . ($extension ? ".{$extension}" : '')
         );
-    }
-
-    private function isUrl(string $path): bool
-    {
-        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
     private function kpdParticipationFor(User $user): ?Participant
@@ -189,13 +180,12 @@ class StudentKpdController extends Controller
     /**
      * Download a personal KPD report.
      *
-     * Requires permission: `participant.kpd.view` and KPD project participation. The report must belong to the current user. Returns direct download URL when configured, otherwise streams the file.
+     * Requires permission: `participant.kpd.view` and KPD project participation. The report must belong to the current user and is streamed after authorization.
      *
      * @group KPD
      * @authenticated
      *
      * @urlParam id integer required Report id. Example: 1
-     * @response 200 {"download_url":"https://storage.example.com/kpd/report.pdf"}
      * @response 200 {"download":"Binary KPD report file stream"}
      * @response 404 {"message":"Rapor dosyasi bulunamadi."}
      */

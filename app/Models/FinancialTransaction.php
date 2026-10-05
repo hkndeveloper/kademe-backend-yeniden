@@ -71,6 +71,11 @@ class FinancialTransaction extends Model
         return $this->morphMany(WorkflowStatusHistory::class, 'subject')->latest();
     }
 
+    public function invoiceRevisions()
+    {
+        return $this->hasMany(FinancialInvoiceRevision::class)->latest('replaced_at');
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

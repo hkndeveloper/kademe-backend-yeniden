@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CoordinationUnit;
 use App\Models\CoordinationUnitMembership;
 use App\Models\CoordinationUnitMembershipPermissionOverride;
+use App\Models\LeaveRequest;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
@@ -96,6 +97,57 @@ class ActiveCoordinationUnitContextTest extends TestCase
             ->assertJsonPath('user.organization_context.active_unit_id', $this->media->id)
             ->assertJsonPath('user.organization_context.active_context_source', 'primary_fallback')
             ->assertJsonPath('user.organization_context.selection_required', true);
+    }
+
+    public function test_leave_list_follows_the_selected_unit_in_enforce_mode(): void
+    {
+        $coordinator = User::factory()->create([
+            'surname' => 'LeaveReviewer',
+            'role' => 'coordinator',
+            'status' => 'active',
+        ]);
+        $coordinator->assignRole('coordinator');
+        foreach ([$this->media, $this->purchase] as $unit) {
+            CoordinationUnitMembership::query()->create([
+                'unit_id' => $unit->id,
+                'user_id' => $coordinator->id,
+                'position' => CoordinationUnitMembership::POSITION_COORDINATOR,
+                'is_primary' => $unit->is($this->media),
+                'status' => CoordinationUnitMembership::STATUS_ACTIVE,
+            ]);
+        }
+        Sanctum::actingAs($coordinator);
+        $mediaOwner = User::factory()->create(['surname' => 'MediaLeave', 'role' => 'staff', 'status' => 'active']);
+        $purchaseOwner = User::factory()->create(['surname' => 'PurchaseLeave', 'role' => 'staff', 'status' => 'active']);
+        $startDate = now()->addDay()->toDateString();
+        $mediaLeave = LeaveRequest::query()->create([
+            'user_id' => $mediaOwner->id,
+            'unit_id' => $this->media->id,
+            'start_date' => $startDate,
+            'end_date' => $startDate,
+            'reason' => 'Medya birimi izni',
+            'status' => 'pending',
+        ]);
+        $purchaseLeave = LeaveRequest::query()->create([
+            'user_id' => $purchaseOwner->id,
+            'unit_id' => $this->purchase->id,
+            'start_date' => $startDate,
+            'end_date' => $startDate,
+            'reason' => 'Satın alma birimi izni',
+            'status' => 'pending',
+        ]);
+
+        $this->withHeaders(['X-Coordination-Unit-Id' => (string) $this->media->id])
+            ->getJson('/api/panel/leave-requests')
+            ->assertOk()
+            ->assertJsonCount(1, 'leave_requests.data')
+            ->assertJsonPath('leave_requests.data.0.id', $mediaLeave->id);
+
+        $this->withHeaders(['X-Coordination-Unit-Id' => (string) $this->purchase->id])
+            ->getJson('/api/panel/leave-requests')
+            ->assertOk()
+            ->assertJsonCount(1, 'leave_requests.data')
+            ->assertJsonPath('leave_requests.data.0.id', $purchaseLeave->id);
     }
 
     public function test_invalid_or_unowned_header_fails_closed(): void

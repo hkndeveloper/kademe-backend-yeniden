@@ -11,6 +11,7 @@ use App\Models\Participant;
 use App\Models\Program;
 use App\Services\CreditService;
 use App\Services\PermissionResolver;
+use App\Support\FeedbackDeadline;
 use App\Support\FeedbackFormResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -81,7 +82,7 @@ class FeedbackController extends Controller
                 ->where('type', 'restore')
                 ->latest()
                 ->first();
-            $deadline = $this->feedbackDeadline($program);
+            $deadline = FeedbackDeadline::forProgram($program);
             $questions = FeedbackFormResolver::forProgram($program);
 
             return [
@@ -176,7 +177,7 @@ class FeedbackController extends Controller
             ], 403);
         }
 
-        $deadline = $this->feedbackDeadline($program);
+        $deadline = FeedbackDeadline::forProgram($program);
         if ($deadline !== null && now()->greaterThanOrEqualTo($deadline)) {
             return response()->json([
                 'message' => 'Bu oturum icin degerlendirme suresi doldu. Degerlendirme bir sonraki etkinlik bitmeden once gonderilmelidir.',
@@ -252,26 +253,5 @@ class FeedbackController extends Controller
             'current_credit' => $participant->credit,
             'anonymous_feedback_id' => Feedback::usesPublicIdColumn() ? $savedFeedback->public_id : null,
         ], 201);
-    }
-
-    private function feedbackDeadline(Program $program): ?\Illuminate\Support\Carbon
-    {
-        if (! $program->start_at) {
-            return null;
-        }
-
-        $nextProgram = Program::query()
-            ->where('project_id', $program->project_id)
-            ->when(
-                $program->period_id,
-                fn ($query) => $query->where('period_id', $program->period_id),
-                fn ($query) => $query->whereNull('period_id')
-            )
-            ->where('id', '!=', $program->id)
-            ->where('start_at', '>', $program->start_at)
-            ->orderBy('start_at')
-            ->first(['start_at', 'end_at']);
-
-        return $nextProgram?->end_at ?? $nextProgram?->start_at;
     }
 }

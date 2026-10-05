@@ -58,6 +58,32 @@ class CreditService
         ));
     }
 
+    /** Paneldeki manuel düzeltmeyi diğer kredi işlemleriyle aynı kurallardan geçirir. */
+    public function adjustManually(Participant $participant, int $amount, string $reason, int $adminId): CreditLog
+    {
+        return DB::transaction(function () use ($participant, $amount, $reason, $adminId) {
+            $lockedParticipant = Participant::query()->lockForUpdate()->findOrFail($participant->id);
+            $creditBefore = (int) $lockedParticipant->credit;
+            $log = $this->createLogAndApplyDelta(
+                $lockedParticipant,
+                $amount,
+                'manual_adjust',
+                $reason,
+                null,
+                $adminId
+            );
+
+            if ($amount < 0) {
+                $this->checkThresholdAndBlacklist(
+                    $lockedParticipant->fresh(['period', 'user', 'project.coordinators']),
+                    $creditBefore
+                );
+            }
+
+            return $log;
+        });
+    }
+
     public function deductOnceForProgram(Participant $participant, Program $program, ?int $adminId = null, ?string $reason = null, ?bool $attended = null): ?CreditLog
     {
         $amount = max((int) ($program->credit_deduction ?? 0), 0);

@@ -52,7 +52,7 @@ final class CoordinationUnitPermissionTemplateCatalog
             'applications.view', 'applications.intake.view', 'applications.intake.manage',
             'applications.update_status', 'applications.plan_interview',
             'applications.waitlist.manage', 'applications.export',
-            'financial.view', 'financial.create', 'financial.export', 'financial.invoice.download',
+            'financial.view', 'financial.create', 'financial.update', 'financial.export', 'financial.invoice.download',
             'requests.create', 'support.create', 'inbox.view',
             'certificates.view', 'certificates.create', 'certificates.delete', 'certificates.export',
             ...$coordinatorFamily,

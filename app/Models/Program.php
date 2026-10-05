@@ -89,6 +89,11 @@ class Program extends Model
         return true;
     }
 
+    public function hasAttendanceLocation(): bool
+    {
+        return $this->latitude !== null && $this->longitude !== null;
+    }
+
     public function project()
     {
         return $this->belongsTo(Project::class);

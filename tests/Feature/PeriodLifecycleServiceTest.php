@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Exceptions\PeriodLifecycleException;
+use App\Models\Participant;
 use App\Models\Period;
 use App\Models\PeriodArchive;
 use App\Models\Project;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Models\ApplicationWindow;
 use App\Services\PeriodLifecycleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use LogicException;
 use Tests\TestCase;
 
@@ -83,6 +85,42 @@ class PeriodLifecycleServiceTest extends TestCase
         $this->assertSame('active', $current->fresh()->status);
         $this->assertSame('planned', $planned->fresh()->status);
         $this->assertSame($current->id, $project->fresh()->current_period_id);
+    }
+
+    public function test_period_date_edit_cannot_create_cross_project_student_overlap(): void
+    {
+        $actor = User::factory()->create(['surname' => 'Editor']);
+        $student = User::factory()->create(['surname' => 'Student']);
+        $firstProject = $this->project('first-period-date-edit');
+        $secondProject = $this->project('second-period-date-edit');
+        $firstPeriod = Period::query()->create([
+            'project_id' => $firstProject->id, 'name' => 'First', 'status' => 'active',
+            'start_date' => '2026-01-01', 'end_date' => '2026-03-31',
+        ]);
+        $secondPeriod = Period::query()->create([
+            'project_id' => $secondProject->id, 'name' => 'Second', 'status' => 'planned',
+            'start_date' => '2026-04-01', 'end_date' => '2026-09-30',
+        ]);
+        foreach ([[$firstProject, $firstPeriod, 'graduated'], [$secondProject, $secondPeriod, 'active']] as [$project, $period, $status]) {
+            Participant::query()->create([
+                'user_id' => $student->id, 'project_id' => $project->id,
+                'period_id' => $period->id, 'status' => $status,
+            ]);
+        }
+
+        $service = app(PeriodLifecycleService::class);
+        $service->updateDetails($secondPeriod->id, ['name' => 'Second renamed'], $actor);
+        $this->assertSame('Second renamed', $secondPeriod->fresh()->name);
+
+        try {
+            $service->updateDetails($secondPeriod->id, ['start_date' => '2026-03-31'], $actor);
+            $this->fail('A one-day overlap must be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('start_date', $exception->errors());
+        }
+
+        $this->assertSame('2026-04-01', $secondPeriod->fresh()->start_date->toDateString());
+        $this->assertSame(1, $secondPeriod->lifecycleEvents()->where('event_type', 'updated')->count());
     }
 
     public function test_legacy_active_period_without_pointer_is_adopted_when_closing_starts(): void

@@ -9,8 +9,10 @@ use App\Models\ForumPost;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Services\PermissionResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -24,6 +26,25 @@ class ForumController extends Controller
     public function __construct(
         private readonly PermissionResolver $permissionResolver
     ) {}
+
+    private function recentPostsInChronologicalDisplayOrder(Builder $query): LengthAwarePaginator
+    {
+        // Select the latest page first so a newly created topic remains visible.
+        // Within that page, show pinned topics first and newer messages below older ones.
+        $page = $query->paginate(20);
+        $page->setCollection($page->getCollection()->sort(function (ForumPost $first, ForumPost $second) {
+            $pinnedOrder = (int) $second->is_pinned <=> (int) $first->is_pinned;
+            if ($pinnedOrder !== 0) {
+                return $pinnedOrder;
+            }
+
+            $dateOrder = strcmp((string) $first->getRawOriginal('created_at'), (string) $second->getRawOriginal('created_at'));
+
+            return $dateOrder !== 0 ? $dateOrder : $first->id <=> $second->id;
+        })->values());
+
+        return $page;
+    }
 
     /** @return int[] */
     private function participantProjectIds(int $userId): array
@@ -121,7 +142,8 @@ class ForumController extends Controller
                 }
             })
             ->orderByDesc('is_pinned')
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         if (! empty($validated['project_id'])) {
             $projectId = (int) $validated['project_id'];
@@ -144,7 +166,7 @@ class ForumController extends Controller
         }
 
         return response()->json([
-            'posts' => $query->paginate(20),
+            'posts' => $this->recentPostsInChronologicalDisplayOrder($query),
         ]);
     }
 
@@ -180,7 +202,8 @@ class ForumController extends Controller
             ])
             ->withCount('replies')
             ->orderByDesc('is_pinned')
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         if (! $hasGlobalScope) {
             $query->whereIn('project_id', $projectIds);
@@ -207,7 +230,41 @@ class ForumController extends Controller
         }
 
         return response()->json([
-            'posts' => $query->paginate(20),
+            'posts' => $this->recentPostsInChronologicalDisplayOrder($query),
+        ]);
+    }
+
+    /**
+     * Pin or unpin a forum topic within the moderator's project scope.
+     *
+     * Requires permission: `forum.moderate` for the topic's project.
+     */
+    public function setPinned(Request $request, int $postId): JsonResponse
+    {
+        $this->abortUnlessAllowed($request, 'forum.moderate');
+        $validated = $request->validate([
+            'is_pinned' => 'required|boolean',
+        ]);
+
+        $post = ForumPost::query()->findOrFail($postId);
+        $this->abortUnlessProjectAllowed($request, 'forum.moderate', (int) $post->project_id);
+
+        $before = (bool) $post->is_pinned;
+        $post->is_pinned = (bool) $validated['is_pinned'];
+        $post->save();
+
+        $request->attributes->set('audit.subject', $post);
+        $request->attributes->set('audit.event', 'forum.post.pin_updated');
+        $request->attributes->set('audit.properties', [
+            'project_id' => (int) $post->project_id,
+            'period_id' => $post->period_id,
+            'is_pinned_before' => $before,
+            'is_pinned_after' => (bool) $post->is_pinned,
+        ]);
+
+        return response()->json([
+            'message' => $post->is_pinned ? 'Konu sabitlendi.' : 'Konu sabitlemesi kaldırıldı.',
+            'post' => ['id' => $post->id, 'is_pinned' => (bool) $post->is_pinned],
         ]);
     }
 

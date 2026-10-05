@@ -11,7 +11,7 @@ use App\Models\KpdRoom;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
-use App\Support\MediaStorage;
+use App\Support\KpdReportStorage;
 use App\Support\IstanbulDateTime;
 use App\Support\ProjectSpecialModuleCatalog;
 use App\Services\NotificationService;
@@ -269,26 +269,17 @@ class AdminKpdController extends Controller
             return response()->json(['message' => 'Rapor dosyasi bulunamadi.'], 404);
         }
 
-        if ($this->isUrl($report->file_path) || (MediaStorage::directDownloadsEnabled() && MediaStorage::publicUrlConfigured())) {
-            return response()->json(['download_url' => MediaStorage::url($report->file_path)]);
-        }
-
-        if (! MediaStorage::exists($report->file_path)) {
+        if (! KpdReportStorage::exists($report->file_path)) {
             return response()->json(['message' => 'Rapor dosyasi storage uzerinde bulunamadi.'], 404);
         }
 
         $extension = pathinfo($report->file_path, PATHINFO_EXTENSION);
         $filename = 'kpd_raporu_' . $report->id;
 
-        return MediaStorage::disk()->download(
+        return KpdReportStorage::download(
             $report->file_path,
             $filename . ($extension ? ".{$extension}" : '')
         );
-    }
-
-    private function isUrl(string $path): bool
-    {
-        return str_starts_with($path, 'http://') || str_starts_with($path, 'https://');
     }
 
     /**
@@ -396,7 +387,7 @@ class AdminKpdController extends Controller
     /**
      * Upload a KPD report for a counselee.
      *
-     * Requires permission: `kpd.reports.create`. The selected user must be in the caller accessible KPD project scope unless the caller has global scope. Optional period must belong to the selected user and completed periods require archive update permission. The uploaded file is stored through `MediaStorage` and an email notification is sent when the user has an email address.
+     * Requires permission: `kpd.reports.create`. The selected user must be in the caller accessible KPD project scope unless the caller has global scope. Optional period must belong to the selected user and completed periods require archive update permission. The uploaded file is stored privately and an email notification is sent when the user has an email address.
      *
      * @group KPD
      * @bodyParam user_id integer required Counselee user ID. Example: 12
@@ -422,7 +413,7 @@ class AdminKpdController extends Controller
         $this->assertPeriodMatchesUser((int) $validated['user_id'], isset($validated['period_id']) ? (int) $validated['period_id'] : null);
         $this->assertPeriodResolvable($request, isset($validated['period_id']) ? (int) $validated['period_id'] : null);
 
-        $path = MediaStorage::putFile('kpd-reports', $request->file('file'));
+        $path = KpdReportStorage::put($request->file('file'));
 
         $report = KpdReport::query()->create([
             'user_id' => $validated['user_id'],
@@ -451,11 +442,10 @@ class AdminKpdController extends Controller
     /**
      * Download a KPD report from the panel.
      *
-     * Requires permission: `kpd.reports.view`. Project-scoped users can only download reports of counselees in accessible KPD projects. Depending on storage configuration, the response is either a JSON direct URL or a streamed file download.
+     * Requires permission: `kpd.reports.view`. Project-scoped users can only download reports of counselees in accessible KPD projects. Files are always streamed after authorization.
      *
      * @group KPD
      * @urlParam id integer required KPD report ID. Example: 8
-     * @response 200 {"download_url":"https://storage.example.com/kpd-reports/report.pdf"}
      * @response 200 {"download":"Binary KPD report file stream"}
      * @response 404 {"message":"Rapor dosyasi storage uzerinde bulunamadi."}
      */
@@ -494,7 +484,7 @@ class AdminKpdController extends Controller
             })
             ->findOrFail($id);
         $this->assertPeriodWritable($request, $report->period_id);
-        MediaStorage::delete($report->file_path);
+        KpdReportStorage::delete($report->file_path);
         $report->delete();
 
         return response()->json(['message' => 'KPD raporu silindi.']);

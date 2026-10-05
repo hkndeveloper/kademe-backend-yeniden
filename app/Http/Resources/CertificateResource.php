@@ -23,12 +23,14 @@ class CertificateResource extends JsonResource
             'source' => $this->source,
             'included_in_cv' => (bool) $this->included_in_cv,
             'uploaded_by_user_id' => $this->uploaded_by_user_id,
-            'verification_code' => $this->verification_code,
+            'verification_code' => $this->source === 'student_upload' ? null : $this->verification_code,
             'issued_at' => $this->issued_at,
             'certificate_path' => $this->certificate_path,
-            'file_url' => MediaStorage::directDownloadsEnabled() ? MediaStorage::url($this->certificate_path) : null,
+            'file_url' => $this->source !== 'student_upload' && MediaStorage::directDownloadsEnabled() ? MediaStorage::url($this->certificate_path) : null,
             'download_url' => $this->certificate_path
-                ? url("/api/certificates/{$this->verification_code}/download")
+                ? ($this->source === 'student_upload'
+                    ? url("/api/certificates/mine/{$this->id}/download")
+                    : url("/api/certificates/{$this->verification_code}/download"))
                 : null,
             'project' => $this->whenLoaded('project', function () {
                 return [

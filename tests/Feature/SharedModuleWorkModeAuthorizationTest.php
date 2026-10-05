@@ -156,6 +156,45 @@ class SharedModuleWorkModeAuthorizationTest extends TestCase
         ]);
     }
 
+    public function test_panel_program_list_and_export_follow_creation_order_even_when_event_dates_differ(): void
+    {
+        $older = $this->program('Older created, later event', Program::KIND_CORE_PROGRAM);
+        $middle = $this->program('Middle created, middle event', Program::KIND_CORE_PROGRAM);
+        $newer = $this->program('Newer created, earlier event', Program::KIND_CORE_PROGRAM);
+        $sharedCreationTime = now()->subHour()->startOfSecond();
+
+        $older->forceFill([
+            'created_at' => now()->subDay(),
+            'start_at' => now()->addDays(5),
+            'end_at' => now()->addDays(5)->addHour(),
+        ])->save();
+        $middle->forceFill([
+            'created_at' => $sharedCreationTime,
+            'start_at' => now()->addDays(3),
+            'end_at' => now()->addDays(3)->addHour(),
+        ])->save();
+        $newer->forceFill([
+            'created_at' => $sharedCreationTime,
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addHour(),
+        ])->save();
+
+        Sanctum::actingAs($this->authority('super_admin', 'ProgramOrdering'));
+
+        $this->getJson('/api/panel/programs?project_id='.$this->project->id)
+            ->assertOk()
+            ->assertJsonPath('programs.0.id', $newer->id)
+            ->assertJsonPath('programs.1.id', $middle->id)
+            ->assertJsonPath('programs.2.id', $older->id)
+            ->assertJsonPath('programs.0.created_at', $sharedCreationTime->toIso8601String());
+
+        $export = $this->get('/api/panel/programs/export?project_id='.$this->project->id.'&format=csv')
+            ->assertOk();
+        $csv = file_get_contents($export->baseResponse->getFile()->getPathname());
+        $this->assertLessThan(strpos($csv, $middle->title), strpos($csv, $newer->title));
+        $this->assertLessThan(strpos($csv, $older->title), strpos($csv, $middle->title));
+    }
+
     public function test_service_units_receive_common_request_and_support_create_capabilities(): void
     {
         $resolver = app(PermissionResolver::class);

@@ -27,10 +27,13 @@ class GoogleCalendarService
         return [
             'configured' => $this->isConfigured(),
             'connected' => (bool) $this->getSetting('google_calendar_refresh_token'),
+            'external_read_enabled' => (bool) config('services.google_calendar.external_read_enabled', false),
             'calendar_id' => config('services.google_calendar.calendar_id'),
             'last_synced_at' => $this->getSetting('google_calendar_last_synced_at'),
             'last_error' => $this->getSetting('google_calendar_last_error'),
             'last_error_at' => $this->getSetting('google_calendar_last_error_at'),
+            'last_read_at' => $this->getSetting('google_calendar_last_read_at'),
+            'last_read_error' => $this->getSetting('google_calendar_last_read_error'),
         ];
     }
 
@@ -179,6 +182,83 @@ class GoogleCalendarService
         $this->putSetting('google_calendar_last_synced_at', now()->toIso8601String());
 
         return $event->fresh();
+    }
+
+    /** Google'daki harici etkinlikleri yerel kayıt oluşturmadan okur. */
+    public function listExternalEvents(Carbon $start, Carbon $end): array
+    {
+        if (! config('services.google_calendar.external_read_enabled', false)
+            || ! $this->isConfigured()
+            || ! $this->getSetting('google_calendar_refresh_token')) {
+            return ['events' => [], 'truncated' => false];
+        }
+
+        $items = [];
+        $pageToken = null;
+        for ($page = 0; $page < 5; $page++) {
+            $query = [
+                'timeMin' => $start->toRfc3339String(),
+                'timeMax' => $end->toRfc3339String(),
+                'singleEvents' => 'true',
+                'orderBy' => 'startTime',
+                'maxResults' => 250,
+            ];
+            if ($pageToken !== null) {
+                $query['pageToken'] = $pageToken;
+            }
+
+            try {
+                $response = $this->authorizedRequest()->timeout(10)->get($this->calendarEventsBaseUrl(), $query);
+            } catch (\Throwable $exception) {
+                $this->putSetting('google_calendar_last_read_error', Str::limit($exception->getMessage(), 500));
+                abort(502, 'Google Calendar baglantisi kurulamadı.');
+            }
+            if (! $response->successful()) {
+                $message = (string) ($response->json('error.message') ?? 'Google Calendar etkinlikleri okunamadı.');
+                $this->putSetting('google_calendar_last_read_error', Str::limit($message, 500));
+                abort(502, $message);
+            }
+
+            $items = array_merge($items, $response->json('items') ?? []);
+            $pageToken = $response->json('nextPageToken');
+            if (! $pageToken) {
+                break;
+            }
+        }
+
+        $localGoogleIds = CalendarEvent::query()
+            ->whereIn('google_event_id', collect($items)->pluck('id')->filter()->all())
+            ->pluck('google_event_id')
+            ->all();
+
+        $events = collect($items)
+            ->filter(fn ($item) => is_array($item)
+                && ! empty($item['id'])
+                && ($item['status'] ?? '') !== 'cancelled'
+                && ! in_array($item['visibility'] ?? '', ['private', 'confidential'], true)
+                && ! in_array($item['id'], $localGoogleIds, true)
+                && ! empty($item['start']['dateTime'] ?? $item['start']['date'] ?? null))
+            ->map(function (array $item) {
+                $allDay = isset($item['start']['date']) && ! isset($item['start']['dateTime']);
+                $startValue = $item['start']['dateTime'] ?? $item['start']['date'];
+                $endValue = $item['end']['dateTime'] ?? $item['end']['date'] ?? $startValue;
+
+                return [
+                    'google_event_id' => $item['id'],
+                    'title' => $item['summary'] ?? 'Başlıksız Google etkinliği',
+                    'location' => $item['location'] ?? null,
+                    'start_at' => Carbon::parse($startValue, config('app.timezone', 'Europe/Istanbul'))->toIso8601String(),
+                    'end_at' => Carbon::parse($endValue, config('app.timezone', 'Europe/Istanbul'))->toIso8601String(),
+                    'all_day' => $allDay,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $this->putSetting('google_calendar_last_read_at', now()->toIso8601String());
+        $this->putSetting('google_calendar_last_read_error', null);
+
+        return ['events' => $events, 'truncated' => (bool) $pageToken];
     }
 
     private function authorizedRequest(): PendingRequest

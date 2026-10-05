@@ -140,9 +140,17 @@ class CoordinationWorkflowRoutingTest extends TestCase
         $this->membership($newUnit, $staff, CoordinationUnitMembership::POSITION_STAFF);
 
         Sanctum::actingAs($newCoordinator);
+        $this->getJson('/api/panel/leave-requests?status=pending')
+            ->assertOk()
+            ->assertJsonCount(0, 'leave_requests.data');
         $this->putJson("/api/panel/leave-requests/{$leaveId}/approve")->assertForbidden();
 
         Sanctum::actingAs($oldCoordinator);
+        $this->getJson('/api/panel/leave-requests?status=pending')
+            ->assertOk()
+            ->assertJsonPath('leave_requests.data.0.id', $leaveId)
+            ->assertJsonPath('leave_requests.data.0.can_approve', true)
+            ->assertJsonPath('leave_requests.data.0.can_reject', true);
         $this->putJson("/api/panel/leave-requests/{$leaveId}/approve")
             ->assertOk()
             ->assertJsonPath('leave_request.status', 'approved');
@@ -175,6 +183,10 @@ class CoordinationWorkflowRoutingTest extends TestCase
             ->json('leave_request.id');
 
         Sanctum::actingAs($otherCoordinator);
+        $this->getJson('/api/panel/leave-requests?status=pending')
+            ->assertOk()
+            ->assertJsonPath('leave_requests.data.0.id', $leaveId)
+            ->assertJsonPath('leave_requests.data.0.can_approve', false);
         $this->putJson("/api/panel/leave-requests/{$leaveId}/approve")->assertForbidden();
 
         Sanctum::actingAs($superAdmin);

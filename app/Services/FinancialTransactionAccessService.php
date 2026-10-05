@@ -95,6 +95,17 @@ class FinancialTransactionAccessService
         return $this->canAccessRecord($user, $transaction, 'financial.invoice.download', true);
     }
 
+    public function canEdit(User $user, FinancialTransaction $transaction): bool
+    {
+        return $transaction->status === 'pending'
+            && $this->canUpdate($user, $transaction);
+    }
+
+    public function canUpdate(User $user, FinancialTransaction $transaction): bool
+    {
+        return $this->canAccessRecord($user, $transaction, 'financial.update', true);
+    }
+
     public function canProcess(
         User $user,
         FinancialTransaction $transaction,
@@ -112,6 +123,7 @@ class FinancialTransactionAccessService
         return [
             'view' => $this->canView($user, $transaction),
             'download_invoice' => $this->canDownloadInvoice($user, $transaction),
+            'edit' => $this->canEdit($user, $transaction),
             'delete' => $this->canProcess($user, $transaction, 'financial.delete', true),
             'approve' => $this->canProcess($user, $transaction, 'financial.approve', true),
             'reject' => $this->canProcess($user, $transaction, 'financial.reject', true),

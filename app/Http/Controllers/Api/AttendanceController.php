@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
+use App\Support\FeedbackDeadline;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -21,14 +22,15 @@ class AttendanceController extends Controller
     /**
      * Mark attendance with a QR token.
      *
-     * Requires permission: `participant.qr.use`. The QR token can be the raw token or a scanned URL containing `token`. If the program has coordinates, latitude and longitude are required and checked against the configured radius.
+     * Requires permission: `participant.qr.use`. The QR token can be the raw token or a scanned URL containing `token`. Program and participant coordinates are required and checked against the configured radius.
      *
      * @group Programs & Attendance
      * @authenticated
      *
      * @bodyParam qr_token string required Raw QR token or scanned URL. Example: qr_abc123
-     * @bodyParam latitude number Optional participant latitude. Example: 41.0082
-     * @bodyParam longitude number Optional participant longitude. Example: 28.9784
+     * @bodyParam latitude number Required participant latitude. Example: 41.0082
+     * @bodyParam longitude number Required participant longitude. Example: 28.9784
+     * @bodyParam accuracy_meters number Optional browser-reported GPS accuracy for audit only; it never changes the attendance decision. Example: 35
      * @response 200 {"message":"Yoklamaniz basariyla alindi. Etkinlik tamamlandiktan sonra degerlendirme formu acilacaktir.","current_credit":100}
      * @response 200 {"message":"Yoklamaniz zaten alinmis."}
      * @response 400 {"message":"Gecersiz veya suresi dolmus QR kod."}
@@ -40,8 +42,8 @@ class AttendanceController extends Controller
     {
         $validated = $request->validate([
             'qr_token' => 'required|string',
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
         ]);
 
         $user = $request->user();
@@ -56,9 +58,18 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'Gecersiz veya suresi dolmus QR kod.'], 400);
         }
 
+        // Keep the program and outcome observable without logging the QR token or coordinates.
+        $request->attributes->set('audit.subject', $program);
+        $request->attributes->set('audit.event', 'attendance.qr.attempt');
+        $request->attributes->set('audit.properties', [
+            'program_id' => $program->id,
+            'project_id' => $program->project_id,
+            'period_id' => $program->period_id,
+        ]);
+
         $this->assertPeriodResolvable($request, $program->period_id);
 
-        if ($program->qr_expires_at && now()->isAfter($program->qr_expires_at)) {
+        if (! $program->qr_expires_at || now()->isAfter($program->qr_expires_at)) {
             return response()->json(['message' => 'Bu QR kodun suresi dolmus. Lutfen ekrandaki yeni kodu okutun.'], 400);
         }
 
@@ -104,25 +115,39 @@ class AttendanceController extends Controller
         $latitude = $validated['latitude'] ?? null;
         $longitude = $validated['longitude'] ?? null;
 
-        if ($program->latitude && $program->longitude) {
-            if ($latitude === null || $longitude === null) {
-                return response()->json(['message' => 'Bu yoklama icin konum izni zorunludur.'], 422);
-            }
+        if (! $program->hasAttendanceLocation()) {
+            return response()->json(['message' => 'Program konumu tanimlanmadigi icin QR yoklama alinamiyor.'], 422);
+        }
+        if ($latitude === null || $longitude === null) {
+            return response()->json(['message' => 'Bu yoklama icin konum izni zorunludur.'], 422);
+        }
 
-            $distance = $this->calculateDistance(
-                $program->latitude,
-                $program->longitude,
-                $latitude,
-                $longitude,
-            );
+        $distance = $this->calculateDistance(
+            $program->latitude,
+            $program->longitude,
+            $latitude,
+            $longitude,
+        );
 
-            $radiusMeters = max((int) ($program->radius_meters ?? 100), 1);
+        $radiusMeters = max((int) ($program->radius_meters ?? 100), 1);
+        $reportedAccuracy = $request->input('accuracy_meters');
+        $accuracyMeters = is_numeric($reportedAccuracy) ? (float) $reportedAccuracy : null;
+        $accuracyBucket = $accuracyMeters !== null && is_finite($accuracyMeters) && $accuracyMeters >= 0
+            ? ($accuracyMeters > $radiusMeters ? 'over_radius' : 'within_radius')
+            : 'not_reported';
 
-            if ($distance > $radiusMeters) {
-                return response()->json([
-                    'message' => 'Konumunuz etkinlik alani disinda. Yoklama alinmadi.',
-                ], 422);
-            }
+        $request->attributes->set('audit.properties', [
+            'program_id' => $program->id,
+            'project_id' => $program->project_id,
+            'period_id' => $program->period_id,
+            'location_check' => $distance > $radiusMeters ? 'outside_radius' : 'inside_radius',
+            'accuracy_bucket' => $accuracyBucket,
+        ]);
+
+        if ($distance > $radiusMeters) {
+            return response()->json([
+                'message' => 'Konumunuz etkinlik alani disinda. Yoklama alinmadi.',
+            ], 422);
         }
 
         Attendance::create([
@@ -204,6 +229,12 @@ class AttendanceController extends Controller
             ->get();
 
         foreach ($attendedCompletedPrograms as $program) {
+            // Once the feedback window closes, the missed credit remains lost,
+            // but it must not prevent attendance at every future program.
+            if (! FeedbackDeadline::isOpen($program)) {
+                continue;
+            }
+
             $anonymousToken = hash('sha256', sprintf('%s:%s:%s', $userId, $program->id, config('app.key')));
             $hasFeedback = Feedback::query()
                 ->where('program_id', $program->id)

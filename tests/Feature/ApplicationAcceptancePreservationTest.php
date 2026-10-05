@@ -45,6 +45,17 @@ class ApplicationAcceptancePreservationTest extends TestCase
         return ['panel' => [false], 'waitlist' => [true]];
     }
 
+    public static function completedParticipationCases(): array
+    {
+        $cases = [];
+        foreach (['passive', 'graduated', 'failed'] as $status) {
+            $cases["panel with {$status} participation"] = [false, $status];
+            $cases["waitlist with {$status} participation"] = [true, $status];
+        }
+
+        return $cases;
+    }
+
     public static function newParticipantCases(): array
     {
         return [
@@ -495,6 +506,30 @@ class ApplicationAcceptancePreservationTest extends TestCase
             'period_id' => $otherPeriod->id,
             'status' => 'active',
             'credit' => 65,
+        ]);
+
+        $this->acceptResponse($application, $waitlist)->assertUnprocessable()
+            ->assertJsonValidationErrors($waitlist ? 'decision' : 'status');
+
+        $this->assertSame($waitlist ? 'waitlisted' : 'pending', $application->fresh()->status);
+        $this->assertDatabaseCount('participants', 1);
+    }
+
+    #[DataProvider('completedParticipationCases')]
+    public function test_acceptance_rejects_an_overlapping_prior_project_even_after_participant_status_changes(bool $waitlist, string $status): void
+    {
+        $application = $this->application($waitlist);
+        $otherProject = Project::query()->create([
+            'name' => 'Earlier project', 'slug' => 'earlier-project', 'type' => 'other', 'status' => 'active',
+        ]);
+        $otherPeriod = Period::query()->create([
+            'project_id' => $otherProject->id, 'name' => 'Earlier period', 'status' => 'completed',
+            'start_date' => $application->period->start_date->subMonths(2),
+            'end_date' => $application->period->start_date,
+        ]);
+        Participant::query()->create([
+            'user_id' => $application->user_id, 'project_id' => $otherProject->id,
+            'period_id' => $otherPeriod->id, 'status' => $status, 'credit' => 65,
         ]);
 
         $this->acceptResponse($application, $waitlist)->assertUnprocessable()

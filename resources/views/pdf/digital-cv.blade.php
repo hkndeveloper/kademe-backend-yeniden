@@ -37,6 +37,7 @@
         @if(!empty($form['location'])) | {{ $form['location'] }} @endif
     </p>
     <p class="muted">Uretim tarihi: {{ $generatedAt }}</p>
+    <p class="muted">CV bilgileri kullanici beyanidir. KADEME belgeleri yalniz dogrulama koduyla teyit edilir.</p>
 </div>
 
 <h2>Profesyonel Ozet</h2>
@@ -74,7 +75,7 @@
     @foreach($certificates as $certificate)
         <div class="entry">
             <span class="entry-title">{{ $certificate['title'] ?? $certificate['type'] ?? 'Sertifika' }}</span>
-            <span class="muted">{{ implode(' | ', array_filter([$certificate['issuer'] ?? null, $certificate['project'] ?? null, $certificate['period'] ?? null, !empty($certificate['verification_code']) ? 'Kod: '.$certificate['verification_code'] : null])) }}</span>
+            <span class="muted">{{ implode(' | ', array_filter([$certificate['issuer'] ?? null, $certificate['project'] ?? null, $certificate['period'] ?? null, ($certificate['source'] ?? null) === 'student_upload' ? 'Kisisel yukleme' : (!empty($certificate['verification_code']) ? 'Kod: '.$certificate['verification_code'] : null)])) }}</span>
         </div>
     @endforeach
 @endif
