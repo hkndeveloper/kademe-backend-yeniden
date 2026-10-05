@@ -1,0 +1,32 @@
+{
+  "home_variant": "1",
+  "hero_background_url": "",
+  "video_url": "",
+  "home_block_order": ["hero", "about", "partners", "services", "projects", "process", "benefits", "features", "tools", "team", "stats", "awards", "testimonials", "pricing", "activities", "intro", "blog", "certificate_verify", "faqs", "contact", "newsletter", "marquee"],
+  "sections": [
+    {"id":"partners","title":"Birlikte daha güçlüyüz","description":"İş ortaklarımız ve destekçilerimiz","enabled":true,"items":[]},
+    {"id":"services","title":"Gelişim için doğru adım","description":"KADEME projeleriyle öğren, deneyim kazan ve geleceğine yön ver.","enabled":true,"items":[]},
+    {"id":"process","title":"Başvurudan gelişime","description":"KADEME yolculuğunun adımları","enabled":true,"items":[
+      {"id":"discover","title":"Projeleri keşfet","description":"Proje sayfalarındaki koşulları, dönemleri ve başvuru bilgilerini incele.","label":"Projeler","href":"/projects","icon":"compass"},
+      {"id":"apply","title":"Başvurunu gönder","description":"Başvurusu açık projenin formunu doldur. Üyelik gerekliliği ve başvuru koşulları projeye göre değişebilir.","label":"Başvuru açık projeler","href":"/projects","icon":"users"},
+      {"id":"learn","title":"Sürecini takip et","description":"Başvuru sonucunu ve katıldığın programları kişisel panelinden takip et.","label":"Panelime git","href":"/panel","icon":"award"}
+    ]},
+    {"id":"benefits","title":"Deneyimle büyü","description":"Birbirini tamamlayan gelişim alanları","enabled":true,"items":[
+      {"id":"career","title":"Kariyer yolculuğu","description":"İlgi alanlarına uygun projeleri ve gelişim fırsatlarını keşfet.","icon":"compass","href":"/projects"},
+      {"id":"community","title":"Birlikte öğrenme","description":"Faaliyetlerde yeni deneyimler edin, farklı bakış açılarıyla tanış.","icon":"users","href":"/activities"},
+      {"id":"certificate","title":"Doğrulanabilir kazanımlar","description":"KADEME sertifikalarını doğrulama koduyla sorgula.","icon":"award","href":"/certificates/verify"},
+      {"id":"knowledge","title":"Bilgiye erişim","description":"KADEME blogunda yayınlanan içerikleri takip et.","icon":"book","href":"/blog"}
+    ]},
+    {"id":"features","title":"Bizi bir araya getiren değerler","description":"KADEME yaklaşımı","enabled":true,"items":[
+      {"id":"curiosity","title":"Merak","description":"Soru sormaya, araştırmaya ve yeni yollar keşfetmeye alan açıyoruz.","icon":"compass"},
+      {"id":"creativity","title":"Üretkenlik","description":"Öğrenilenleri deneyime ve birlikte üretilen çalışmalara dönüştürüyoruz.","icon":"sparkles"},
+      {"id":"collaboration","title":"İş birliği","description":"Paylaşarak öğrenmenin ve birlikte gelişmenin gücüne inanıyoruz.","icon":"users"},
+      {"id":"growth","title":"Gelişim","description":"Her adımı yeni bir öğrenme ve gelişim fırsatı olarak görüyoruz.","icon":"award"}
+    ]},
+    {"id":"tools","title":"Birbirine bağlı bir ekosistem","description":"KADEME projelerini keşfet","enabled":true,"items":[]},
+    {"id":"team","title":"KADEME ekibi","description":"Birlikte öğrenme yolculuğuna eşlik eden insanlar","enabled":true,"items":[]},
+    {"id":"awards","title":"Yolculuğumuzdan izler","description":"Kilometre taşlarımız ve paylaşılan başarılarımız","enabled":true,"items":[]},
+    {"id":"testimonials","title":"Deneyimleriyle anlatıyorlar","description":"Topluluğumuzdan paylaşımlar","enabled":true,"items":[]},
+    {"id":"pricing","title":"Sana uygun gelişim yolu","description":"Güncel başvuru koşulları ve kontenjanlar ilgili proje sayfasında yayınlanır.","enabled":true,"items":[]}
+  ]
+}

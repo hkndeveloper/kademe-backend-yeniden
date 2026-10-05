@@ -47,6 +47,7 @@ class SiteSettingsController extends Controller
     private function defaults(): array
     {
         return [
+            'theme' => json_decode(file_get_contents(resource_path('theme/aigocy.json')), true, 512, JSON_THROW_ON_ERROR),
             'general' => [
                 'site_name' => 'KADEME',
                 'site_tagline' => 'Geleceğin Liderlik Okulu',
@@ -365,6 +366,25 @@ class SiteSettingsController extends Controller
         $homepage['stats'] = $this->normalizeStats($homepage['stats'] ?? null, $defaults['homepage']['stats']);
         $settings['homepage'] = $homepage;
 
+        $theme = array_replace($defaults['theme'], is_array($settings['theme'] ?? null) ? $settings['theme'] : []);
+        $theme['home_variant'] = in_array($theme['home_variant'], ['1', '2'], true) ? $theme['home_variant'] : '1';
+        foreach (['hero_background_url', 'video_url'] as $key) {
+            $theme[$key] = is_string($theme[$key] ?? null) ? $theme[$key] : '';
+        }
+        $order = is_array($theme['home_block_order'] ?? null) ? $theme['home_block_order'] : [];
+        $theme['home_block_order'] = array_values(array_unique(array_merge(array_intersect($order, $defaults['theme']['home_block_order']), $defaults['theme']['home_block_order'])));
+        $sections = is_array($theme['sections'] ?? null) ? $theme['sections'] : [];
+        $theme['sections'] = array_map(function ($default) use ($sections) {
+            $incoming = collect($sections)->first(fn ($item) => is_array($item) && ($item['id'] ?? null) === $default['id']);
+            $section = array_replace($default, $incoming ?? []);
+            $section['description'] = is_string($section['description'] ?? null) ? $section['description'] : '';
+            $section['enabled'] = filter_var($section['enabled'], FILTER_VALIDATE_BOOLEAN);
+            $section['items'] = array_values(array_filter(is_array($section['items']) ? $section['items'] : [], fn ($item) => is_array($item) && is_string($item['title'] ?? null)));
+
+            return $section;
+        }, $defaults['theme']['sections']);
+        $settings['theme'] = $theme;
+
         return $settings;
     }
 
@@ -547,6 +567,38 @@ class SiteSettingsController extends Controller
             'settings.about' => 'nullable|array',
             'settings.blog_page' => 'nullable|array',
             'settings.faq_page' => 'nullable|array',
+            'settings.theme' => 'sometimes|array:home_variant,hero_background_url,video_url,home_block_order,sections',
+            'settings.theme.home_block_order' => 'sometimes|array|max:22',
+            'settings.theme.home_block_order.*' => 'required|string|distinct|in:hero,about,partners,services,projects,process,benefits,features,tools,team,stats,awards,testimonials,pricing,activities,intro,blog,certificate_verify,faqs,contact,newsletter,marquee',
+            'settings.theme.home_variant' => 'sometimes|in:1,2',
+            'settings.theme.hero_background_url' => ['nullable', 'string', 'max:2048', 'regex:~^(?:https?://|/(?!/))~'],
+            'settings.theme.video_url' => ['nullable', 'string', 'max:2048', 'regex:~^(?:https?://|/(?!/))~'],
+            'settings.theme.sections' => 'sometimes|array|max:11',
+            'settings.theme.sections.*' => 'required|array:id,title,description,enabled,items',
+            'settings.theme.sections.*.id' => 'required|distinct|in:partners,services,process,benefits,features,tools,team,awards,testimonials,pricing',
+            'settings.theme.sections.*.title' => 'required|string|max:180',
+            'settings.theme.sections.*.description' => 'nullable|string|max:2000',
+            'settings.theme.sections.*.enabled' => 'required|boolean',
+            'settings.theme.sections.*.items' => ['present', 'array', 'max:50', function ($attribute, $value, $fail) {
+                if (is_array($value)) {
+                    $ids = array_column($value, 'id');
+                    if (count($ids) !== count(array_unique($ids))) {
+                        $fail('Aynı bölümde kart kimlikleri benzersiz olmalıdır.');
+                    }
+                }
+            }],
+            'settings.theme.sections.*.items.*' => 'required|array:id,title,description,image_url,href,label,subtitle,value,icon,details',
+            'settings.theme.sections.*.items.*.id' => 'required|string|max:100',
+            'settings.theme.sections.*.items.*.title' => 'required|string|max:180',
+            'settings.theme.sections.*.items.*.description' => 'nullable|string|max:5000',
+            'settings.theme.sections.*.items.*.subtitle' => 'nullable|string|max:250',
+            'settings.theme.sections.*.items.*.value' => 'nullable|string|max:80',
+            'settings.theme.sections.*.items.*.icon' => 'nullable|in:compass,users,award,book,sparkles',
+            'settings.theme.sections.*.items.*.label' => 'nullable|string|max:100',
+            'settings.theme.sections.*.items.*.image_url' => ['nullable', 'string', 'max:2048', 'regex:~^(?:https?://|/(?!/))~'],
+            'settings.theme.sections.*.items.*.href' => ['nullable', 'string', 'max:2048', 'regex:~^(?:https?://|/(?!/))~'],
+            'settings.theme.sections.*.items.*.details' => 'sometimes|array|max:20',
+            'settings.theme.sections.*.items.*.details.*' => 'string|max:500',
         ]);
 
         foreach ($validated['settings'] as $group => $entries) {
