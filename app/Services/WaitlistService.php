@@ -7,7 +7,6 @@ use App\Models\Application;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
-use App\Support\ApplicationMailLinks;
 use App\Support\IstanbulDateTime;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -227,19 +226,19 @@ class WaitlistService
         $unknown = false;
         try {
             $application->load(['project:id,name', 'period:id,name', 'program:id,title', 'user:id,email,role']);
-            if ($application->user?->email) {
+            if ($application->applicant()?->email) {
                 $deadline = IstanbulDateTime::format($expiresAt).' (Türkiye saati)';
-                $applicationUrl = ApplicationMailLinks::portal($application->user, 'applications');
+                $applicationUrl = app(ApplicationTrackingService::class)->issue($application);
                 $plainText = 'Proje: '.($application->project?->name ?? '-')."\n"
                     .'Dönem: '.($application->period?->name ?? '-')."\n"
                     .'Program: '.($application->program?->title ?? '-')."\n"
-                    .'Durum: Yedek listeden davet edildiniz.' ."\n"
+                    .'Durum: Yedek listeden davet edildiniz.'."\n"
                     .'Son yanıt tarihi: '.$deadline
                     .($applicationUrl ? "\nBaşvurularım: {$applicationUrl}" : '');
-                $sent = $this->notificationService->sendTemplatedEmail(
-                    [$application->user->email],
+                $sent = app(ApplicationMessageService::class)->send(
+                    $application,
+                    'waitlist_invited',
                     'Yedek listeden davet edildiniz',
-                    'emails.application-status',
                     [
                         'title' => 'Yedek Liste Daveti',
                         'preheader' => 'Yedek listeden davet edildiniz.',
@@ -254,7 +253,6 @@ class WaitlistService
                         'action_text' => $applicationUrl ? 'Başvurularımı görüntüle' : null,
                         'plain_text' => $plainText,
                     ],
-                    $application->project_id,
                     $senderId
                 ) > 0;
             }
@@ -283,6 +281,7 @@ class WaitlistService
         return Application::query()
             ->where('project_id', $scope->project_id)
             ->where('period_id', $scope->period_id)
+            ->when($scope->training_id, fn ($query) => $query->where('training_id', $scope->training_id), fn ($query) => $query->whereNull('training_id'))
             ->when(
                 $scope->program_id,
                 fn ($query) => $query->where('program_id', $scope->program_id),

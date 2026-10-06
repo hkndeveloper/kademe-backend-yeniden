@@ -114,47 +114,7 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'surname' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'tc_no' => 'required|string|size:11', // KADEME için önemli
-            'phone' => 'required|string|max:20',
-        ]);
-
-        $user = User::create([
-            'name' => $validated['name'],
-            'surname' => $validated['surname'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'tc_no' => $validated['tc_no'],
-            'phone' => $validated['phone'],
-            'role' => 'student', // Varsayılan kayıt rolü
-            'status' => 'active',
-            'must_change_password' => false,
-        ]);
-
-        // Spatie rolü ata
-        $user->assignRole('student');
-
-        // Boş bir profil oluştur
-        $user->profile()->create();
-
-        // Token oluştur
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        $this->logAuthActivity($request, 'registered', 'auth.register.success', $user, [
-            'status_code' => 201,
-            'role' => $user->role,
-        ]);
-
-        return response()->json([
-            'message' => 'Kayıt başarılı.',
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $this->authenticatedUserPayload($user),
-        ], 201);
+        return response()->json(['message' => 'Genel hesap oluşturma kapalıdır. Açık proje veya eğitim başvurusunun kabulünden sonra hesabınız açılır.'], 403);
     }
 
     /**

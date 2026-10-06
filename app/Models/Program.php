@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 class Program extends Model
 {
@@ -17,6 +18,7 @@ class Program extends Model
 
     protected $fillable = [
         'project_id',
+        'project_module_id',
         'period_id',
         'program_kind',
         'managing_unit_id',
@@ -76,7 +78,7 @@ class Program extends Model
 
     public function isAttendanceWindowOpen($at = null): bool
     {
-        $at = $at ? \Illuminate\Support\Carbon::parse($at) : now();
+        $at = $at ? Carbon::parse($at) : now();
 
         if ($this->start_at && $at->lt($this->start_at)) {
             return false;

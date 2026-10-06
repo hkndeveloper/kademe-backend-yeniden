@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Application;
 use App\Models\Participant;
+use App\Models\TrainingEnrollment;
 use Illuminate\Validation\ValidationException;
 
 class ApplicationEnrollmentService
@@ -34,18 +35,29 @@ class ApplicationEnrollmentService
             ]);
         }
 
-        $this->projectPeriodGuard->assertNoOverlappingProjectParticipation(
-            $application->user_id,
-            $application->project_id,
-            $application->period,
-            $errorKey
-        );
+        if ($application->user_id) {
+            $this->projectPeriodGuard->assertNoOverlappingProjectParticipation($application->user_id, $application->project_id, $application->period, $errorKey);
+        }
 
         if (! $this->capacityService->hasAvailableSeat($application, forApplicant: true)) {
             throw ValidationException::withMessages([
                 $errorKey => ['Kontenjan dolu. Basvuruyu kabul etmeden once kontenjan acin veya yedek listede birakin.'],
             ]);
         }
+
+        if ($application->training_id) {
+            $training = $application->training;
+            if (! $training || ! $training->is_active || (int) $training->project_id !== (int) $application->project_id
+                || (int) $training->period_id !== (int) $application->period_id) {
+                throw ValidationException::withMessages([$errorKey => ['Eğitim bu proje/dönem için kabule uygun değil.']]);
+            }
+        }
+        $user = app(AcceptedApplicantAccountService::class)->resolve($application);
+        if ($user->status === 'blacklisted' && (! $user->blacklisted_until || $user->blacklisted_until->isFuture())) {
+            throw ValidationException::withMessages([$errorKey => ['Adayın başvuru kısıtlaması devam ediyor.']]);
+        }
+        // Recheck against the resolved account; another candidate acceptance may have linked it.
+        $this->projectPeriodGuard->assertNoOverlappingProjectParticipation($user->id, $application->project_id, $application->period, $errorKey);
 
         // Another program acceptance must not reset an existing period membership.
         $participant = Participant::firstOrCreate([
@@ -60,6 +72,11 @@ class ApplicationEnrollmentService
 
         // Participation is separate from the account's administrative roles/status.
         $user?->profile()->firstOrCreate(['user_id' => $user->id], []);
+
+        if ($application->training_id) {
+            TrainingEnrollment::firstOrCreate(['training_id' => $application->training_id, 'user_id' => $user->id],
+                ['application_id' => $application->id, 'status' => 'active']);
+        }
 
         // Legacy visitor accounts become students on acceptance, but an account
         // carrying any other role must keep that assignment and its account state.

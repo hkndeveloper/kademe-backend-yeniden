@@ -29,6 +29,7 @@ class Project extends Model
         'application_end_at',
         'next_application_date',
         'has_interview',
+        'application_scope',
         'quota',
         'created_by',
     ];

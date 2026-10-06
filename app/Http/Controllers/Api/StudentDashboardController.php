@@ -14,24 +14,36 @@ use App\Models\Participant;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectModuleEnrollment;
+use App\Models\ProjectTraining;
 use App\Models\RewardTier;
+use App\Models\TrainingEnrollment;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Services\KademeModuleConsentService;
 use App\Support\ProjectSpecialModuleCatalog;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Validation\ValidationException;
 
 /**
  * @group Participant Dashboard
  */
 class StudentDashboardController extends Controller
 {
+    private function assertTrainingModuleAccess($user, ProjectModule $module): void
+    {
+        if ($module->training_id) {
+            abort_unless(TrainingEnrollment::where('user_id', $user->id)->where('training_id', $module->training_id)->where('status', 'active')->exists(), 403, 'Bu eğitime kabul edilmediniz.');
+        } else {
+            $ids = ProjectTraining::where('project_id', $module->project_id)->pluck('id');
+            abort_if(TrainingEnrollment::where('user_id', $user->id)->whereIn('training_id', $ids)->where('status', 'active')->exists(), 403, 'Modül kabul edildiğiniz eğitime bağlı değil.');
+        }
+    }
+
     private function shouldIncludeGraduatedParticipations($user): bool
     {
         return $user->role === 'alumni';
@@ -56,6 +68,7 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.dashboard.view`. Returns active or alumni participations, recent credit history, KADEME+ badge data, monthly titles, and total score.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @response 200 {"participations":[{"id":1,"status":"active","credit":100}],"recent_credit_history":[{"amount":10,"type":"bonus"}],"earned_badges":[{"id":1,"name":"Liderlik"}],"monthly_titles":["Ayin Pergellisi"],"total_score":100,"profile_badge_frame":"gold"}
@@ -113,6 +126,7 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.projects.view`. Alumni users may also see graduated participations.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @response 200 {"projects":[{"id":1,"name":"KADEME","slug":"kademe","type":"kademe_plus","participation_status":"active","graduation_status":null,"period":{"id":1,"name":"2026","status":"active"}}]}
@@ -158,6 +172,7 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.cv.manage`. Returns editable saved draft data plus approved KADEME projects, badges, certificates, and credit history that can be shown in the mobile CV builder.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @response 200 {"profile":{"full_name":"Hakan Kekec","email":"hakan@example.com","summary":"Kariyer hedefim sosyal etki."},"saved_draft":{"form":{"fullName":"Hakan Kekec"}},"approved":{"title":"KADEME Onayli Dijital CV","total_credit":100,"completed_project_count":1,"badge_count":2,"certificate_count":1},"projects":[],"badges":[],"certificates":[],"credit_history":[]}
@@ -280,6 +295,7 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.cv.manage`. Stores the editable CV builder payload under the user profile. The approved KADEME data is not overwritten by this endpoint.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @bodyParam form object required CV form payload.
@@ -290,6 +306,7 @@ class StudentDashboardController extends Controller
      * @bodyParam form.education object[] Optional education rows.
      * @bodyParam form.projects object[] Optional project rows.
      * @bodyParam form.certificates object[] Optional certificate rows.
+     *
      * @response 200 {"message":"Dijital CV taslagi kaydedildi.","saved_draft":{"form":{"fullName":"Hakan Kekec"},"saved_at":"2026-06-30T12:00:00+03:00"}}
      * @response 422 {"message":"The form field is required.","errors":{"form":["The form field is required."]}}
      */
@@ -358,6 +375,7 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.cv.manage`. Accepts the CV builder payload and returns a downloadable PDF response.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @bodyParam form object required CV form payload.
@@ -366,6 +384,7 @@ class StudentDashboardController extends Controller
      * @bodyParam badges object[] Optional badge rows.
      * @bodyParam certificates object[] Optional certificate rows.
      * @bodyParam credit_history object[] Optional credit rows.
+     *
      * @response 200 {"download":"Binary PDF stream named {full-name}-kademe-cv.pdf"}
      * @response 422 {"message":"The form field is required.","errors":{"form":["The form field is required."]}}
      */
@@ -416,6 +435,7 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.projects.view`. Returns only modules that belong to projects where the current user is a participant or alumni participant.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @response 200 {"projects":[{"project":{"id":1,"name":"KADEME","type":"kademe_plus"},"participation":{"id":1,"status":"active","credit":100},"modules":["reward_tiers","participants_by_module"],"reward_progress":{"badge_count":2,"credit":100,"eligible_count":1}}]}
@@ -472,6 +492,12 @@ class StudentDashboardController extends Controller
         $moduleRows = ProjectModule::query()
             ->whereIn('project_id', $projectIds)
             ->where('is_active', true)
+            ->where(function ($query) use ($user) {
+                $acceptedTrainingIds = TrainingEnrollment::where('user_id', $user->id)->where('status', 'active')->pluck('training_id');
+                $trainingProjectIds = ProjectTraining::whereIn('id', $acceptedTrainingIds)->pluck('project_id');
+                $query->whereIn('training_id', $acceptedTrainingIds)
+                    ->orWhere(fn ($legacy) => $legacy->whereNull('training_id')->whereNotIn('project_id', $trainingProjectIds));
+            })
             ->orderBy('sort_order')
             ->get();
 
@@ -567,15 +593,15 @@ class StudentDashboardController extends Controller
                         ? ($eurodeskByProject->get($project->id) ?? collect())
                             ->filter(fn (EurodeskProject $eurodeskProject) => $eurodeskProject->period_id === null || (int) $eurodeskProject->period_id === (int) $participation->period_id)
                             ->map(fn (EurodeskProject $eurodeskProject) => [
-                            'id' => $eurodeskProject->id,
-                            'title' => $eurodeskProject->title,
-                            'partner_organizations' => $eurodeskProject->partner_organizations ?? [],
-                            'grant_amount' => $eurodeskProject->grant_amount,
-                            'grant_status' => $eurodeskProject->grant_status,
-                            'period' => $eurodeskProject->period?->only(['id', 'name', 'status']),
-                            'start_date' => optional($eurodeskProject->start_date)?->toDateString(),
-                            'end_date' => optional($eurodeskProject->end_date)?->toDateString(),
-                        ])->values()
+                                'id' => $eurodeskProject->id,
+                                'title' => $eurodeskProject->title,
+                                'partner_organizations' => $eurodeskProject->partner_organizations ?? [],
+                                'grant_amount' => $eurodeskProject->grant_amount,
+                                'grant_status' => $eurodeskProject->grant_status,
+                                'period' => $eurodeskProject->period?->only(['id', 'name', 'status']),
+                                'start_date' => optional($eurodeskProject->start_date)?->toDateString(),
+                                'end_date' => optional($eurodeskProject->end_date)?->toDateString(),
+                            ])->values()
                         : [],
                     'reward_tiers' => in_array('reward_tiers', $moduleKeys, true)
                         ? $projectRewardTiers->map(fn (RewardTier $tier) => [
@@ -601,32 +627,32 @@ class StudentDashboardController extends Controller
                         ? ($modulesByProject->get($project->id) ?? collect())
                             ->filter(fn (ProjectModule $module) => $module->period_id === null || (int) $module->period_id === (int) $participation->period_id)
                             ->map(function (ProjectModule $module) use ($enrollmentRows, $moduleConsentService) {
-                            $enrollment = $enrollmentRows->get($module->id);
+                                $enrollment = $enrollmentRows->get($module->id);
 
-                            return [
-                                'id' => $module->id,
-                                'title' => $module->title,
-                                'description' => $module->description,
-                                'outcomes' => $module->outcomes ?? [],
-                                'instructors' => $module->instructors ?? [],
-                                'faq_items' => $moduleConsentService->faqItemsFor($module),
-                                'warning_text' => $moduleConsentService->warningTextFor($module),
-                                'application_consent_text' => $moduleConsentService->textFor($module),
-                                'application_consent_hash' => $moduleConsentService->hashFor($module),
-                                'requires_consent' => true,
-                                'consent_checkbox_label' => $module->consent_checkbox_label,
-                                'application_open' => (bool) $module->application_open,
-                                'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
-                                'enrollment' => $enrollment ? [
-                                    'id' => $enrollment->id,
-                                    'status' => $enrollment->status,
-                                    'consented_at' => optional($enrollment->consented_at)?->toIso8601String(),
-                                    'consent_text_snapshot' => $enrollment->consent_text_snapshot,
-                                    'reviewed_at' => optional($enrollment->reviewed_at)?->toIso8601String(),
-                                    'note' => $enrollment->note,
-                                ] : null,
-                            ];
-                        })->values()
+                                return [
+                                    'id' => $module->id,
+                                    'title' => $module->title,
+                                    'description' => $module->description,
+                                    'outcomes' => $module->outcomes ?? [],
+                                    'instructors' => $module->instructors ?? [],
+                                    'faq_items' => $moduleConsentService->faqItemsFor($module),
+                                    'warning_text' => $moduleConsentService->warningTextFor($module),
+                                    'application_consent_text' => $moduleConsentService->textFor($module),
+                                    'application_consent_hash' => $moduleConsentService->hashFor($module),
+                                    'requires_consent' => true,
+                                    'consent_checkbox_label' => $module->consent_checkbox_label,
+                                    'application_open' => (bool) $module->application_open,
+                                    'requires_coordinator_approval' => (bool) $module->requires_coordinator_approval,
+                                    'enrollment' => $enrollment ? [
+                                        'id' => $enrollment->id,
+                                        'status' => $enrollment->status,
+                                        'consented_at' => optional($enrollment->consented_at)?->toIso8601String(),
+                                        'consent_text_snapshot' => $enrollment->consent_text_snapshot,
+                                        'reviewed_at' => optional($enrollment->reviewed_at)?->toIso8601String(),
+                                        'note' => $enrollment->note,
+                                    ] : null,
+                                ];
+                            })->values()
                         : [],
                 ];
             })->values(),
@@ -639,12 +665,15 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.projects.view`. The user must be a participant of the project and, when required, must accept module terms.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @urlParam projectId integer required Project id. Example: 1
      * @urlParam moduleId integer required Module id. Example: 10
+     *
      * @bodyParam accepted_terms boolean required Module information accepted. Example: true
      * @bodyParam expected_consent_hash string required Hash of the displayed module information.
+     *
      * @response 201 {"message":"Basvurunuz koordinator onayina iletildi.","enrollment":{"id":1,"status":"pending","consented_at":"2026-06-30T12:00:00+03:00"}}
      * @response 403 {"message":"Bu projenin katilimcisi degilsiniz."}
      * @response 422 {"message":"Bu modul icin basvuru su an kapali."}
@@ -661,6 +690,7 @@ class StudentDashboardController extends Controller
             ->firstOrFail();
 
         abort_unless($module->is_active && $module->application_open, 422, 'Bu modul icin basvuru su an kapali.');
+        $this->assertTrainingModuleAccess($user, $module);
 
         $participant = $this->participationQueryFor($user)
             ->where('project_id', $projectId)
@@ -686,6 +716,7 @@ class StudentDashboardController extends Controller
                 ->findOrFail($moduleId);
 
             abort_unless($currentModule->is_active && $currentModule->application_open, 422, 'Bu modul icin basvuru su an kapali.');
+            $this->assertTrainingModuleAccess($user, $currentModule);
             abort_unless(
                 $currentModule->period_id === null || (int) $currentModule->period_id === (int) $participant->period_id,
                 403,
@@ -734,9 +765,11 @@ class StudentDashboardController extends Controller
      * Requires permission: `participant.projects.view`. The viewer must be a participant of the project. Returns top 50 rows and the viewer row.
      *
      * @group Participant Dashboard
+     *
      * @authenticated
      *
      * @urlParam projectId integer required Project id. Example: 1
+     *
      * @response 200 {"leaderboard":[{"rank":1,"user_id":1,"display_name":"Hakan Kekec","badge_count":5,"profile_badge_frame":"gold"}],"me":{"rank":1,"user_id":1,"display_name":"Hakan Kekec","badge_count":5}}
      * @response 403 {"message":"Bu siralamayi gorme yetkiniz yok."}
      * @response 404 {"message":"Not Found"}

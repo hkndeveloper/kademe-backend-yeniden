@@ -155,7 +155,7 @@ class SiteSettingsController extends Controller
                 'certificate_verify_cta_label' => 'Dogrulama Ekranina Git',
                 'certificate_verify_cta_href' => '/certificates/verify',
                 'footer_description' => 'KADEME Kariyer Gelişim Merkezi. Gelecegin liderlerini bugunden yetistiriyoruz.',
-                'footer_copyright' => '© 2026 KADEME YÖNETİM SİSTEMİ. TÜM HAKLARI SAKLIDIR.',
+                'footer_copyright' => '2026 KADEME',
                 'stats' => [
                     ['label' => 'Aktif Ogrenci', 'value' => '2,500+', 'icon' => 'users'],
                     ['label' => 'Tamamlanan Proje', 'value' => '450+', 'icon' => 'trophy'],

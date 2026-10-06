@@ -5,25 +5,30 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\ResolvesProjectPeriodContext;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\ApplicationCandidate;
 use App\Models\ApplicationForm;
 use App\Models\ApplicationWindow;
 use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
+use App\Models\ProjectTraining;
+use App\Models\TrainingEnrollment;
 use App\Models\User;
+use App\Services\ApplicationAudienceService;
+use App\Services\ApplicationConsentService;
 use App\Services\ApplicationDecisionService;
 use App\Services\ApplicationEmailVerificationService;
 use App\Services\ApplicationEnrollmentService;
-use App\Services\ApplicationConsentService;
 use App\Services\ApplicationFormResolver;
 use App\Services\ApplicationIntakeService;
+use App\Services\ApplicationMessageService;
 use App\Services\ApplicationNotificationRecipientService;
 use App\Services\ApplicationProjectPeriodGuard;
-use App\Services\ApplicationSubmissionService;
-use App\Services\ApplicationScreeningService;
 use App\Services\ApplicationScheduleService;
-use App\Services\ApplicationAudienceService;
+use App\Services\ApplicationScreeningService;
+use App\Services\ApplicationSubmissionService;
+use App\Services\ApplicationTrackingService;
 use App\Services\NotificationService;
 use App\Services\WaitlistService;
 use App\Support\ApplicationFileStorage;
@@ -31,9 +36,8 @@ use App\Support\ApplicationMailLinks;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -62,33 +66,15 @@ class ApplicationController extends Controller
         private readonly ApplicationProjectPeriodGuard $projectPeriodGuard,
     ) {}
 
-    private function resolveApplicantUser(array $applicant): User
+    private function resolveApplicantUser(array $applicant): ApplicationCandidate
     {
         $email = Str::lower(trim($applicant['email']));
-        $existing = User::where('email', $email)->first();
 
-        if ($existing) {
-            return $existing;
-        }
-
-        return DB::transaction(function () use ($applicant, $email) {
-            $user = User::firstOrCreate(['email' => $email], [
-                'name' => trim($applicant['name']),
-                'surname' => trim($applicant['surname']),
-                'phone' => ! empty($applicant['phone']) ? trim((string) $applicant['phone']) : null,
-                'password' => Hash::make(Str::random(32)),
-                'role' => 'student',
-                'status' => 'active',
-                'email_verified_at' => now(),
-                'must_change_password' => false,
-            ]);
-
-            if ($user->wasRecentlyCreated) {
-                $user->syncRoles(['student']);
-            }
-
-            return $user;
-        });
+        return ApplicationCandidate::firstOrCreate(['email' => $email], [
+            'name' => trim($applicant['name']), 'surname' => trim($applicant['surname']),
+            'phone' => $applicant['phone'] ?? null, 'email_verified_at' => now(),
+            'user_id' => User::whereRaw('LOWER(email) = ?', [$email])->value('id'),
+        ]);
     }
 
     private function ensureUserCanApply(User $user): void
@@ -175,6 +161,13 @@ class ApplicationController extends Controller
     private function sendApplicationEmail(array $emails, string $subject, array $data, ?int $projectId = null, ?int $senderId = null, ?int $applicationId = null): int
     {
         try {
+            if ($applicationId) {
+                $application = Application::find($applicationId);
+                if ($application && count($emails) === 1 && in_array($application->applicant()?->email, $emails, true)) {
+                    return app(ApplicationMessageService::class)->send($application, in_array($application->status, ['accepted', 'rejected'], true) ? $application->status : 'received', $subject, $data, $senderId);
+                }
+            }
+
             return $this->notificationService->sendTemplatedEmail(
                 $emails,
                 $subject,
@@ -211,13 +204,13 @@ class ApplicationController extends Controller
     }
 
     /** @return array{Application, array{applicant_email_sent: bool, coordinators_email_sent: ?bool}} */
-    private function createApplicationForUser(User|\Closure $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false, ?int $programId = null, ?string $verificationCode = null, ?int $expectedFormId = null, ?string $expectedConsentText = null, bool $publicSubmission = false): array
+    private function createApplicationForUser(User|\Closure $user, Project $project, array $formData, array $formFiles = [], bool $consentAccepted = false, ?int $programId = null, ?string $verificationCode = null, ?int $expectedFormId = null, ?string $expectedConsentText = null, bool $publicSubmission = false, ?int $trainingId = null): array
     {
         $uploadedPaths = [];
         try {
-            $submission = function (User $currentUser, Project $currentProject, ?Period $period) use ($formData, $formFiles, $consentAccepted, $programId, $verificationCode, $expectedFormId, $expectedConsentText, $publicSubmission, &$uploadedPaths) {
+            $submission = function (User|ApplicationCandidate $currentUser, Project $currentProject, ?Period $period) use ($formData, $formFiles, $consentAccepted, $programId, $verificationCode, $expectedFormId, $expectedConsentText, $publicSubmission, $trainingId, &$uploadedPaths) {
                 return $this->recordApplicationForUser(
-                    $currentUser, $currentProject, $period, $formData, $formFiles, $consentAccepted, $programId, $uploadedPaths, $verificationCode, $expectedFormId, $expectedConsentText, $publicSubmission
+                    $currentUser, $currentProject, $period, $formData, $formFiles, $consentAccepted, $programId, $uploadedPaths, $verificationCode, $expectedFormId, $expectedConsentText, $publicSubmission, $trainingId
                 );
             };
             $application = $user instanceof User
@@ -245,9 +238,12 @@ class ApplicationController extends Controller
         return [$application, $followUp];
     }
 
-    private function recordApplicationForUser(User $user, Project $project, ?Period $currentPeriod, array $formData, array $formFiles, bool $consentAccepted, ?int $programId, array &$uploadedPaths, ?string $verificationCode, ?int $expectedFormId, ?string $expectedConsentText, bool $publicSubmission): Application
+    private function recordApplicationForUser(User|ApplicationCandidate $user, Project $project, ?Period $currentPeriod, array $formData, array $formFiles, bool $consentAccepted, ?int $programId, array &$uploadedPaths, ?string $verificationCode, ?int $expectedFormId, ?string $expectedConsentText, bool $publicSubmission, ?int $trainingId): Application
     {
-        $this->ensureUserCanApply($user);
+        $account = $user instanceof User ? $user : $user->user;
+        if ($account) {
+            $this->ensureUserCanApply($account);
+        }
 
         if (! $currentPeriod || $currentPeriod->status !== 'active') {
             throw ValidationException::withMessages([
@@ -255,7 +251,22 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $this->projectPeriodGuard->assertNoOverlappingProjectParticipation($user->id, $project->id, $currentPeriod, 'project_id');
+        if ($account) {
+            $this->projectPeriodGuard->assertNoOverlappingProjectParticipation($account->id, $project->id, $currentPeriod, 'project_id');
+        }
+
+        $training = null;
+        if ($project->application_scope === 'training') {
+            $training = ProjectTraining::where('project_id', $project->id)->where('period_id', $currentPeriod->id)->find($trainingId);
+            if (! $training || ! $training->isOpen()) {
+                throw ValidationException::withMessages(['training_id' => ['Başvurusu açık bir eğitim seçin.']]);
+            }
+        } elseif ($trainingId !== null) {
+            throw ValidationException::withMessages(['training_id' => ['Bu proje yalnız proje başvurusu alır.']]);
+        }
+        if ($programId !== null) {
+            throw ValidationException::withMessages(['program_id' => ['Ders veya oturuma değil, projeye ya da eğitime başvurun.']]);
+        }
 
         $applicationWindow = $this->intakeService->windowFor($project, $currentPeriod);
         if (! $this->intakeService->isOpen($project, $currentPeriod, $applicationWindow)) {
@@ -265,28 +276,20 @@ class ApplicationController extends Controller
         }
 
         $program = null;
-        if ($programId !== null) {
-            $program = Program::query()
-                ->where('id', $programId)
-                ->where('project_id', $project->id)
-                ->where('period_id', $currentPeriod->id)
-                ->whereIn('status', ['scheduled', 'active'])
-                ->first();
 
-            if (! $program) {
-                throw ValidationException::withMessages([
-                    'program_id' => ['Secilen program bu proje/donem icin basvuruya uygun degil.'],
-                ]);
+        $submissionKey = hash('sha256', Str::lower($user->email).'|'.$project->id.'|'.$currentPeriod->id.'|'.($training?->id ?? 'project'));
+        $existingApp = Application::where(function ($query) use ($user, $account, $submissionKey) {
+            $query->where('submission_key', $submissionKey);
+            if ($user instanceof ApplicationCandidate) {
+                $query->orWhere('candidate_id', $user->id);
             }
-
-            $this->applicationAudienceService->assertCanSubmit($program, $user, $publicSubmission);
-            $this->applicationScheduleService->assertNoConflict($user->id, $program);
-        }
-
-        $existingApp = Application::where('user_id', $user->id)
+            if ($account) {
+                $query->orWhere('user_id', $account->id);
+            }
+        })
             ->where('project_id', $project->id)
             ->where('period_id', $currentPeriod->id)
-            ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
+            ->when($training, fn ($query) => $query->where('training_id', $training->id))
             ->first();
 
         if ($existingApp) {
@@ -295,7 +298,7 @@ class ApplicationController extends Controller
             ]);
         }
 
-        $form = $this->applicationFormResolver->forApplication($project, $currentPeriod, $program);
+        $form = $this->applicationFormResolver->forApplication($project, $currentPeriod, $program, $training);
 
         if ($expectedFormId !== null && $expectedFormId !== (int) ($form?->id ?? 0)) {
             throw ValidationException::withMessages([
@@ -325,9 +328,10 @@ class ApplicationController extends Controller
         );
         $autoRejectReason = ($screeningMatch['mode'] ?? null) === 'reject' ? $screeningMatch['reason'] : null;
         $reviewReason = ($screeningMatch['mode'] ?? null) === 'review' ? $screeningMatch['reason'] : null;
+        $trainingHasSeat = ! $training || $training->quota === null || TrainingEnrollment::where('training_id', $training->id)->where('status', 'active')->count() < $training->quota;
         $initialStatus = $autoRejectReason
             ? 'rejected'
-            : ($reviewReason || $this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program, $applicationWindow) ? 'pending' : 'waitlisted');
+            : ($reviewReason || ($training ? $trainingHasSeat : $this->projectPeriodHasAvailableSeat($project, $currentPeriod, $program, $applicationWindow)) ? 'pending' : 'waitlisted');
         $waitlistOrder = $initialStatus === 'waitlisted'
             ? $this->nextWaitlistOrder($project, $currentPeriod, $program)
             : null;
@@ -337,7 +341,12 @@ class ApplicationController extends Controller
         }
 
         return Application::create([
-            'user_id' => $user->id,
+            'user_id' => $account?->id,
+            'candidate_id' => $user instanceof ApplicationCandidate ? $user->id : null,
+            'training_id' => $training?->id,
+            'submission_key' => $submissionKey,
+            'has_interview_snapshot' => $training ? false : (bool) ($applicationWindow?->has_interview ?? $project->has_interview),
+            'form_fields_snapshot' => $form?->fields ?? [],
             'project_id' => $project->id,
             'period_id' => $currentPeriod->id,
             'application_window_id' => $applicationWindow?->id,
@@ -358,13 +367,13 @@ class ApplicationController extends Controller
     /** @return array{applicant_email_sent: bool, coordinators_email_sent: ?bool} */
     private function notifyApplicationReceived(Application $application): array
     {
-        $user = $application->user()->firstOrFail();
+        $user = $application->applicant();
         $project = $application->project()->firstOrFail();
         $period = $application->period()->first();
         $program = $application->program()->first();
         $autoRejectReason = $application->auto_rejection_reason;
         $initialStatus = $application->status;
-        $followUpUrl = ApplicationMailLinks::portal($user, 'applications');
+        $followUpUrl = app(ApplicationTrackingService::class)->issue($application);
 
         $applicantEmailSent = $this->sendApplicationEmail(
             array_filter([$user->email]),
@@ -388,7 +397,7 @@ class ApplicationController extends Controller
                 'plain_text' => "Proje: {$project->name}".($period ? "\nDönem: {$period->name}" : '').($program ? "\nProgram: {$program->title}" : '')."\nDurum: ".$this->applicationStatusLabel($initialStatus).($autoRejectReason ? "\nGerekçe: {$autoRejectReason}" : '').($followUpUrl ? "\nBaşvurularım: {$followUpUrl}" : ''),
             ],
             $project->id,
-            $user->id,
+            $application->user_id,
             $application->id
         ) > 0;
 
@@ -416,7 +425,7 @@ class ApplicationController extends Controller
                     'plain_text' => "Proje: {$project->name}".($period ? "\nDönem: {$period->name}" : '').($program ? "\nProgram: {$program->title}" : '')."\nDurum: ".$this->applicationStatusLabel($initialStatus)."\nYeni başvuru: #{$application->id}".(ApplicationMailLinks::absolute('/panel/applications') ? "\nBaşvuru yönetimi: ".ApplicationMailLinks::absolute('/panel/applications') : ''),
                 ],
                 $project->id,
-                $user->id,
+                $application->user_id,
                 $application->id
             ) > 0;
         }
@@ -426,7 +435,7 @@ class ApplicationController extends Controller
 
     private function formEntriesForStudent(Application $application): array
     {
-        $fields = collect($application->form?->fields ?? [])
+        $fields = collect($application->form_fields_snapshot ?? $application->form?->fields ?? [])
             ->mapWithKeys(function (array $field) {
                 $id = $field['id'] ?? $field['key'] ?? null;
 
@@ -462,6 +471,7 @@ class ApplicationController extends Controller
             'project' => $application->project,
             'period' => $application->period,
             'program' => $application->program,
+            'training' => $application->training?->only(['id', 'title']),
             'status' => $application->status,
             'waitlist_order' => $application->waitlist_order,
             'waitlist_invited_at' => optional($application->waitlist_invited_at)?->toISOString(),
@@ -538,7 +548,7 @@ class ApplicationController extends Controller
     public function myApplications(Request $request)
     {
         $applications = Application::where('user_id', $request->user()->id)
-            ->with(['project', 'period', 'program:id,title,start_at', 'form:id,fields'])
+            ->with(['project', 'period', 'training:id,title', 'program:id,title,start_at', 'form:id,fields'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(fn (Application $application) => $this->formatStudentApplication($application));
@@ -699,6 +709,7 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'program_id' => 'nullable|exists:programs,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'application_form_id' => 'sometimes|integer|min:0',
             'expected_consent_text' => 'sometimes|string|max:10000',
             'form_data' => 'nullable|array',
@@ -719,7 +730,9 @@ class ApplicationController extends Controller
             isset($validated['program_id']) ? (int) $validated['program_id'] : null,
             null,
             isset($validated['application_form_id']) ? (int) $validated['application_form_id'] : null,
-            $validated['expected_consent_text'] ?? null
+            $validated['expected_consent_text'] ?? null,
+            false,
+            isset($validated['training_id']) ? (int) $validated['training_id'] : null
         );
 
         return response()->json([
@@ -736,7 +749,7 @@ class ApplicationController extends Controller
      *
      * @unauthenticated
      *
-     * This endpoint accepts dynamic application form fields. File fields must be sent as `multipart/form-data` under `form_files[field_id]`. The applicant may be matched to an existing user by email or created as a student user.
+     * This endpoint accepts verified guest candidates without creating a login account. Accounts are created only on acceptance; existing accounts and roles are preserved. File fields use `multipart/form-data` under `form_files[field_id]`.
      *
      * @bodyParam project_id integer required Project id. Example: 1
      * @bodyParam program_id integer Optional program id. Example: 5
@@ -758,6 +771,7 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'program_id' => 'nullable|exists:programs,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'application_form_id' => 'sometimes|integer|min:0',
             'expected_consent_text' => 'sometimes|string|max:10000',
             'form_data' => 'nullable|array',
@@ -776,7 +790,7 @@ class ApplicationController extends Controller
         $email = Str::lower(trim($validated['applicant']['email']));
         $this->emailVerificationService->assertCode($project->id, $email, $validated['verification_code']);
         [$application, $followUp] = $this->createApplicationForUser(
-            fn (): User => $this->resolveApplicantUser($validated['applicant']),
+            fn (): ApplicationCandidate => $this->resolveApplicantUser($validated['applicant']),
             $project,
             $validated['form_data'] ?? [],
             $request->file('form_files', []),
@@ -785,11 +799,13 @@ class ApplicationController extends Controller
             $validated['verification_code'],
             isset($validated['application_form_id']) ? (int) $validated['application_form_id'] : null,
             $validated['expected_consent_text'] ?? null,
-            true
+            true,
+            isset($validated['training_id']) ? (int) $validated['training_id'] : null
         );
 
         return response()->json([
             'message' => 'Basvurunuz basariyla alindi.',
+            'tracking_url' => app(ApplicationTrackingService::class)->issue($application),
             'application' => $this->applicationForResponse($application),
             'follow_up' => $followUp,
         ], 201);
@@ -865,13 +881,13 @@ class ApplicationController extends Controller
      * @response 200 {"message":"Yedek liste daveti kabul edildi.","application":{"id":1,"status":"accepted","waitlist_invitation_active":false}}
      * @response 422 {"message":"Yedek liste davet suresi doldu.","errors":{"application":["Yedek liste davet suresi doldu."]}}
      */
-    public function respondWaitlistInvitation(Request $request, int $id)
+    public function respondWaitlistInvitation(Request $request, int $id, ?Application $trackedApplication = null)
     {
         $validated = $request->validate([
             'decision' => 'required|in:accept,reject',
         ]);
 
-        $application = Application::query()
+        $application = $trackedApplication ?? Application::query()
             ->with(['project:id,name,quota', 'period:id,credit_start_amount,status', 'applicationWindow:id,quota', 'program:id,title,application_quota', 'user:id,email,role,status'])
             ->where('id', $id)
             ->where('user_id', $request->user()->id)
@@ -918,6 +934,16 @@ class ApplicationController extends Controller
             throw $invitationError;
         }
 
+        $activationLinkSent = null;
+        if ($validated['decision'] === 'accept' && $application->accountCreatedOnAcceptance) {
+            try {
+                $activationLinkSent = Password::sendResetLink(['email' => $application->user->email]) === Password::RESET_LINK_SENT;
+            } catch (\Throwable $exception) {
+                $activationLinkSent = false;
+                Log::warning('application.activation_link_failed', ['application_id' => $application->id, 'error' => $exception->getMessage()]);
+            }
+        }
+
         $nextWaitlistChecked = null;
         if ($validated['decision'] === 'reject') {
             try {
@@ -933,10 +959,10 @@ class ApplicationController extends Controller
         }
 
         $application->loadMissing(['project:id,name', 'period', 'program:id,title,start_at', 'form:id,fields', 'user:id,email,name,surname,role']);
-        $applicantUrl = ApplicationMailLinks::portal($application->user()->first(['id', 'role']), 'applications');
+        $applicantUrl = app(ApplicationTrackingService::class)->issue($application);
 
         $applicantEmailSent = $this->sendApplicationEmail(
-            array_filter([$application->user?->email]),
+            array_filter([$application->applicant()?->email]),
             $validated['decision'] === 'accept' ? 'Yedek liste davetiniz kabul edildi' : 'Yedek liste davetiniz reddedildi',
             [
                 'title' => $validated['decision'] === 'accept' ? 'Davet Kabul Edildi' : 'Davet Reddedildi',
@@ -955,7 +981,7 @@ class ApplicationController extends Controller
                 'plain_text' => 'Proje: '.($application->project?->name ?? '-').($application->period ? "\nDönem: {$application->period->name}" : '').($application->program ? "\nProgram: {$application->program->title}" : '')."\nDurum: ".$this->applicationStatusLabel((string) $application->status).($applicantUrl ? "\nBaşvurularım: {$applicantUrl}" : ''),
             ],
             $application->project_id,
-            $request->user()->id,
+            $request->user()?->id,
             $application->id
         ) > 0;
 
@@ -983,7 +1009,7 @@ class ApplicationController extends Controller
                     'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nAday: ".trim(($application->user?->name ?? '').' '.($application->user?->surname ?? ''))."\nYanıt: ".($validated['decision'] === 'accept' ? 'Kabul' : 'Red'),
                 ],
                 $application->project_id,
-                $request->user()->id,
+                $request->user()?->id,
                 $application->id
             ) > 0;
         }
@@ -997,6 +1023,7 @@ class ApplicationController extends Controller
                 'applicant_email_sent' => $applicantEmailSent,
                 'coordinators_email_sent' => $coordinatorsEmailSent,
                 'next_waitlist_checked' => $nextWaitlistChecked,
+                'activation_link_sent' => $activationLinkSent,
             ],
         ]);
     }

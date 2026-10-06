@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Application;
+use App\Models\ApplicationCandidate;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
@@ -25,10 +26,12 @@ class ApplicationSubmissionService
     public function runLockedForGuest(Project $project, Closure $resolveUser, Closure $submission): Application
     {
         return DB::transaction(function () use ($project, $resolveUser, $submission) {
-            // Create a new guest account only inside the application transaction.
+            // Resolve a verified candidate, not a login account, inside this transaction.
             [$currentProject, $period] = $this->lockProjectAndPeriod($project);
             $user = $resolveUser();
-            $currentUser = User::query()->lockForUpdate()->findOrFail($user->id);
+            $currentUser = $user instanceof ApplicationCandidate
+                ? ApplicationCandidate::query()->lockForUpdate()->findOrFail($user->id)
+                : User::query()->lockForUpdate()->findOrFail($user->id);
 
             return $submission($currentUser, $currentProject, $period);
         });

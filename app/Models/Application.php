@@ -9,10 +9,19 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Application extends Model
 {
+    public bool $accountCreatedOnAcceptance = false;
+
     use HasFactory, LogsActivity;
 
     protected $fillable = [
         'user_id',
+        'candidate_id',
+        'training_id',
+        'submission_key',
+        'has_interview_snapshot',
+        'form_fields_snapshot',
+        'tracking_token_hash',
+        'tracking_expires_at',
         'project_id',
         'period_id',
         'application_window_id',
@@ -41,6 +50,9 @@ class Application extends Model
     ];
 
     protected $casts = [
+        'has_interview_snapshot' => 'boolean',
+        'form_fields_snapshot' => 'array',
+        'tracking_expires_at' => 'datetime',
         'form_data' => 'array',
         'consent_accepted_at' => 'datetime',
         'interview_at' => 'datetime',
@@ -55,6 +67,23 @@ class Application extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    protected $hidden = ['tracking_token_hash', 'submission_key'];
+
+    public function candidate()
+    {
+        return $this->belongsTo(ApplicationCandidate::class);
+    }
+
+    public function training()
+    {
+        return $this->belongsTo(ProjectTraining::class);
+    }
+
+    public function applicant(): User|ApplicationCandidate|null
+    {
+        return $this->user ?? $this->candidate;
     }
 
     public function project()
@@ -84,6 +113,9 @@ class Application extends Model
 
     public function usesInterview(): bool
     {
+        if ($this->has_interview_snapshot !== null) {
+            return $this->has_interview_snapshot;
+        }
         // List/detail queries may already carry partial relations without this
         // field; the persisted application setting must decide the workflow.
         $windowSetting = $this->application_window_id !== null

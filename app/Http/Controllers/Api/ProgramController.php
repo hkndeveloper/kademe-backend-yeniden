@@ -8,6 +8,7 @@ use App\Models\CreditLog;
 use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
+use App\Services\TrainingAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -80,6 +81,8 @@ class ProgramController extends Controller
             ->get();
 
         $programIds = $programs->pluck('id')->all();
+        $programs = $programs->filter(fn (Program $program) => app(TrainingAccessService::class)->canAccessProgram($user, $program))->values();
+        $programIds = $programs->pluck('id')->all();
         $attendances = Attendance::query()
             ->where('user_id', $user->id)
             ->whereIn('program_id', $programIds)
@@ -145,6 +148,7 @@ class ProgramController extends Controller
         $user = $request->user();
 
         $participant = $this->participationScope(
+            // Training acceptance does not grant access to sibling training sessions.
             Participant::query()
                 ->where('user_id', $user->id)
                 ->where('project_id', $program->project_id)
@@ -159,6 +163,7 @@ class ProgramController extends Controller
         );
 
         abort_unless($participant, 403, 'Bu etkinligi goruntuleme yetkiniz bulunmuyor.');
+        abort_unless(app(TrainingAccessService::class)->canAccessProgram($user, $program), 403, 'Bu eğitime kabul edilmediniz.');
 
         $attendance = Attendance::query()
             ->where('user_id', $user->id)

@@ -10,10 +10,11 @@ use App\Models\KpdRoom;
 use App\Models\Mentor;
 use App\Models\Program;
 use App\Models\Project;
+use App\Models\ProjectTraining;
 use App\Models\RewardTier;
-use App\Services\ApplicationIntakeService;
-use App\Services\ApplicationFormResolver;
 use App\Services\ApplicationConsentService;
+use App\Services\ApplicationFormResolver;
+use App\Services\ApplicationIntakeService;
 use App\Support\MediaStorage;
 use App\Support\ProjectSpecialModuleCatalog;
 use Illuminate\Http\Request;
@@ -125,12 +126,14 @@ class ProjectController extends Controller
      * Get the form shown to a visitor for the selected project program.
      *
      * @unauthenticated
+     *
      * @queryParam program_id integer Optional public program in the active period.
+     *
      * @response 200 {"application_form":{"id":1,"fields":[]}}
      */
     public function applicationForm(Request $request, string $slug)
     {
-        $validated = $request->validate(['program_id' => 'nullable|integer|exists:programs,id']);
+        $validated = $request->validate(['program_id' => 'nullable|integer|exists:programs,id', 'training_id' => 'nullable|integer|exists:project_trainings,id']);
         $project = Project::query()
             ->where('slug', $slug)
             ->where('status', 'active')
@@ -153,7 +156,15 @@ class ProjectController extends Controller
             abort_unless($program, 422, 'Secilen program basvuruya uygun degil.');
         }
 
-        $form = $this->applicationFormResolver->forApplication($project, $period, $program);
+        $training = null;
+        if ($project->application_scope === 'training') {
+            $training = ProjectTraining::where('project_id', $project->id)->where('period_id', $period->id)->find($validated['training_id'] ?? null);
+            abort_unless($training && $training->isOpen(), 422, 'Başvurusu açık bir eğitim seçin.');
+        } else {
+            abort_if(! empty($validated['training_id']), 422, 'Bu proje eğitim başvurusu almıyor.');
+        }
+        abort_if($program, 422, 'Oturuma değil proje veya eğitime başvurun.');
+        $form = $this->applicationFormResolver->forApplication($project, $period, $program, $training);
 
         return response()->json([
             'application_form' => $form?->makeHidden('auto_reject_rules'),

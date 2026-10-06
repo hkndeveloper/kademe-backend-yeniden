@@ -13,6 +13,7 @@ class ApplicationForm extends Model
         'project_id',
         'period_id',
         'program_id',
+        'training_id',
         'fields',
         'require_consent',
         'consent_text',

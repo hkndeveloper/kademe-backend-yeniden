@@ -8,14 +8,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Services\ApplicationDecisionService;
 use App\Services\ApplicationEnrollmentService;
+use App\Services\ApplicationMessageService;
 use App\Services\ApplicationScheduleService;
+use App\Services\ApplicationTrackingService;
 use App\Services\NotificationService;
 use App\Services\PermissionResolver;
 use App\Services\WaitlistService;
-use App\Support\ApplicationFileStorage;
 use App\Support\AdminExportResponder;
+use App\Support\ApplicationFileStorage;
 use App\Support\IstanbulDateTime;
-use App\Support\ApplicationMailLinks;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * @group Admin Applications
@@ -62,6 +64,9 @@ class AdminApplicationController extends Controller
         }
 
         $search = trim((string) ($filters['search'] ?? ''));
+        if (! empty($filters['training_id'])) {
+            $query->where('training_id', $filters['training_id']);
+        }
         if ($search !== '') {
             $query->where(function (Builder $builder) use ($search) {
                 $builder
@@ -72,8 +77,17 @@ class AdminApplicationController extends Controller
                             ->orWhere('email', 'like', "%$search%")
                             ->orWhere('phone', 'like', "%$search%");
                     })
+                    ->orWhereHas('candidate', function (Builder $candidateQuery) use ($search) {
+                        $candidateQuery->where('name', 'like', "%$search%")
+                            ->orWhere('surname', 'like', "%$search%")
+                            ->orWhere('email', 'like', "%$search%")
+                            ->orWhere('phone', 'like', "%$search%");
+                    })
                     ->orWhereHas('project', function (Builder $projectQuery) use ($search) {
                         $projectQuery->where('name', 'like', "%$search%");
+                    })
+                    ->orWhereHas('training', function (Builder $trainingQuery) use ($search) {
+                        $trainingQuery->where('title', 'like', "%$search%");
                     });
             });
         }
@@ -83,14 +97,14 @@ class AdminApplicationController extends Controller
 
     private function notifyApplicationUser(Application $application, string $subject, string $body, ?int $senderId = null): bool
     {
-        $user = $application->user()->first(['id', 'email', 'role']);
+        $user = $application->applicant();
         $email = $user?->email;
         if (! $email) {
             return false;
         }
 
         $application->loadMissing(['project:id,name', 'period:id,name', 'program:id,title']);
-        $followUpUrl = ApplicationMailLinks::portal($user, 'applications');
+        $followUpUrl = app(ApplicationTrackingService::class)->issue($application);
         $lines = [
             ['label' => 'Proje', 'value' => $application->project?->name ?? '-'],
             ['label' => 'Dönem', 'value' => $application->period?->name ?? '-'],
@@ -108,10 +122,10 @@ class AdminApplicationController extends Controller
         }
 
         try {
-            return $this->notificationService->sendTemplatedEmail(
-                [$email],
+            return app(ApplicationMessageService::class)->send(
+                $application,
+                $application->status,
                 $subject,
-                'emails.application-status',
                 [
                     'title' => $subject,
                     'preheader' => 'Başvuru durumunuz güncellendi.',
@@ -119,9 +133,8 @@ class AdminApplicationController extends Controller
                     'lines' => $lines,
                     'action_url' => $followUpUrl,
                     'action_text' => $followUpUrl ? 'Başvurularımı görüntüle' : null,
-                    'plain_text' => "Proje: ".($application->project?->name ?? '-')."\nDönem: ".($application->period?->name ?? '-').($application->program ? "\nProgram: {$application->program->title}" : '')."\nDurum: ".$this->applicationStatusLabel((string) $application->status)."\n{$body}".($followUpUrl ? "\nBaşvurularım: {$followUpUrl}" : ''),
+                    'plain_text' => 'Proje: '.($application->project?->name ?? '-')."\nDönem: ".($application->period?->name ?? '-').($application->program ? "\nProgram: {$application->program->title}" : '')."\nDurum: ".$this->applicationStatusLabel((string) $application->status)."\n{$body}".($followUpUrl ? "\nBaşvurularım: {$followUpUrl}" : ''),
                 ],
-                $application->project_id,
                 $senderId
             ) > 0;
         } catch (\Throwable $exception) {
@@ -134,8 +147,11 @@ class AdminApplicationController extends Controller
         }
     }
 
-    private function sendPasswordLink(Application $application): bool
+    private function sendPasswordLink(Application $application, bool $retry = false): bool
     {
+        if ($application->candidate_id && ! $application->accountCreatedOnAcceptance && ! ($retry && $application->user?->must_change_password)) {
+            return false;
+        }
         if (! $application->user?->email) {
             return false;
         }
@@ -194,7 +210,7 @@ class AdminApplicationController extends Controller
 
     private function formEntries(Application $application): array
     {
-        $fields = collect($application->form?->fields ?? [])
+        $fields = collect($application->form_fields_snapshot ?? $application->form?->fields ?? [])
             ->mapWithKeys(function (array $field) {
                 $id = $field['id'] ?? $field['key'] ?? null;
 
@@ -228,7 +244,13 @@ class AdminApplicationController extends Controller
     {
         return [
             'id' => $application->id,
-            'user' => $application->user,
+            'user' => $application->user ?? ($application->candidate ? [
+                'id' => null, 'name' => $application->candidate->name, 'surname' => $application->candidate->surname,
+                'email' => $application->candidate->email, 'phone' => $application->candidate->phone, 'role' => 'candidate',
+            ] : null),
+            'candidate_id' => $application->candidate_id,
+            'training' => $application->training,
+            'training_id' => $application->training_id,
             'period' => $application->period,
             'program' => $application->program,
             'project' => $application->project,
@@ -278,11 +300,13 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.export`. Project and period filters are resolved through action+scope. Returns a binary CSV/XLSX/PDF/DOCX file depending on `format`. The same method is exposed under `/api/admin/applications/export` and `/api/panel/applications/export` aliases.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam status string Optional application status filter. Example: accepted
      * @queryParam search string Optional applicant or project search. Example: ayse
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: xlsx
+     *
      * @response 200 binary Applications export file.
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
      */
@@ -291,6 +315,7 @@ class AdminApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'status' => 'nullable|string',
             'search' => 'nullable|string|max:255',
             'format' => 'nullable|string|max:20',
@@ -315,10 +340,10 @@ class AdminApplicationController extends Controller
             $application->project->name ?? '-',
             $application->period->name ?? '-',
             $application->program->title ?? '-',
-            $application->user->name ?? '-',
-            $application->user->surname ?? '-',
-            $application->user->email ?? '-',
-            $application->user->phone ?? '-',
+            $application->applicant()?->name ?? '-',
+            $application->applicant()?->surname ?? '-',
+            $application->applicant()?->email ?? '-',
+            $application->applicant()?->phone ?? '-',
             $this->applicationStatusLabel((string) $application->status),
             $application->waitlist_order ?? '-',
             $application->evaluation_note ?? '-',
@@ -341,10 +366,12 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.view`. This staff alias uses the same project/period action+scope resolver, so staff users only see applications in their permitted projects.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam status string Optional application status filter. Example: pending
      * @queryParam search string Optional applicant or project search. Example: hakan
+     *
      * @response 200 {"applications":{"data":[]}}
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
      */
@@ -353,6 +380,7 @@ class AdminApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'status' => 'nullable|string',
             'search' => 'nullable|string|max:255',
         ]);
@@ -380,11 +408,13 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.export`. This staff alias uses the same project/period action+scope resolver and returns a binary CSV/XLSX/PDF/DOCX file depending on `format`.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. Example: 1
      * @queryParam period_id integer Optional period filter. Example: 3
      * @queryParam status string Optional application status filter. Example: accepted
      * @queryParam search string Optional applicant or project search. Example: ayse
      * @queryParam format string Optional export format: `csv`, `xlsx`, `pdf`, `docx`, `excel` or `word`. Defaults to csv. Example: csv
+     *
      * @response 200 binary Staff applications export file.
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
      */
@@ -393,6 +423,7 @@ class AdminApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'status' => 'nullable|string',
             'search' => 'nullable|string|max:255',
             'format' => 'nullable|string|max:20',
@@ -418,10 +449,10 @@ class AdminApplicationController extends Controller
             $application->project->name ?? '-',
             $application->period->name ?? '-',
             $application->program->title ?? '-',
-            $application->user->name ?? '-',
-            $application->user->surname ?? '-',
-            $application->user->email ?? '-',
-            $application->user->phone ?? '-',
+            $application->applicant()?->name ?? '-',
+            $application->applicant()?->surname ?? '-',
+            $application->applicant()?->email ?? '-',
+            $application->applicant()?->phone ?? '-',
             $this->applicationStatusLabel((string) $application->status),
             $application->waitlist_order ?? '-',
             IstanbulDateTime::format($application->created_at),
@@ -442,11 +473,14 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.update_status`. The staff alias first checks the application project against the staff user permitted project IDs, then delegates to the standard status update workflow.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
+     *
      * @bodyParam status string required New status. Example: rejected
      * @bodyParam interview_at date Optional future interview date when needed. Example: 2026-07-10 14:30:00
      * @bodyParam rejection_reason string Optional rejection reason. Example: Belgeler eksik.
      * @bodyParam evaluation_note string Optional internal evaluation note. Example: Tekrar basvurabilir.
+     *
      * @response 200 {"message":"Basvuru durumu basariyla guncellendi.","application":{"id":12,"status":"rejected"}}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      */
@@ -503,11 +537,13 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.view`. Project and period filters are resolved through action+scope, so global users can list all projects while scoped users only see applications in allowed projects. The same method is exposed under `/api/admin/applications` and `/api/panel/applications` aliases.
      *
      * @authenticated
+     *
      * @queryParam project_id integer Optional project filter. User must be allowed for `applications.view`. Example: 1
      * @queryParam period_id integer Optional period filter. Must belong to the selected/allowed project. Example: 3
      * @queryParam status string Optional application status filter. Example: pending
      * @queryParam search string Optional applicant/project search. Example: hakan
      * @queryParam per_page integer Optional page size between 1 and 100. Example: 20
+     *
      * @response 200 {"applications":{"data":[{"id":12,"status":"pending","waitlist_order":null,"user":{"id":30,"name":"Hakan"},"project":{"id":1,"name":"Kademe"},"available_statuses":["accepted","rejected","waitlisted"],"workflow":{"has_interview":false,"next_step":"final_decision"}}]}}
      * @response 403 {"message":"Bu proje icin yetkiniz yok."}
      */
@@ -516,6 +552,7 @@ class AdminApplicationController extends Controller
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'period_id' => 'nullable|exists:periods,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'status' => 'nullable|string',
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:100',
@@ -560,8 +597,10 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.view` and project access for the application project. Streams the file after authorization.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
      * @urlParam field string required Dynamic form field key containing the uploaded file. Example: cv_file
+     *
      * @response 200 binary Application form file stream.
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 404 {"message":"Basvuru dosyasi bulunamadi."}
@@ -590,11 +629,14 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.update_status` and project access for the application project. Status transitions are validated against the project interview workflow, capacity rules and completed-period archive lock. Accepting an application can create/update the participant record and send the password setup/reset email.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
+     *
      * @bodyParam status string required New status: `accepted`, `rejected`, `waitlisted`, `interview_planned`, `interview_passed` or `interview_failed`. Example: accepted
      * @bodyParam interview_at date Optional future interview date. Required when planning an interview and no date already exists. Example: 2026-07-10 14:30:00
      * @bodyParam rejection_reason string Optional rejection reason. Example: Kontenjan dolu.
      * @bodyParam evaluation_note string Optional internal evaluation note. Example: Uygun aday.
+     *
      * @response 200 {"message":"Basvuru durumu basariyla guncellendi.","application":{"id":12,"status":"accepted"}}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"The given data was invalid.","errors":{"status":["Bu basvuru akisi icin secilen durum gecislerine izin verilmiyor."]}}
@@ -658,7 +700,7 @@ class AdminApplicationController extends Controller
             });
         } catch (ValidationException $e) {
             throw $e;
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             throw $e;
         } catch (\Exception $e) {
             return response()->json(['message' => 'Bir hata oluştu.'], 500);
@@ -767,7 +809,7 @@ class AdminApplicationController extends Controller
 
         if ($validated['type'] === 'password') {
             abort_unless($application->status === 'accepted', 422, 'Şifre bağlantısı yalnız kabul edilmiş başvuru için gönderilebilir.');
-            $sent = $this->sendPasswordLink($application);
+            $sent = $this->sendPasswordLink($application, true);
         } else {
             $corrected = $application->status === 'pending' && $application->auto_rejection_corrected_at !== null;
             $sent = $this->notifyApplicationUser(
@@ -794,8 +836,11 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.plan_interview` and project access for the application project. Only projects with interview workflow enabled can use this endpoint, and completed periods require archive override permission.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
+     *
      * @bodyParam interview_at date required Future interview date. Example: 2026-07-10 14:30:00
+     *
      * @response 200 {"message":"Mulakat tarihi basariyla planlandi.","application":{"id":12,"status":"interview_planned","interview_at":"2026-07-10T14:30:00+03:00"}}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Bu proje mulakatli basvuru akisi kullanmiyor."}
@@ -856,8 +901,11 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.waitlist.manage` and project access for the application project. The endpoint validates the current workflow state, period archive lock and assigns the next waitlist order when needed.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
+     *
      * @bodyParam evaluation_note string Optional internal waitlist note. Example: Kontenjan acilinca davet edilecek.
+     *
      * @response 200 {"message":"Basvuru yedege alindi.","application":{"id":12,"status":"waitlisted","waitlist_order":4}}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"The given data was invalid."}
@@ -910,8 +958,11 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.waitlist.manage` and project access for the application project. Only applications currently in `waitlisted` status can be reordered.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
+     *
      * @bodyParam waitlist_order integer required New waitlist order, minimum 1. Example: 2
+     *
      * @response 200 {"message":"Yedek liste sirasi guncellendi.","application":{"id":12,"waitlist_order":2}}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Sadece yedek listedeki basvurular siralanabilir."}
@@ -975,8 +1026,11 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.waitlist.manage` and project access for the application project. Only waitlisted applications can be invited; quota and active invitation rules are enforced by the waitlist service.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID. Example: 12
+     *
      * @bodyParam expires_at date Optional invitation expiry date. Defaults to three days from now. Example: 2026-07-03 23:59:00
+     *
      * @response 200 {"message":"Yedek liste daveti gonderildi.","application":{"id":12,"status":"waitlisted","waitlist_invited_at":"2026-06-30T12:00:00+03:00"}}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Sadece yedek listedeki basvurular davet edilebilir."}
@@ -1050,7 +1104,9 @@ class AdminApplicationController extends Controller
      * Requires permission: `applications.waitlist.manage` and project access for the application project. The endpoint expires overdue waitlist invitations and invites the next eligible application if a seat is available.
      *
      * @authenticated
+     *
      * @urlParam id integer required Application ID used as the waitlist context. Example: 12
+     *
      * @response 200 {"message":"Yedek davet sureleri guncellendi.","expired_count":1,"auto_invited_application_id":15}
      * @response 403 {"message":"Bu basvuru icin yetkiniz bulunmuyor."}
      * @response 422 {"message":"Sadece yedek listedeki basvurular icin yenileme yapilabilir."}

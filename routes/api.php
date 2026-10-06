@@ -7,10 +7,12 @@ use App\Http\Controllers\Api\AdminCreditController;
 use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminKpdController;
 use App\Http\Controllers\Api\AdminProgramController;
+use App\Http\Controllers\Api\AdmissionsController;
 use App\Http\Controllers\Api\AlumniOpportunityController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\ApplicationIntakeController;
+use App\Http\Controllers\Api\ApplicationTrackingController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -20,12 +22,12 @@ use App\Http\Controllers\Api\ContentManagementController;
 use App\Http\Controllers\Api\CoordinationUnitController;
 use App\Http\Controllers\Api\CoordinatorParticipantController;
 use App\Http\Controllers\Api\DigitalBohcaController;
+use App\Http\Controllers\Api\DirectMessageController;
 use App\Http\Controllers\Api\FeedbackController;
 use App\Http\Controllers\Api\FeedbackFormTemplateController;
 use App\Http\Controllers\Api\FinancialTransactionController;
 use App\Http\Controllers\Api\ForumController;
 use App\Http\Controllers\Api\InboxController;
-use App\Http\Controllers\Api\DirectMessageController;
 use App\Http\Controllers\Api\MediaUploadController;
 use App\Http\Controllers\Api\MotivationController;
 use App\Http\Controllers\Api\NewsletterController;
@@ -78,6 +80,9 @@ Route::get('/certificates/verify/{verificationCode}', [CertificateController::cl
 Route::get('/certificates/{verificationCode}/download', [CertificateController::class, 'download']);
 Route::get('/site-config', [SiteSettingsController::class, 'public']);
 Route::get('/homepage', [SiteSettingsController::class, 'homepage']);
+Route::get('/application-targets', [AdmissionsController::class, 'targets']);
+Route::get('/applications/track/{id}', [ApplicationTrackingController::class, 'show'])->middleware('throttle:30,1');
+Route::post('/applications/track/{id}/waitlist-response', [ApplicationTrackingController::class, 'respond'])->middleware('throttle:10,1');
 Route::get('/motivation/current', [MotivationController::class, 'current']);
 Route::post('/contact', [SupportTicketController::class, 'storePublic'])
     ->middleware('throttle:10,1');
@@ -465,6 +470,12 @@ Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'passwor
 // Unified panel icin rol-prefix bagimsiz generic alias endpointleri.
 // /admin/* endpointleri geriye donuk uyumluluk icin oldugu gibi korunur.
 Route::middleware(['auth:sanctum', 'coordination.context', 'blacklist', 'password.not_pending_setup', 'audit.action'])->prefix('panel')->group(function () {
+    Route::get('/projects/{id}/admissions', [AdmissionsController::class, 'index']);
+    Route::put('/projects/{id}/admissions/sessions/{programId}', [AdmissionsController::class, 'assignSession']);
+    Route::put('/projects/{id}/admissions/settings', [AdmissionsController::class, 'settings']);
+    Route::post('/projects/{id}/admissions/trainings', [AdmissionsController::class, 'saveTraining']);
+    Route::put('/projects/{id}/admissions/trainings/{trainingId}', [AdmissionsController::class, 'saveTraining']);
+    Route::put('/projects/{id}/admissions/templates/{event}', [AdmissionsController::class, 'saveTemplate']);
     Route::get('/modules', [PanelModuleController::class, 'index']);
 
     Route::get('/programs', [AdminProgramController::class, 'index']);

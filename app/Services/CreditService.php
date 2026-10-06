@@ -3,9 +3,10 @@
 namespace App\Services;
 
 use App\Enums\PeriodWriteAction;
+use App\Events\CreditThresholdReached;
 use App\Models\Attendance;
-use App\Models\Participant;
 use App\Models\CreditLog;
+use App\Models\Participant;
 use App\Models\Program;
 use App\Models\ProgramAbsence;
 use App\Models\SystemNotification;
@@ -18,8 +19,7 @@ class CreditService
     public function __construct(
         private readonly NotificationService $notificationService,
         private readonly PeriodWritePolicy $periodWritePolicy,
-    ) {
-    }
+    ) {}
 
     /**
      * Katılımcıdan kredi (puan) düşürür
@@ -86,6 +86,9 @@ class CreditService
 
     public function deductOnceForProgram(Participant $participant, Program $program, ?int $adminId = null, ?string $reason = null, ?bool $attended = null): ?CreditLog
     {
+        if (! $participant->user || ! app(TrainingAccessService::class)->canAccessProgram($participant->user, $program)) {
+            return null;
+        }
         $amount = max((int) ($program->credit_deduction ?? 0), 0);
         if ($amount === 0) {
             if ($attended === false) {
@@ -325,15 +328,15 @@ class CreditService
         // Kural 1: Dusuk kredi uyarisi (SMS gateway kapsam disi olsa bile log + event olustur)
         if ($participant->credit < $threshold) {
             Log::info('credit.low_threshold_warning', [
-                'user_id'        => $user->id,
+                'user_id' => $user->id,
                 'participant_id' => $participant->id,
-                'project_id'     => $participant->project_id,
-                'credit'         => $participant->credit,
-                'threshold'      => $threshold,
+                'project_id' => $participant->project_id,
+                'credit' => $participant->credit,
+                'threshold' => $threshold,
             ]);
 
             // Event dispatch: ileride SMS, bildirim, e-posta listener'lari baglanabilir.
-            event(new \App\Events\CreditThresholdReached($participant, $threshold));
+            event(new CreditThresholdReached($participant, $threshold));
 
             if ($creditBefore === null || $creditBefore >= $threshold) {
                 $this->notifyLowCredit($participant, $threshold);
@@ -345,15 +348,15 @@ class CreditService
 
         if ($unexcusedAbsenceCount >= 3) {
             Log::warning('credit.unexcused_absence_blacklist', [
-                'user_id'         => $user->id,
-                'participant_id'  => $participant->id,
-                'absence_count'   => $unexcusedAbsenceCount,
+                'user_id' => $user->id,
+                'participant_id' => $participant->id,
+                'absence_count' => $unexcusedAbsenceCount,
             ]);
 
             if ($user->status !== 'blacklisted') {
                 $user->update([
-                    'status'            => 'blacklisted',
-                    'blacklist_count'   => ($user->blacklist_count ?? 0) + 1,
+                    'status' => 'blacklisted',
+                    'blacklist_count' => ($user->blacklist_count ?? 0) + 1,
                     'blacklisted_until' => now()->addMonths(6),
                 ]);
 
@@ -366,15 +369,15 @@ class CreditService
         // Kural 3: Kredi <= 30 → aninda kara liste
         if ($participant->credit < $threshold && $participant->credit <= 30) {
             Log::warning('credit.hard_limit_blacklist', [
-                'user_id'        => $user->id,
+                'user_id' => $user->id,
                 'participant_id' => $participant->id,
-                'credit'         => $participant->credit,
+                'credit' => $participant->credit,
             ]);
 
             if ($user->status !== 'blacklisted') {
                 $user->update([
-                    'status'            => 'blacklisted',
-                    'blacklist_count'   => ($user->blacklist_count ?? 0) + 1,
+                    'status' => 'blacklisted',
+                    'blacklist_count' => ($user->blacklist_count ?? 0) + 1,
                     'blacklisted_until' => now()->addMonths(6),
                 ]);
 

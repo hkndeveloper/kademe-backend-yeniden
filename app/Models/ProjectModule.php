@@ -11,6 +11,7 @@ class ProjectModule extends Model
     protected $fillable = [
         'project_id',
         'period_id',
+        'training_id',
         'title',
         'description',
         'sort_order',

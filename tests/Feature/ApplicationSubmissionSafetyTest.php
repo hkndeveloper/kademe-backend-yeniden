@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Application;
+use App\Models\ApplicationCandidate;
 use App\Models\ApplicationEmailVerification;
 use App\Models\ApplicationForm;
 use App\Models\ApplicationWindow;
@@ -13,6 +14,7 @@ use App\Models\CoordinationUnitPermissionRule;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
+use App\Models\ProjectTraining;
 use App\Models\User;
 use App\Services\ApplicationEmailVerificationService;
 use App\Services\ApplicationNotificationRecipientService;
@@ -55,7 +57,7 @@ class ApplicationSubmissionSafetyTest extends TestCase
 
     public static function applicationScopes(): array
     {
-        return ['project application' => [false], 'program application' => [true]];
+        return ['project application' => [false], 'training application' => [true]];
     }
 
     public function test_authenticated_application_remains_created_when_receipt_email_throws(): void
@@ -86,7 +88,8 @@ class ApplicationSubmissionSafetyTest extends TestCase
         $this->postJson('/api/applications/public', $payload)
             ->assertCreated()
             ->assertJsonPath('follow_up.applicant_email_sent', false);
-        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('application_candidates', 1);
         $this->assertDatabaseCount('applications', 1);
     }
 
@@ -172,11 +175,16 @@ class ApplicationSubmissionSafetyTest extends TestCase
     }
 
     #[DataProvider('applicationScopes')]
-    public function test_repeat_submission_keeps_existing_application_in_every_status(bool $programScoped): void
+    public function test_repeat_submission_keeps_existing_application_in_every_status(bool $trainingScoped): void
     {
         [$project, $period, $program] = $this->scope();
         Sanctum::actingAs($this->user());
-        $payload = ['project_id' => $project->id, 'program_id' => $programScoped ? $program->id : null, 'consent_accepted' => true, 'form_data' => ['answer' => 'original']];
+        $training = null;
+        if ($trainingScoped) {
+            $project->update(['application_scope' => 'training']);
+            $training = ProjectTraining::create(['project_id' => $project->id, 'period_id' => $period->id, 'title' => 'Training', 'is_active' => true, 'application_open' => true]);
+        }
+        $payload = ['project_id' => $project->id, 'training_id' => $training?->id, 'consent_accepted' => true, 'form_data' => ['answer' => 'original']];
         $this->mock(NotificationService::class)->shouldReceive('sendTemplatedEmail')->once()->andReturn(1);
         $id = $this->postJson('/api/applications', $payload)->assertCreated()->json('application.id');
 
@@ -213,21 +221,22 @@ class ApplicationSubmissionSafetyTest extends TestCase
         $this->assertSame($before, Application::query()->findOrFail($id)->getAttributes());
     }
 
-    public function test_project_and_different_non_overlapping_programs_remain_separate_applications(): void
+    public function test_sessions_cannot_create_additional_applications_after_a_project_application(): void
     {
         [$project, $period, $program] = $this->scope();
         $other = $program->replicate();
         $other->fill(['start_at' => now()->addDays(2), 'end_at' => now()->addDays(2)->addHour()])->save();
         Sanctum::actingAs($this->user());
 
-        foreach ([null, $program->id, $other->id] as $programId) {
-            $this->postJson('/api/applications', ['project_id' => $project->id, 'program_id' => $programId, 'consent_accepted' => true])->assertCreated();
+        $this->postJson('/api/applications', ['project_id' => $project->id, 'consent_accepted' => true])->assertCreated();
+        foreach ([$program->id, $other->id] as $programId) {
+            $this->postJson('/api/applications', ['project_id' => $project->id, 'program_id' => $programId, 'consent_accepted' => true])->assertUnprocessable()->assertJsonValidationErrors('program_id');
         }
 
-        $this->assertDatabaseCount('applications', 3);
+        $this->assertDatabaseCount('applications', 1);
     }
 
-    public function test_parallel_programs_do_not_allow_one_applicant_to_submit_overlapping_applications(): void
+    public function test_sessions_are_not_public_admission_targets_even_without_an_existing_application(): void
     {
         [$project, , $program] = $this->scope();
         $other = $program->replicate();
@@ -239,7 +248,7 @@ class ApplicationSubmissionSafetyTest extends TestCase
             'project_id' => $project->id,
             'program_id' => $program->id,
             'consent_accepted' => true,
-        ])->assertCreated();
+        ])->assertUnprocessable()->assertJsonValidationErrors('program_id');
 
         $this->postJson('/api/applications', [
             'project_id' => $project->id,
@@ -247,10 +256,10 @@ class ApplicationSubmissionSafetyTest extends TestCase
             'consent_accepted' => true,
         ])->assertUnprocessable()->assertJsonValidationErrors('program_id');
 
-        $this->assertDatabaseCount('applications', 1);
+        $this->assertDatabaseCount('applications', 0);
     }
 
-    public function test_repeated_guest_submission_creates_one_account_and_one_application(): void
+    public function test_repeated_guest_submission_creates_one_candidate_and_no_login_account(): void
     {
         [$project] = $this->scope();
         $payload = $this->guestPayload($project);
@@ -259,10 +268,10 @@ class ApplicationSubmissionSafetyTest extends TestCase
         $payload['applicant']['name'] = 'Replacement name';
         $this->postJson('/api/applications/public', $payload)->assertUnprocessable()->assertJsonValidationErrors('verification_code');
 
-        $user = User::query()->sole();
-        $this->assertSame('Guest', $user->name);
-        $this->assertSame('guest@example.test', $user->email);
-        $this->assertTrue($user->hasRole('student'));
+        $candidate = ApplicationCandidate::query()->sole();
+        $this->assertSame('Guest', $candidate->name);
+        $this->assertSame('guest@example.test', $candidate->email);
+        $this->assertDatabaseCount('users', 0);
         $this->assertDatabaseCount('applications', 1);
     }
 
@@ -396,7 +405,8 @@ class ApplicationSubmissionSafetyTest extends TestCase
         $payload['form_files']['attachment'] = UploadedFile::fake()->create('corrected.pdf', 10);
         $this->post('/api/applications/public', $payload, ['Accept' => 'application/json'])->assertCreated();
 
-        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('application_candidates', 1);
         $this->assertDatabaseCount('applications', 1);
         $this->assertNotNull(ApplicationEmailVerification::query()->sole()->consumed_at);
         $this->assertCount(1, Storage::disk('application_private')->allFiles('application-files'));

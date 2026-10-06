@@ -16,8 +16,9 @@ use App\Models\Participant;
 use App\Models\Period;
 use App\Models\Program;
 use App\Models\Project;
-use App\Services\CoordinationUnitPermissionRuleSyncService;
+use App\Models\ProjectTraining;
 use App\Services\ApplicationScreeningService;
+use App\Services\CoordinationUnitPermissionRuleSyncService;
 use App\Services\PermissionResolver;
 use App\Support\AdminExportResponder;
 use App\Support\ProjectSpecialModuleCatalog;
@@ -26,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * @group Projects
@@ -869,6 +871,7 @@ class ProjectContentController extends Controller
         $validated = $request->validate([
             'period_id' => 'nullable|integer|exists:periods,id',
             'program_id' => 'nullable|integer|exists:programs,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
         ]);
 
         if (! empty($validated['period_id']) && ! $project->periods->contains('id', $validated['period_id'])) {
@@ -889,6 +892,13 @@ class ProjectContentController extends Controller
 
         $applicationFormQuery = ApplicationForm::where('project_id', $project->id)
             ->where('is_active', true);
+        if (! empty($validated['training_id'])) {
+            $training = ProjectTraining::where('project_id', $project->id)->findOrFail($validated['training_id']);
+            abort_if(! empty($validated['period_id']) && (int) $training->period_id !== (int) $validated['period_id'], 422, 'Eğitim seçilen döneme ait değil.');
+            $applicationFormQuery->where('training_id', $training->id);
+        } else {
+            $applicationFormQuery->whereNull('training_id');
+        }
 
         if ($program) {
             $applicationFormQuery->where('program_id', $program->id);
@@ -915,6 +925,7 @@ class ProjectContentController extends Controller
                 ->where('project_id', $project->id)
                 ->orderByDesc('start_at')
                 ->get(['id', 'project_id', 'period_id', 'title', 'start_at', 'status']),
+            'trainings' => ProjectTraining::where('project_id', $project->id)->get(['id', 'period_id', 'title']),
             'application_form' => $applicationForm,
         ]);
     }
@@ -953,6 +964,7 @@ class ProjectContentController extends Controller
         $validated = $request->validate([
             'period_id' => 'nullable|exists:periods,id',
             'program_id' => 'nullable|exists:programs,id',
+            'training_id' => 'nullable|integer|exists:project_trainings,id',
             'fields' => 'required|array|min:1',
             'fields.*.id' => 'required|string|max:100|distinct',
             'fields.*.type' => 'required|in:text,longtext,select,radio,checkbox,file',
@@ -996,12 +1008,21 @@ class ProjectContentController extends Controller
             $validated['period_id'] = $program->period_id;
         }
 
-        $form = DB::transaction(function () use ($project, $program, $validated) {
+        $training = null;
+        if (! empty($validated['training_id'])) {
+            abort_if($project->application_scope !== 'training' || $program, 422, 'Bu kapsamda eğitim formu oluşturulamaz.');
+            $training = ProjectTraining::where('project_id', $project->id)->findOrFail($validated['training_id']);
+            abort_if(! empty($validated['period_id']) && (int) $training->period_id !== (int) $validated['period_id'], 422, 'Eğitim seçilen döneme ait değil.');
+            $validated['period_id'] = $training->period_id;
+            $this->assertPeriodConfigurable($request, $training->period_id);
+        }
+        $form = DB::transaction(function () use ($project, $program, $training, $validated) {
             Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
 
             ApplicationForm::query()
                 ->where('project_id', $project->id)
                 ->where('period_id', $validated['period_id'] ?? null)
+                ->when($training, fn ($query) => $query->where('training_id', $training->id), fn ($query) => $query->whereNull('training_id'))
                 ->when($program, fn ($query) => $query->where('program_id', $program->id), fn ($query) => $query->whereNull('program_id'))
                 ->update(['is_active' => false]);
 
@@ -1009,6 +1030,7 @@ class ProjectContentController extends Controller
                 'project_id' => $project->id,
                 'period_id' => $validated['period_id'] ?? null,
                 'program_id' => $program?->id,
+                'training_id' => $training?->id,
                 'fields' => array_map(function (array $field) {
                     $payload = [
                         'id' => $field['id'],
@@ -1079,7 +1101,7 @@ class ProjectContentController extends Controller
             $valid = is_numeric($answer);
         }
         if (! $valid) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'sample_answer' => ['Örnek cevap seçilen sorunun türüne veya seçeneklerine uygun değil.'],
             ]);
         }

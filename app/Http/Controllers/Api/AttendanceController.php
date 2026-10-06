@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\Feedback;
 use App\Models\Participant;
 use App\Models\Program;
+use App\Services\TrainingAccessService;
 use App\Support\FeedbackDeadline;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -25,12 +26,14 @@ class AttendanceController extends Controller
      * Requires permission: `participant.qr.use`. The QR token can be the raw token or a scanned URL containing `token`. Program and participant coordinates are required and checked against the configured radius.
      *
      * @group Programs & Attendance
+     *
      * @authenticated
      *
      * @bodyParam qr_token string required Raw QR token or scanned URL. Example: qr_abc123
      * @bodyParam latitude number Required participant latitude. Example: 41.0082
      * @bodyParam longitude number Required participant longitude. Example: 28.9784
      * @bodyParam accuracy_meters number Optional browser-reported GPS accuracy for audit only; it never changes the attendance decision. Example: 35
+     *
      * @response 200 {"message":"Yoklamaniz basariyla alindi. Etkinlik tamamlandiktan sonra degerlendirme formu acilacaktir.","current_credit":100}
      * @response 200 {"message":"Yoklamaniz zaten alinmis."}
      * @response 400 {"message":"Gecersiz veya suresi dolmus QR kod."}
@@ -80,6 +83,7 @@ class AttendanceController extends Controller
         if (! $program->isTargetedTo($user->role)) {
             return response()->json(['message' => 'Bu program panel turunuz icin acik degil.'], 403);
         }
+        abort_unless(app(TrainingAccessService::class)->canAccessProgram($user, $program), 403, 'Bu eğitime kabul edilmediniz.');
 
         $participant = $this->participantForProgram($user, $program);
 

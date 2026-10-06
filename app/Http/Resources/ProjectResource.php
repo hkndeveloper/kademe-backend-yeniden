@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\ProjectTraining;
 use App\Services\PeriodLifecycleService;
 use App\Support\MediaStorage;
 use App\Support\ProjectSpecialModuleCatalog;
@@ -164,6 +165,11 @@ class ProjectResource extends JsonResource
         $periodContextLoaded = $this->relationLoaded('periods') || $this->relationLoaded('currentPeriod');
         $currentPeriod = $periodContextLoaded ? $this->resource->currentPeriodOrLegacy() : null;
 
+        $trainings = $this->application_scope === 'training' && $currentPeriod
+            ? ProjectTraining::where('project_id', $this->id)->where('period_id', $currentPeriod->id)->where('is_active', true)->get()
+                ->map(fn ($training) => $training->only(['id', 'title', 'description', 'period_id', 'quota', 'application_end_at']) + ['is_application_open' => $applicationSettings['is_open'] && $training->isOpen()])->all()
+            : [];
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -176,7 +182,9 @@ class ProjectResource extends JsonResource
             'cover_image' => $this->mediaUrl($this->cover_image_path),
             'status' => $this->status,
             'is_public' => (bool) $this->is_public,
-            'is_application_open' => $applicationSettings['is_open'],
+            'application_scope' => $this->application_scope ?? 'project',
+            'trainings' => $trainings,
+            'is_application_open' => $applicationSettings['is_open'] && ($this->application_scope !== 'training' || collect($trainings)->contains('is_application_open', true)),
             'application_start_at' => optional($applicationSettings['starts_at'])?->toISOString(),
             'application_end_at' => optional($applicationSettings['ends_at'])?->toISOString(),
             'description' => $this->when(! is_null($this->description), $this->description),
@@ -196,7 +204,7 @@ class ProjectResource extends JsonResource
                 ! is_null($applicationSettings['next_application_date']),
                 fn () => optional($applicationSettings['next_application_date'])->format('Y-m-d')
             ),
-            'has_interview' => $applicationSettings['has_interview'],
+            'has_interview' => $this->application_scope === 'training' ? false : $applicationSettings['has_interview'],
             'quota' => $applicationSettings['quota'],
             'active_period' => $this->when(
                 $periodContextLoaded,

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Application;
+use App\Models\ApplicationCandidate;
 use App\Models\Period;
 use App\Models\Project;
 use App\Models\User;
@@ -22,7 +23,12 @@ class ApplicationDecisionService
             }
 
             // Serialize this applicant's acceptances even across different projects.
-            User::query()->lockForUpdate()->findOrFail($application->user_id);
+            if ($application->candidate_id) {
+                ApplicationCandidate::query()->lockForUpdate()->findOrFail($application->candidate_id);
+            }
+            if ($application->user_id) {
+                User::query()->lockForUpdate()->findOrFail($application->user_id);
+            }
             $current = Application::query()->lockForUpdate()->findOrFail($application->id);
             $current->load([
                 'project:id,name,has_interview,quota',

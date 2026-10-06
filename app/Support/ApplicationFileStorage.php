@@ -66,7 +66,7 @@ class ApplicationFileStorage
 
     public static function fileForField(Application $application, string $field): ?array
     {
-        $definition = collect($application->form?->fields ?? [])->first(
+        $definition = collect($application->form_fields_snapshot ?? $application->form?->fields ?? [])->first(
             fn (array $item) => ($item['id'] ?? $item['key'] ?? null) === $field,
         );
         if (($definition['type'] ?? null) !== 'file') {
